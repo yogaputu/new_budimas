@@ -1,0 +1,8 @@
+{
+  "policy_id": "draft_product_tax_bdm_tmp_20260902",
+  "approval_status": "rejected_pending_business_rule",
+  "review_note": "Do not approve this draft as-is. Read-only invoice evidence supports YA->11%, but TIDAK is not proof of 0%: 99/99 TMP positive-detail observations marked TIDAK were still 11%. Obtain a finance-approved rule for TIDAK and the one blank value before product import.",
+  "source_fakturpajak_to_ppn": {
+    "YA": 11
+  }
+}

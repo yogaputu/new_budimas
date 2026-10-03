@@ -1,0 +1,30 @@
+{
+  "format": "clean-pd-sales-uat-approval-v1",
+  "approval": {
+    "approval_status": "pending_review",
+    "environment": "uat",
+    "target_database": null,
+    "approved_plan_sha256": null,
+    "approved_report_sha256": null,
+    "approved_apply_contract_sha256": null,
+    "approved_clean_policy_sha256": null,
+    "approved_pd_draft_policy_sha256": null,
+    "approved_baseline_schema_sha256": null,
+    "approved_baseline_reference_sha256": null,
+    "approved_candidate_documents": null,
+    "approved_candidate_lines": null,
+    "approved_hold_sha256": null,
+    "approved_hold_count": null,
+    "hold_disposition": "record_open_do_not_import",
+    "approved_by": null,
+    "approval_reference": null,
+    "approved_at": null,
+    "acknowledgements": {
+      "compound_discount_percentage_not_reconstructed": false,
+      "numberless_faktur_draft_only": false,
+      "no_stock_picking_route_payment_or_return": false,
+      "holds_recorded_open_not_imported": false,
+      "uat_only_no_production_or_baseline": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "policy_id": "approved_sales_type_bdm_tmp_20260902",
+  "approval_status": "approved",
+  "approval_reference": "User approval in Codex task on 2026-09-02; historical sales rows have no login account.",
+  "source_type_to_sales_tipe_name": {
+    "KV": "Canvasser",
+    "TO": "Taking Order"
+  },
+  "source_jenisitr_to_sales_tipe_name": {
+    "motoris": "Canvasser",
+    "retail": "Taking Order",
+    "supermarket": "Taking Order"
+  }
+}

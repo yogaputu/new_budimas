@@ -1,0 +1,21 @@
+-- Safe jurnal setup notes for legacy fitur_mal.
+-- Applied locally on 2026-05-24 through a guarded setup script, not by ALTER TABLE.
+--
+-- Configured:
+-- 2  Pembayaran Hutang: Hutang Usaha (D) / Kas (K)
+-- 4  Shipping HPP: Beban Pokok Penjualan (D) / Persediaan Barang (K)
+-- 5  Realisasi Penjualan: Piutang Usaha (D) / Penjualan (K)
+-- 6  Setoran Non Tunai: Pembayaran Belum Teridentifikasi (D) / Piutang Usaha (K)
+-- 7  Stock Opname Terima: Penyesuaian Persediaan (D) / Persediaan Barang (K)
+-- 8  Close Eskalasi Stock Opname: Piutang Karyawan (D) / Persediaan Barang (K)
+-- 11 Pengeluaran Kasir Konfirmasi: Biaya Penjualan (D) / Kas (K)
+-- 12 Setoran Tunai: Kas (D) / Piutang Usaha (K)
+-- 17 Request Purchase: Persediaan Barang (D) / Hutang Usaha (K)
+--
+-- Pending audit before setup:
+-- 3  Picking: source exists, but no distinct Stock Picking/Transit COA found.
+-- 9  Stock Transfer Terima: source exists, but no Persediaan Transfer/Stock Transfer Transit COA found.
+-- 10 Close Eskalasi Stock Transfer: same as feature 9.
+-- 13-16 Cashier/COD flows: handlers exist but source_modul rows are missing.
+-- 18 Konfirmasi Request Purchase: dispatcher calls handle_konfirmasi_purchase(), but that handler currently hardcodes id_fitur_mal = 1.
+-- 19-26 Purchase/kasbon/klaim flows: handlers exist but source_modul rows are missing and need flow-level COA decisions.

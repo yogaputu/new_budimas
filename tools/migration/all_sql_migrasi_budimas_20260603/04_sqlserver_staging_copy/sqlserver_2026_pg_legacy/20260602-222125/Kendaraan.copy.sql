@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."kendaraan" ("idkendaraan", "nopolisi", "jenis", "merk", "kapasitasberat", "kapasitasvolume", "active", "created_at", "updated_at") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/Kendaraan.csv' WITH (FORMAT csv, HEADER true, NULL '')

@@ -1,0 +1,1488 @@
+from  apps.handler import  *
+from  apps.helper  import  *
+from  apps.widget  import  *
+from  sqlalchemy   import  desc, text
+from  .            import  Base
+from  apps.lib.query import DB
+from  apps.models  import  (
+      Produk,
+      ProdukUOM as UOM,
+      ProdukHargaJual,
+      ProdukTipeHarga,
+      ProdukBrand,
+      ProdukKategori
+)
+from flask import request
+from sqlalchemy import or_
+import re
+from apps.lib.schema_guard import require_table_columns, require_tables
+
+
+class ProdukService(Base) :
+
+    def __init__(self) :
+        super().__init__()
+
+    def req(self, key, default=None):
+        return self.data.get(key, default)
+
+    def query(self):
+        return DB()
+
+    @staticmethod
+    def _status_label(value):
+        if value in (1, '1'):
+            return 'Aktif'
+        if value in (0, '0'):
+            return 'Nonaktif'
+        if value in (None, '', 'None'):
+            return 'Belum diatur'
+        return f'Status {value}'
+
+    def _build_detail_payload(self, product):
+        if not product:
+            return {}
+
+        brand_name = None
+        category_name = None
+        subbrand_name = None
+
+        if getattr(product, 'id_brand', None):
+            brand = ProdukBrand.query.filter_by(id=product.id_brand).first()
+            brand_name = brand.nama if brand else None
+
+        if getattr(product, 'id_kategori', None):
+            category = ProdukKategori.query.filter_by(id=product.id_kategori).first()
+            category_name = category.nama if category else None
+
+        if getattr(product, 'id_subbrand', None):
+            subbrand_name = self._get_subbrand_name(product.id_subbrand)
+
+        detail = {
+            'produk_id': product.id,
+            'id': product.id,
+            'id_principal': getattr(product, 'id_principal', None),
+            'id_brand': getattr(product, 'id_brand', None),
+            'id_kategori': getattr(product, 'id_kategori', None),
+            'id_subbrand': getattr(product, 'id_subbrand', None),
+            'id_ppn': getattr(product, 'id_ppn', None),
+            'id_status': getattr(product, 'id_status', None),
+            'kode_sku': getattr(product, 'kode_sku', None),
+            'kode_ean': getattr(product, 'kode_ean', None),
+            'nama': getattr(product, 'nama', None),
+            'harga_beli': getattr(product, 'harga_beli', None),
+            'harga_jual': getattr(product, 'harga_jual', None),
+            'kubikasiperbox': getattr(product, 'kubikasiperbox', None),
+            'kubikasiperkarton': getattr(product, 'kubikasiperkarton', None),
+            'isiperbox': getattr(product, 'isiperbox', None),
+            'isiperkarton': getattr(product, 'isiperkarton', None),
+            'satuan': getattr(product, 'satuan', None),
+            'kubikasiperpieces': getattr(product, 'kubikasiperpieces', None),
+            'ppn': getattr(product, 'ppn', None),
+            'ppn_nama': None,
+            'ppn_kode': None,
+            'keterangan': getattr(product, 'keterangan', None),
+            'brand_nama': brand_name,
+            'kategori_nama': category_name,
+            'subbrand_nama': subbrand_name,
+        }
+
+        detail['status_label'] = self._status_label(detail.get('id_status'))
+        if detail.get('id_ppn'):
+            ppn_row = self.db.session.execute(
+                text("""
+                    SELECT kode, nama, persentase
+                    FROM master_ppn
+                    WHERE id = :id_ppn
+                    LIMIT 1
+                """),
+                {"id_ppn": detail.get("id_ppn")}
+            ).mappings().first()
+            if ppn_row:
+                detail['ppn'] = ppn_row.get('persentase')
+                detail['ppn_nama'] = ppn_row.get('nama')
+                detail['ppn_kode'] = ppn_row.get('kode')
+        detail['uoms'] = self.fetch_uoms(product.id)
+        detail['prices'] = self.fetch_price_history(product.id)
+        detail['external_mappings'] = self.fetch_external_mappings(product.id)
+        detail['kode_external'] = ', '.join(
+            item.get('kode_external') for item in detail['external_mappings'] if item.get('kode_external')
+        )
+        return detail
+
+    def _ensure_product_external_mapping_table(self):
+        require_table_columns(
+            self.db.session,
+            "produk_external_mapping",
+            [
+                "id",
+                "kode_external",
+                "id_produk",
+                "kode_sku",
+                "principal_code",
+                "source",
+                "is_active",
+                "created_at",
+                "updated_at",
+            ],
+            "tools/migrations/20260519_runtime_schema_manual.sql",
+        )
+
+    def _parse_external_codes(self, value):
+        if value in (None, ''):
+            return []
+
+        if isinstance(value, (list, tuple)):
+            raw_values = value
+        else:
+            raw_values = str(value).replace('\n', ',').replace(';', ',').split(',')
+
+        codes = []
+        seen = {}
+        for item in raw_values:
+            code = str(item or '').strip()
+            if not code or code in seen:
+                continue
+            seen[code] = True
+            codes.append(code)
+        return codes
+
+    def _get_subbrand_name(self, id_subbrand):
+        if id_subbrand in (None, '', 'None'):
+            return None
+
+        row = self.db.session.execute(
+            text("""
+                SELECT nama
+                FROM produk_subbrand
+                WHERE id = :id_subbrand
+                LIMIT 1
+            """),
+            {'id_subbrand': id_subbrand}
+        ).mappings().first()
+        return row.get('nama') if row else None
+
+    def _ensure_ppn_schema(self):
+        require_tables(
+            self.db.session,
+            {
+                "master_ppn": [
+                    "id",
+                    "kode",
+                    "nama",
+                    "persentase",
+                    "is_active",
+                    "keterangan",
+                    "created_at",
+                    "updated_at",
+                ],
+                "produk": ["id_ppn"],
+            },
+            "tools/migrations/20260519_runtime_schema_manual.sql",
+        )
+
+    @handle_error
+    def fetch_ppn_options(self):
+        self._ensure_ppn_schema()
+        rows = self.db.session.execute(text("""
+            SELECT id, kode, nama, persentase, is_active, keterangan
+            FROM master_ppn
+            WHERE COALESCE(is_active, TRUE) = TRUE
+            ORDER BY persentase ASC, nama ASC, id ASC
+        """)).mappings().all()
+
+        return [
+            {
+                **dict(row),
+                "text": f"{row['nama']} ({float(row['persentase'] or 0):g}%)"
+            }
+            for row in rows
+        ]
+
+    @handle_error
+    def fetch_ppn_list(self):
+        self._ensure_ppn_schema()
+        search = (request.args.get('search') or '').strip()
+        params = {}
+        where = ""
+        if search:
+            where = """
+                WHERE kode ILIKE :search
+                   OR nama ILIKE :search
+                   OR COALESCE(keterangan, '') ILIKE :search
+            """
+            params["search"] = f"%{search}%"
+
+        rows = self.db.session.execute(
+            text(f"""
+                SELECT
+                    mp.id,
+                    mp.kode,
+                    mp.nama,
+                    mp.persentase,
+                    mp.is_active,
+                    mp.keterangan,
+                    COUNT(p.id) AS total_produk
+                FROM master_ppn mp
+                LEFT JOIN produk p ON p.id_ppn = mp.id
+                {where}
+                GROUP BY mp.id, mp.kode, mp.nama, mp.persentase, mp.is_active, mp.keterangan
+                ORDER BY mp.persentase ASC, mp.nama ASC, mp.id ASC
+            """),
+            params
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+    def _normalize_ppn_payload(self, payload):
+        kode = str(payload.get('kode') or '').strip().upper()
+        nama = str(payload.get('nama') or '').strip()
+        if not kode:
+            raise nonServerErrorException('Kode PPN wajib diisi', 400)
+        if not nama:
+            raise nonServerErrorException('Nama PPN wajib diisi', 400)
+
+        try:
+            persentase = float(payload.get('persentase') or 0)
+        except (TypeError, ValueError):
+            raise nonServerErrorException('Persentase PPN harus berupa angka', 400)
+
+        is_active_raw = payload.get('is_active', True)
+        is_active = is_active_raw in (True, 1, '1', 'true', 'TRUE', 'True', 'on', 'ON', 'ya', 'YA')
+
+        return {
+            'kode': kode,
+            'nama': nama,
+            'persentase': max(0, persentase),
+            'is_active': is_active,
+            'keterangan': payload.get('keterangan') or None
+        }
+
+    @handle_error_rollback
+    def create_ppn(self):
+        self._ensure_ppn_schema()
+        payload = self._normalize_ppn_payload(request.get_json(silent=True) or {})
+        row = self.db.session.execute(
+            text("""
+                INSERT INTO master_ppn (kode, nama, persentase, is_active, keterangan, updated_at)
+                VALUES (:kode, :nama, :persentase, :is_active, :keterangan, NOW())
+                RETURNING id, kode, nama, persentase, is_active, keterangan
+            """),
+            payload
+        ).mappings().first()
+        self.db.session.commit()
+        return dict(row)
+
+    @handle_error_rollback
+    def update_ppn(self, id):
+        self._ensure_ppn_schema()
+        payload = self._normalize_ppn_payload(request.get_json(silent=True) or {})
+        payload['id'] = int(id)
+        row = self.db.session.execute(
+            text("""
+                UPDATE master_ppn
+                SET kode = :kode,
+                    nama = :nama,
+                    persentase = :persentase,
+                    is_active = :is_active,
+                    keterangan = :keterangan,
+                    updated_at = NOW()
+                WHERE id = :id
+                RETURNING id, kode, nama, persentase, is_active, keterangan
+            """),
+            payload
+        ).mappings().first()
+        if not row:
+            raise nonServerErrorException('Master PPN tidak ditemukan', 404)
+
+        self.db.session.execute(
+            text("""
+                UPDATE produk
+                SET ppn = :persentase
+                WHERE id_ppn = :id
+            """),
+            {'id': int(id), 'persentase': payload['persentase']}
+        )
+        self.db.session.commit()
+        return dict(row)
+
+    @handle_error_rollback
+    def delete_ppn(self, id):
+        self._ensure_ppn_schema()
+        total_produk = self.db.session.execute(
+            text("SELECT COUNT(*) AS total FROM produk WHERE id_ppn = :id"),
+            {'id': int(id)}
+        ).mappings().first()
+        if int((total_produk or {}).get('total') or 0) > 0:
+            raise nonServerErrorException('Master PPN masih dipakai produk, tidak bisa dihapus.', 400)
+
+        deleted = self.db.session.execute(
+            text("DELETE FROM master_ppn WHERE id = :id RETURNING id"),
+            {'id': int(id)}
+        ).mappings().first()
+        if not deleted:
+            raise nonServerErrorException('Master PPN tidak ditemukan', 404)
+
+        self.db.session.commit()
+        return {'id': int(id), 'status': 'deleted'}
+
+    def fetch_external_mappings(self, id_produk):
+        self._ensure_product_external_mapping_table()
+        rows = self.db.session.execute(
+            text("""
+                SELECT id, kode_external, kode_sku, principal_code, source, is_active
+                FROM produk_external_mapping
+                WHERE id_produk = :id_produk
+                  AND source = 'sales_order_import'
+                  AND is_active = TRUE
+                ORDER BY kode_external ASC
+            """),
+            {'id_produk': id_produk}
+        ).mappings().all()
+        return [dict(row) for row in rows]
+
+    def _sync_external_mappings(self, product, payload):
+        if 'kode_external' not in payload and 'external_codes' not in payload:
+            return
+
+        self._ensure_product_external_mapping_table()
+        external_codes = self._parse_external_codes(payload.get('kode_external', payload.get('external_codes')))
+
+        self.db.session.execute(
+            text("""
+                UPDATE produk_external_mapping
+                SET is_active = FALSE, updated_at = NOW()
+                WHERE id_produk = :id_produk
+                  AND source = 'sales_order_import'
+            """),
+            {'id_produk': product.id}
+        )
+
+        for external_code in external_codes:
+            self.db.session.execute(
+                text("""
+                    INSERT INTO produk_external_mapping (
+                        kode_external, id_produk, kode_sku, source, is_active, updated_at
+                    )
+                    VALUES (
+                        :kode_external, :id_produk, :kode_sku, 'sales_order_import', TRUE, NOW()
+                    )
+                    ON CONFLICT (kode_external, source)
+                    DO UPDATE SET
+                        id_produk = EXCLUDED.id_produk,
+                        kode_sku = EXCLUDED.kode_sku,
+                        is_active = TRUE,
+                        updated_at = NOW()
+                """),
+                {
+                    'kode_external': external_code,
+                    'id_produk': product.id,
+                    'kode_sku': getattr(product, 'kode_sku', None)
+                }
+            )
+
+    def _clean_params(self):
+        params = self.set_param()
+        return {
+            key: value for key, value in params.items()
+            if value not in (None, '', 'None') and key not in ('search', 'filters', 'limit', 'start', 'length', 'branchId', 'route', 'tokens')
+        }
+
+
+    @handle_error
+    def fetch_option(self) :
+        params = {}
+        where_parts = []
+        allowed_filters = {
+            'id',
+            'id_principal',
+            'id_brand',
+            'id_kategori',
+            'id_subbrand',
+            'id_status',
+        }
+
+        for key, value in self._clean_params().items():
+            if key in allowed_filters:
+                where_parts.append(f"{key} = :{key}")
+                params[key] = value
+
+        search = request.args.get('search') or request.args.get('filters')
+        if search not in (None, '', 'None'):
+            params['search'] = f"%{search}%"
+            where_parts.append("(nama ILIKE :search OR kode_sku ILIKE :search)")
+
+        limit_clause = ''
+        limit = request.args.get('limit') or request.args.get('length')
+        if limit not in (None, '', 'None'):
+            try:
+                params['limit'] = max(1, min(int(limit), 100))
+            except (TypeError, ValueError):
+                params['limit'] = 50
+            limit_clause = 'LIMIT :limit'
+
+        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ''
+        rows = self.db.session.execute(
+            text(f"""
+                SELECT id, kode_sku AS kode, nama
+                FROM produk
+                {where_clause}
+                ORDER BY nama ASC, id ASC
+                {limit_clause}
+            """),
+            params
+        ).mappings().all()
+
+        return [dict(row) for row in rows]
+
+    
+
+    @handle_error
+    def fetch_detail_transaksi(self, id):
+        self._ensure_ppn_schema()
+        result = (
+            Produk.query.with_entities(
+                Produk.id.label('produk_id'),
+                Produk.id_principal.label('id_principal'),
+                Produk.id_brand.label('id_brand'),
+                Produk.id_kategori.label('id_kategori'),
+                Produk.id_subbrand.label('id_subbrand'),
+                Produk.id_ppn.label('id_ppn'),
+                Produk.id_status.label('id_status'),
+                Produk.kode_sku.label('kode_sku'),
+                Produk.kode_ean.label('kode_ean'),
+                Produk.nama.label('nama'),
+                Produk.harga_beli.label('harga_beli'),
+                Produk.harga_jual.label('harga_jual'),
+                Produk.kubikasiperbox.label('kubikasiperbox'),
+                Produk.kubikasiperkarton.label('kubikasiperkarton'),
+                Produk.isiperbox.label('isiperbox'),
+                Produk.isiperkarton.label('isiperkarton'),
+                Produk.satuan.label('satuan'),
+                Produk.kubikasiperpieces.label('kubikasiperpieces'),
+                Produk.ppn.label('ppn'),
+                Produk.keterangan.label('keterangan'),
+                ProdukBrand.nama.label('brand_nama'),
+                ProdukKategori.nama.label('kategori_nama'),
+            )
+            .outerjoin(ProdukBrand, ProdukBrand.id == Produk.id_brand)
+            .outerjoin(ProdukKategori, ProdukKategori.id == Produk.id_kategori)
+            .filter(Produk.id == id)
+            .first()
+        )
+
+        if result:
+            detail = dict(result._mapping)
+            ppn_row = self.db.session.execute(
+                text("""
+                    SELECT kode, nama, persentase
+                    FROM master_ppn
+                    WHERE id = :id_ppn
+                    LIMIT 1
+                """),
+                {"id_ppn": detail.get("id_ppn")}
+            ).mappings().first() if detail.get("id_ppn") else None
+            if ppn_row:
+                detail["ppn"] = ppn_row.get("persentase")
+                detail["ppn_nama"] = ppn_row.get("nama")
+                detail["ppn_kode"] = ppn_row.get("kode")
+            detail['subbrand_nama'] = self._get_subbrand_name(detail.get('id_subbrand'))
+            detail['status_label'] = self._status_label(detail.get('id_status'))
+            detail['uoms'] = self.fetch_uoms(id)
+            detail['prices'] = self.fetch_price_history(id)
+            detail['external_mappings'] = self.fetch_external_mappings(id)
+            detail['kode_external'] = ', '.join(
+                item.get('kode_external') for item in detail['external_mappings'] if item.get('kode_external')
+            )
+            return detail
+
+        product = Produk.query.filter(Produk.id == id).first()
+        return self._build_detail_payload(product)
+
+
+    @handle_error
+    def fetch_detail_transaksi_uom(self, id) :
+        with self.db.session.begin() :
+            return (
+                UOM.query.with_entities(
+                    UOM  .id               .label('uom_id'             ),
+                    UOM  .kode             .label('uom_kode'           ),
+                    UOM  .nama             .label('uom_nama'           ),
+                    UOM  .level            .label('uom_level'          ),
+                    UOM  .faktor_konversi  .label('uom_faktor_konversi'),
+                )
+                .filter_by(id_produk = id)
+                .order_by(desc(UOM.level))
+                .all()
+            )
+
+    def fetch_uoms(self, id):
+        result = (
+            UOM.query.with_entities(
+                UOM.id,
+                UOM.kode,
+                UOM.nama,
+                UOM.level,
+                UOM.faktor_konversi,
+                UOM.set_default_sales,
+                UOM.set_default_storage,
+                UOM.packing_satuan,
+                UOM.packing_tinggi,
+                UOM.packing_panjang,
+                UOM.packing_lebar,
+                UOM.berat_satuan,
+                UOM.berat_bersih,
+                UOM.berat_kotor,
+            )
+            .filter_by(id_produk=id)
+            .order_by(desc(UOM.level))
+            .all()
+        )
+
+        return Mapper(result).to_dict().get()
+
+    @handle_error
+    def fetch_brand_options(self):
+        search = (request.args.get('search') or '').strip()
+
+        with self.db.session.begin():
+            query = ProdukBrand.query.with_entities(
+                ProdukBrand.id,
+                ProdukBrand.nama
+            )
+
+            if search:
+                query = query.filter(ProdukBrand.nama.ilike(f'%{search}%'))
+
+            result = query.order_by(ProdukBrand.nama.asc()).limit(100).all()
+
+        return (
+            Mapper(result)
+            .to_dict()
+            .add_col(lambda item: item['nama'], 'text')
+            .get()
+        )
+
+    @handle_error
+    def fetch_category_options(self):
+        search = (request.args.get('search') or '').strip()
+
+        with self.db.session.begin():
+            query = ProdukKategori.query.with_entities(
+                ProdukKategori.id,
+                ProdukKategori.nama
+            )
+
+            if search:
+                query = query.filter(ProdukKategori.nama.ilike(f'%{search}%'))
+
+            result = query.order_by(ProdukKategori.nama.asc()).limit(100).all()
+
+        return (
+            Mapper(result)
+            .to_dict()
+            .add_col(lambda item: item['nama'], 'text')
+            .get()
+        )
+
+    @handle_error
+    def fetch_subbrand_options(self):
+        search = (request.args.get('search') or '').strip()
+        id_brand = request.args.get('id_brand')
+        include_inactive = str(request.args.get('include_inactive') or '').lower() in ('1', 'true', 'yes')
+        limit = request.args.get('limit') or 150
+
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 150
+
+        params = {}
+        where = []
+
+        if not include_inactive:
+            where.append("COALESCE(ps.is_active, TRUE) = TRUE")
+
+        if search:
+            where.append("(ps.nama ILIKE :search OR ps.kode ILIKE :search OR pb.nama ILIKE :search)")
+            params['search'] = f'%{search}%'
+
+        if id_brand not in (None, '', 'None'):
+            where.append("(ps.id_brand = :id_brand OR ps.id_brand IS NULL)")
+            params['id_brand'] = int(id_brand)
+
+        where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+
+        rows = self.db.session.execute(
+            text(f"""
+                SELECT
+                    ps.id,
+                    ps.id_brand,
+                    ps.kode,
+                    ps.nama,
+                    ps.keterangan,
+                    COALESCE(ps.is_active, TRUE) AS is_active,
+                    pb.nama AS brand_nama
+                FROM produk_subbrand ps
+                LEFT JOIN produk_brand pb ON pb.id = ps.id_brand
+                {where_clause}
+                ORDER BY pb.nama ASC NULLS LAST, ps.nama ASC
+                LIMIT :limit
+            """),
+            {**params, 'limit': limit}
+        ).mappings().all()
+
+        return [
+            {
+                **dict(row),
+                'text': f"{row.get('nama')} ({row.get('brand_nama')})" if row.get('brand_nama') else row.get('nama')
+            }
+            for row in rows
+        ]
+
+    @handle_error_rollback
+    def create_subbrand_option(self):
+        payload = request.get_json(silent=True) or request.form.to_dict() or self.data or {}
+        name = str(payload.get('nama') or payload.get('name') or '').strip()
+        id_brand = payload.get('id_brand')
+
+        if not name:
+            raise nonServerErrorException('Nama subbrand wajib diisi', 400)
+
+        code = re.sub(r'[^A-Za-z0-9]+', '_', name.upper()).strip('_')[:60] or 'SUBBRAND'
+        brand_value = None
+        if id_brand not in (None, '', 'None'):
+            try:
+                brand_value = int(id_brand)
+            except (TypeError, ValueError):
+                raise nonServerErrorException('Brand harus berupa angka', 400)
+
+        row = self.db.session.execute(
+            text("""
+                INSERT INTO produk_subbrand (id_brand, kode, nama, keterangan, updated_at)
+                VALUES (:id_brand, :kode, :nama, :keterangan, NOW())
+                ON CONFLICT (COALESCE(id_brand, 0), LOWER(TRIM(nama))) DO UPDATE SET
+                    kode = EXCLUDED.kode,
+                    keterangan = EXCLUDED.keterangan,
+                    is_active = TRUE,
+                    updated_at = NOW()
+                RETURNING id, id_brand, kode, nama, keterangan, is_active
+            """),
+            {
+                'id_brand': brand_value,
+                'kode': code,
+                'nama': name,
+                'keterangan': payload.get('keterangan') or 'Input dari master produk'
+            }
+        ).mappings().first()
+        self.db.session.commit()
+
+        result = dict(row)
+        result['text'] = result.get('nama')
+        return result
+
+    @handle_error_rollback
+    def update_subbrand_option(self, id):
+        payload = request.get_json(silent=True) or request.form.to_dict() or self.data or {}
+        name = str(payload.get('nama') or payload.get('name') or '').strip()
+        code = str(payload.get('kode') or '').strip()
+        id_brand = payload.get('id_brand')
+        is_active = payload.get('is_active')
+
+        if not name:
+            raise nonServerErrorException('Nama subbrand wajib diisi', 400)
+
+        if not code:
+            code = re.sub(r'[^A-Za-z0-9]+', '_', name.upper()).strip('_')[:60] or 'SUBBRAND'
+
+        brand_value = None
+        if id_brand not in (None, '', 'None'):
+            try:
+                brand_value = int(id_brand)
+            except (TypeError, ValueError):
+                raise nonServerErrorException('Brand harus berupa angka', 400)
+
+        active_value = True
+        if isinstance(is_active, bool):
+            active_value = is_active
+        elif is_active not in (None, '', 'None'):
+            active_value = str(is_active).lower() in ('1', 'true', 'yes', 'aktif')
+
+        row = self.db.session.execute(
+            text("""
+                UPDATE produk_subbrand
+                SET
+                    id_brand = :id_brand,
+                    kode = :kode,
+                    nama = :nama,
+                    keterangan = :keterangan,
+                    is_active = :is_active,
+                    updated_at = NOW()
+                WHERE id = :id
+                RETURNING id, id_brand, kode, nama, keterangan, is_active
+            """),
+            {
+                'id': int(id),
+                'id_brand': brand_value,
+                'kode': code,
+                'nama': name,
+                'keterangan': payload.get('keterangan') or None,
+                'is_active': active_value
+            }
+        ).mappings().first()
+
+        if not row:
+            raise nonServerErrorException('Subbrand tidak ditemukan', 404)
+
+        self.db.session.commit()
+        result = dict(row)
+        result['text'] = result.get('nama')
+        return result
+
+    @handle_error_rollback
+    def delete_subbrand_option(self, id):
+        row = self.db.session.execute(
+            text("""
+                UPDATE produk_subbrand
+                SET is_active = FALSE, updated_at = NOW()
+                WHERE id = :id
+                RETURNING id, id_brand, kode, nama, keterangan, is_active
+            """),
+            {'id': int(id)}
+        ).mappings().first()
+
+        if not row:
+            raise nonServerErrorException('Subbrand tidak ditemukan', 404)
+
+        self.db.session.commit()
+        result = dict(row)
+        result['text'] = result.get('nama')
+        return result
+
+    @handle_error
+    def fetch_status_options(self):
+        with self.db.session.begin():
+            rows = (
+                Produk.query.with_entities(Produk.id_status)
+                .filter(Produk.id_status.isnot(None))
+                .distinct()
+                .order_by(Produk.id_status.asc())
+                .all()
+            )
+
+        statuses = []
+        for row in rows:
+            value = row[0]
+            statuses.append({
+                'id': value,
+                'nama': self._status_label(value),
+                'text': self._status_label(value)
+            })
+
+        if not statuses:
+            statuses = [
+                {'id': 1, 'nama': 'Aktif', 'text': 'Aktif'},
+                {'id': 0, 'nama': 'Nonaktif', 'text': 'Nonaktif'}
+            ]
+
+        return statuses
+
+    @handle_error
+    def fetch_price_type_options(self):
+        rows = (
+            ProdukTipeHarga.query.with_entities(
+                ProdukTipeHarga.id,
+                ProdukTipeHarga.kode,
+                ProdukTipeHarga.nama
+            )
+            .order_by(ProdukTipeHarga.nama.asc(), ProdukTipeHarga.id.asc())
+            .all()
+        )
+
+        return (
+            Mapper(rows)
+            .to_dict()
+            .add_col(lambda item: item['nama'], 'text')
+            .get()
+        )
+
+    @handle_error
+    def fetch_completeness_summary(self):
+        rows = self.db.session.execute(
+            text("""
+                WITH product_flags AS (
+                    SELECT
+                        p.id,
+                        p.id_brand,
+                        p.id_subbrand,
+                        COUNT(DISTINCT pu.id) AS total_uom,
+                        COUNT(DISTINCT phj.id_tipe_harga) FILTER (WHERE COALESCE(phj.harga, 0) > 0) AS total_price_type,
+                        COUNT(DISTINCT r.id) FILTER (WHERE r.id IS NOT NULL) AS total_promo_rule
+                    FROM produk p
+                    LEFT JOIN produk_uom pu ON pu.id_produk = p.id
+                    LEFT JOIN produk_harga_jual phj ON phj.id_produk = p.id
+                    LEFT JOIN trade_promo_program_rule r
+                        ON (
+                            (r.id_subbrand IS NOT NULL AND r.id_subbrand = p.id_subbrand)
+                            OR EXISTS (
+                                SELECT 1
+                                FROM trade_promo_rule_product rp
+                                WHERE rp.program_rule_id = r.id
+                                  AND rp.id_produk = p.id
+                                  AND COALESCE(rp.is_active, TRUE) = TRUE
+                            )
+                        )
+                    GROUP BY p.id, p.id_brand, p.id_subbrand
+                )
+                SELECT
+                    COUNT(*) AS total_produk,
+                    COUNT(*) FILTER (WHERE id_brand IS NULL) AS missing_brand,
+                    COUNT(*) FILTER (WHERE id_subbrand IS NULL) AS missing_subbrand,
+                    COUNT(*) FILTER (WHERE total_uom = 0) AS missing_uom,
+                    COUNT(*) FILTER (WHERE total_price_type = 0) AS missing_price_type,
+                    COUNT(*) FILTER (WHERE total_promo_rule = 0) AS without_promo_mapping,
+                    COUNT(*) FILTER (
+                        WHERE id_brand IS NOT NULL
+                          AND id_subbrand IS NOT NULL
+                          AND total_uom > 0
+                          AND total_price_type > 0
+                    ) AS ready_for_order
+                FROM product_flags
+            """)
+        ).mappings().first()
+
+        return dict(rows or {})
+
+    def fetch_price_history(self, id):
+        result = (
+            ProdukHargaJual.query.with_entities(
+                ProdukHargaJual.id,
+                ProdukHargaJual.id_produk,
+                ProdukHargaJual.id_tipe_harga,
+                ProdukHargaJual.harga,
+                ProdukTipeHarga.nama.label('tipe_harga_nama'),
+                ProdukTipeHarga.kode.label('tipe_harga_kode')
+            )
+            .outerjoin(ProdukTipeHarga, ProdukTipeHarga.id == ProdukHargaJual.id_tipe_harga)
+            .filter(ProdukHargaJual.id_produk == id)
+            .order_by(desc(ProdukHargaJual.id))
+            .all()
+        )
+
+        return Mapper(result).to_dict().get()
+
+    @handle_error
+    def fetch_principal_price_rows(self, principal_id):
+        search = (request.args.get('search') or '').strip()
+        limit = request.args.get('limit', 300)
+
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError):
+            limit_value = 300
+
+        limit_value = max(1, min(limit_value, 500))
+
+        params = {
+            'principal_id': int(principal_id),
+            'limit': limit_value
+        }
+        where_search = ''
+
+        if search:
+            params['search'] = f'%{search}%'
+            where_search = """
+                AND (
+                    p.nama ILIKE :search
+                    OR p.kode_sku ILIKE :search
+                    OR pth.nama ILIKE :search
+                    OR pth.kode ILIKE :search
+                )
+            """
+
+        rows = self.db.session.execute(
+            text(
+                f"""
+                    SELECT
+                        phj.id,
+                        p.id AS id_produk,
+                        pth.id AS id_tipe_harga,
+                        COALESCE(phj.harga, p.harga_jual, 0) AS harga,
+                        p.nama AS nama_produk,
+                        p.kode_sku,
+                        pth.nama AS tipe_harga_nama,
+                        pth.kode AS tipe_harga_kode
+                    FROM produk p
+                    CROSS JOIN produk_tipe_harga pth
+                    LEFT JOIN produk_harga_jual phj
+                        ON phj.id_produk = p.id
+                        AND phj.id_tipe_harga = pth.id
+                    WHERE p.id_principal = :principal_id
+                    {where_search}
+                    ORDER BY p.nama ASC, pth.nama ASC, pth.id ASC
+                    LIMIT :limit
+                """
+            ),
+            params
+        ).mappings().all()
+
+        return [dict(row) for row in rows]
+
+    @handle_error_rollback
+    def update_price(self, id):
+        payload = request.get_json(silent=True) or {}
+
+        id_tipe_harga = payload.get('id_tipe_harga') or self.data.get('id_tipe_harga')
+        harga = payload.get('harga')
+        if harga in (None, ''):
+            harga = self.data.get('harga')
+
+        if not id_tipe_harga:
+            raise nonServerErrorException('Tipe harga wajib diisi', 400)
+
+        if harga in (None, ''):
+            raise nonServerErrorException('Harga wajib diisi', 400)
+
+        try:
+            harga_value = float(harga)
+        except (TypeError, ValueError):
+            raise nonServerErrorException('Harga harus berupa angka', 400)
+
+        existing = (
+            ProdukHargaJual.query
+            .filter_by(id_produk=id, id_tipe_harga=int(id_tipe_harga))
+            .first()
+        )
+
+        if existing:
+            existing.harga = harga_value
+        else:
+            existing = ProdukHargaJual({
+                'id_produk': id,
+                'id_tipe_harga': int(id_tipe_harga),
+                'harga': harga_value
+            })
+            self.db.session.add(existing)
+
+        self.db.session.commit()
+
+        refreshed = (
+            ProdukHargaJual.query.with_entities(
+                ProdukHargaJual.id,
+                ProdukHargaJual.id_produk,
+                ProdukHargaJual.id_tipe_harga,
+                ProdukHargaJual.harga,
+                ProdukTipeHarga.nama.label('tipe_harga_nama'),
+                ProdukTipeHarga.kode.label('tipe_harga_kode')
+            )
+            .outerjoin(ProdukTipeHarga, ProdukTipeHarga.id == ProdukHargaJual.id_tipe_harga)
+            .filter(ProdukHargaJual.id == existing.id)
+            .first()
+        )
+
+        return dict(refreshed._mapping) if refreshed else {}
+
+    @handle_error_rollback
+    def bulk_update_prices(self):
+        payload = request.get_json(silent=True) or {}
+        updates = payload.get('updates') or []
+
+        if not isinstance(updates, list) or not updates:
+            raise nonServerErrorException('Daftar update harga wajib diisi', 400)
+
+        updated_rows = []
+
+        for item in updates:
+            if not isinstance(item, dict):
+                continue
+
+            id_produk = item.get('id_produk')
+            id_tipe_harga = item.get('id_tipe_harga')
+            harga = item.get('harga')
+
+            if not id_produk or not id_tipe_harga:
+                raise nonServerErrorException('Produk dan tipe harga wajib diisi', 400)
+
+            if harga in (None, ''):
+                raise nonServerErrorException('Harga wajib diisi', 400)
+
+            try:
+                harga_value = float(harga)
+            except (TypeError, ValueError):
+                raise nonServerErrorException('Harga harus berupa angka', 400)
+
+            existing = (
+                ProdukHargaJual.query
+                .filter_by(id_produk=int(id_produk), id_tipe_harga=int(id_tipe_harga))
+                .first()
+            )
+
+            if existing:
+                existing.harga = harga_value
+            else:
+                existing = ProdukHargaJual({
+                    'id_produk': int(id_produk),
+                    'id_tipe_harga': int(id_tipe_harga),
+                    'harga': harga_value
+                })
+                self.db.session.add(existing)
+                self.db.session.flush()
+
+            updated_rows.append(existing.id)
+
+        self.db.session.commit()
+
+        refreshed = []
+        if updated_rows:
+            refreshed = (
+                ProdukHargaJual.query.with_entities(
+                    ProdukHargaJual.id,
+                    ProdukHargaJual.id_produk,
+                    ProdukHargaJual.id_tipe_harga,
+                    ProdukHargaJual.harga,
+                    Produk.nama.label('nama_produk'),
+                    Produk.kode_sku.label('kode_sku'),
+                    ProdukTipeHarga.nama.label('tipe_harga_nama'),
+                    ProdukTipeHarga.kode.label('tipe_harga_kode')
+                )
+                .join(Produk, Produk.id == ProdukHargaJual.id_produk)
+                .outerjoin(ProdukTipeHarga, ProdukTipeHarga.id == ProdukHargaJual.id_tipe_harga)
+                .filter(ProdukHargaJual.id.in_(updated_rows))
+                .order_by(Produk.nama.asc(), ProdukTipeHarga.nama.asc(), ProdukHargaJual.id.asc())
+                .all()
+            )
+
+        return {
+            'updated_count': len(updated_rows),
+            'updated_rows': Mapper(refreshed).to_dict().get()
+        }
+
+    @handle_error_rollback
+    def create_product_detail(self):
+        self._ensure_ppn_schema()
+        payload = request.get_json(silent=True) or {}
+
+        product = Produk()
+        self._apply_product_payload(product, payload)
+
+        if not getattr(product, 'id_principal', None):
+            raise nonServerErrorException('Principal wajib diisi', 400)
+
+        if not (product.nama or '').strip():
+            raise nonServerErrorException('Nama produk wajib diisi', 400)
+
+        self.db.session.add(product)
+        self.db.session.flush()
+        self._sync_external_mappings(product, payload)
+        self.db.session.commit()
+
+        return self.fetch_detail_transaksi(product.id)
+
+    @handle_error_rollback
+    def delete_product_detail(self, id):
+        product = Produk.query.filter_by(id=id).first()
+        if not product:
+            raise nonServerErrorException('Produk tidak ditemukan', 404)
+
+        self.db.session.delete(product)
+        self.db.session.commit()
+
+        return {'status': 'success', 'id': id}
+
+    def _apply_product_payload(self, product, payload):
+        text_fields = ('nama', 'kode_sku', 'kode_ean', 'keterangan', 'satuan')
+        integer_fields = (
+            'id_principal',
+            'id_brand',
+            'id_kategori',
+            'id_subbrand',
+            'id_ppn',
+            'id_status',
+            'kubikasiperbox',
+            'kubikasiperkarton',
+            'kubikasiperpieces',
+            'isiperbox',
+            'isiperkarton',
+        )
+        float_fields = ('harga_beli', 'harga_jual', 'ppn')
+
+        for field in text_fields:
+            if field in payload:
+                value = payload.get(field)
+                setattr(product, field, None if value in ('', None) else str(value).strip())
+
+        for field in integer_fields:
+            if field in payload:
+                value = payload.get(field)
+                if value in ('', None):
+                    setattr(product, field, None)
+                else:
+                    try:
+                        setattr(product, field, int(value))
+                    except (TypeError, ValueError):
+                        raise nonServerErrorException(f'{field} harus berupa angka', 400)
+
+        for field in float_fields:
+            if field in payload:
+                value = payload.get(field)
+                if value in ('', None):
+                    setattr(product, field, None)
+                else:
+                    try:
+                        setattr(product, field, float(value))
+                    except (TypeError, ValueError):
+                        raise nonServerErrorException(f'{field} harus berupa angka', 400)
+
+        if 'id_ppn' in payload and getattr(product, 'id_ppn', None):
+            row = self.db.session.execute(
+                text("SELECT persentase FROM master_ppn WHERE id = :id_ppn LIMIT 1"),
+                {"id_ppn": int(product.id_ppn)}
+            ).mappings().first()
+            if row:
+                product.ppn = float(row.get('persentase') or 0)
+
+    @handle_error_rollback
+    def update_product_detail(self, id):
+        self._ensure_ppn_schema()
+        payload = request.get_json(silent=True) or {}
+
+        product = Produk.query.filter_by(id=id).first()
+        if not product:
+            raise nonServerErrorException('Produk tidak ditemukan', 404)
+
+        self._apply_product_payload(product, payload)
+
+        if not (product.nama or '').strip():
+            raise nonServerErrorException('Nama produk wajib diisi', 400)
+
+        self.db.session.flush()
+        self._sync_external_mappings(product, payload)
+        self.db.session.commit()
+
+        refreshed = self.fetch_detail_transaksi(id)
+        return refreshed
+
+
+    @handle_error
+    def daftar_option(self) :
+        rows = []
+        for item in self.fetch_option():
+            if isinstance(item, dict):
+                row = dict(item)
+            elif hasattr(item, '_mapping'):
+                row = dict(item._mapping)
+            elif hasattr(item, '_asdict'):
+                row = item._asdict()
+            elif isinstance(item, (list, tuple)):
+                row = {
+                    'id': item[0] if len(item) > 0 else None,
+                    'kode': item[1] if len(item) > 1 else None,
+                    'nama': item[2] if len(item) > 2 else None,
+                }
+            else:
+                row = {
+                    'id': getattr(item, 'id', None),
+                    'kode': getattr(item, 'kode', None),
+                    'nama': getattr(item, 'nama', None),
+                }
+
+            row['text'] = f"[{row['kode']}] {row['nama']}" if row.get('kode') else f"{row.get('nama') or ''}"
+            rows.append(row)
+
+        return rows
+    
+    @handle_error
+    def daftar_option_principal(self,id):
+        def text(i):
+            return (
+                f"[{i['kode']}] {i['nama']}" if i['kode'] else f"{i['nama']}"
+            )
+
+        with self.db.session.begin():
+            options = (
+                Produk.query.with_entities(
+                    Produk.id,
+                    Produk.kode_sku.label('kode'),
+                    Produk.nama,
+                )
+                .filter_by(id_principal=id)
+                .all()
+            )
+
+        return (
+            Mapper(options)
+                .to_dict()
+                .add_col(lambda i: text(i), "text")
+                .get()
+        )
+
+
+
+    @handle_error
+    def konversi_harga(satuan_target, satuan, produk) :
+        satuan_awal   = min(satuan, key=lambda i : i['uom_level'])
+        harga_awal    = produk['produk_harga_beli']
+        faktor_awal   = satuan_awal['uom_faktor_konversi']
+        faktor_target = satuan_target['uom_faktor_konversi']
+        
+        return harga_awal * (faktor_target / faktor_awal)
+
+
+    @handle_error
+    def konversi_jumlah(satuan_awal) :
+        jumlah_awal   = satuan_awal['jumlah']
+        faktor_awal   = satuan_awal['uom_faktor_konversi']
+        faktor_target = 1
+        
+        return jumlah_awal * (faktor_awal / faktor_target)
+    
+    def konversi_jumlah_total(satuan) :
+        total = 0
+        for satuan_awal in satuan :
+            if satuan_awal and satuan_awal['jumlah'] :
+                jumlah_awal   = int(satuan_awal['jumlah']) 
+                faktor_awal   = int(satuan_awal['uom_faktor_konversi'])
+                faktor_target = 1
+                total         += jumlah_awal * (faktor_awal / faktor_target)
+        
+        return total
+
+    @handle_error
+    def getProducts(self):
+        return (
+            self.query().setRawQuery(
+            """
+                SELECT * FROM produk
+            """
+            ).execute().fetchall()
+        )
+
+    def getProduct(self):
+        id_cabang = self.req('id_cabang')
+        id_produk = self.req('id_produk')
+
+        res = self.query().setRawQuery(
+            """
+                SELECT 
+                    produk.*, 
+                    stok.jumlah_ready,
+                    stok.jumlah_booked,
+                    stok.jumlah_delivery,
+                    stok.jumlah_incoming,
+                    stok.jumlah_gudang,
+                    stok.jumlah_good,
+                    stok.jumlah_bad,
+                    stok.tanggal_update,
+                    uom1.faktor_konversi AS konversi_1,
+                    uom2.faktor_konversi AS konversi_2,
+                    uom3.faktor_konversi AS konversi_3
+                FROM produk
+                JOIN stok 
+                    ON produk.id = stok.produk_id
+                LEFT JOIN produk_uom uom1 
+                    ON uom1.id_produk = produk.id AND uom1.level = 1
+                LEFT JOIN produk_uom uom2 
+                    ON uom2.id_produk = produk.id AND uom2.level = 2
+                LEFT JOIN produk_uom uom3 
+                    ON uom3.id_produk = produk.id AND uom3.level = 3
+                WHERE 
+                    stok.produk_id = :id_produk
+                    AND stok.cabang_id = :id_cabang
+            """
+        ).bindparams({
+            "id_produk": id_produk,
+            "id_cabang": id_cabang
+        }).execute().fetchone().result
+
+        return res
+
+    # this function get principal products that have relation with customer and sales
+    @handle_error
+    def getPlafonProduks(self):
+        products = (
+            self.query()
+            .setRawQuery(
+            f"""
+            SELECT 
+               principal.id AS id_principal,
+               principal.nama AS nama_principal,
+               produk.id,
+               produk.id_brand,
+               produk.id_subbrand,
+               produk.id_kategori,
+               produk.id_status,
+               produk.kode_sku,
+               produk.kode_ean,
+               produk.nama,
+               produk_subbrand.nama AS subbrand_nama,
+               produk.harga_beli,
+               produk.keterangan,
+               produk.ppn,
+               produk_harga_jual.harga as harga_jual,
+               MAX(CASE WHEN produk_uom.level = 1 THEN produk_uom.faktor_konversi END) as konversi_1,
+               MAX(CASE WHEN produk_uom.level = 2 THEN produk_uom.faktor_konversi END) as konversi_2, 
+               MAX(CASE WHEN produk_uom.level = 3 THEN produk_uom.faktor_konversi END) as konversi_3,
+               MAX(CASE WHEN produk_uom.level = 1 THEN produk_uom.nama END) as konversi_1_nama,
+               MAX(CASE WHEN produk_uom.level = 2 THEN produk_uom.nama END) as konversi_2_nama, 
+               MAX(CASE WHEN produk_uom.level = 3 THEN produk_uom.nama END) as konversi_3_nama
+            FROM plafon
+            LEFT JOIN customer ON customer.id = plafon.id_customer
+            LEFT JOIN principal ON principal.id = plafon.id_principal  
+            LEFT JOIN sales ON sales.id = plafon.id_sales
+            LEFT JOIN users ON users.id = sales.id_user
+            LEFT JOIN produk ON produk.id_principal = principal.id
+            LEFT JOIN produk_subbrand ON produk_subbrand.id = produk.id_subbrand
+            LEFT JOIN produk_harga_jual ON produk.id = produk_harga_jual.id_produk
+            LEFT JOIN produk_uom ON produk.id = produk_uom.id_produk
+            WHERE 
+               plafon.id_user = :user_id AND
+               plafon.id_customer = :customer_id AND 
+               plafon.id_principal = :principal_id AND
+               plafon.id_tipe_harga = produk_harga_jual.id_tipe_harga
+            GROUP BY
+               principal.id,
+               principal.nama,
+               produk.id,
+               produk.id_principal,
+               produk.id_brand,
+               produk.id_subbrand,
+               produk.id_kategori, 
+               produk.id_status,
+               produk.kode_sku,
+               produk.kode_ean,
+               produk.nama,
+               produk_subbrand.nama,
+               produk.harga_beli,
+               produk.keterangan,
+               produk.ppn,
+               produk_harga_jual.harga
+            """
+            )
+            .bindparams({
+                "user_id": self.req("user_id"),
+                "customer_id": self.req("customer_id"),
+                "principal_id": self.req("principal_id")
+            })
+            .execute()
+            .fetchall()
+            .get()
+        )
+
+        return products
+
+    @handle_error
+    def getStokReady(self):
+        id_cabang = self.req('id_cabang')
+        id_produk = self.req('id_produk')
+
+        res = self.query().setRawQuery(
+            """
+                SELECT 
+                stok.jumlah_ready
+
+                FROM produk
+                JOIN stok ON produk.id = stok.produk_id 
+                WHERE 
+                stok.produk_id = :id_produk
+                AND
+                stok.cabang_id = :id_cabang
+            """
+        ).bindparams({
+            "id_produk": id_produk,
+            "id_cabang": id_cabang
+        }).execute().fetchone().get()
+
+        return res
+
+    @staticmethod
+    def _parse_id_list(value):
+        if isinstance(value, (list, tuple)):
+            values = value
+        else:
+            values = str(value or '').split(',')
+
+        parsed = []
+        for item in values:
+            try:
+                numeric = int(str(item).strip())
+            except (TypeError, ValueError):
+                continue
+            if numeric > 0 and numeric not in parsed:
+                parsed.append(numeric)
+        return parsed
+
+    def _request_principal_ids(self):
+        raw_values = []
+        for key in ('principal_ids', 'principal_ids[]', 'principal_id', 'principal_id[]'):
+            raw_values.extend(request.args.getlist(key))
+
+        if not raw_values:
+            raw_values.append(self.req("principal_ids"))
+            raw_values.append(self.req("principal_id"))
+
+        principal_ids = []
+        for raw_value in raw_values:
+            for principal_id in self._parse_id_list(raw_value):
+                if principal_id not in principal_ids:
+                    principal_ids.append(principal_id)
+
+        return principal_ids
+
+    @handle_error
+    def getProdukSalesOrder(self):
+        self._ensure_ppn_schema()
+        # Ambil parameter dari request
+        user_id = self.req("user_id")
+        customer_id = self.req("customer_id")
+        principal_ids = self._request_principal_ids()
+        cabang_id = self.req("id_cabang")
+
+        if not principal_ids:
+            return []
+
+        # Raw Query yang sudah menyertakan stok_ready
+        query = """
+            SELECT 
+                p.id, p.nama, p.kode_sku, p.id_principal, p.id_subbrand,
+                pr.nama AS nama_principal,
+                pr.kode AS kode_principal,
+                p.id_ppn,
+                mp.nama AS ppn_nama,
+                mp.kode AS ppn_kode,
+                COALESCE(mp.persentase, p.ppn, 0) AS ppn,
+                CASE WHEN p.id_ppn IS NULL AND p.ppn IS NULL THEN TRUE ELSE FALSE END AS ppn_missing,
+                ps.nama AS subbrand_nama,
+                phj.harga as harga_jual,
+                s.jumlah_ready as stok_ready,
+                MAX(CASE WHEN u.level = 1 THEN u.faktor_konversi END) as konversi_1,
+                MAX(CASE WHEN u.level = 2 THEN u.faktor_konversi END) as konversi_2,
+                MAX(CASE WHEN u.level = 3 THEN u.faktor_konversi END) as konversi_3,
+                MAX(CASE WHEN u.level = 1 THEN u.nama END) as uom_1,
+                MAX(CASE WHEN u.level = 2 THEN u.nama END) as uom_2,
+                MAX(CASE WHEN u.level = 3 THEN u.nama END) as uom_3
+            FROM produk p
+            JOIN plafon pl ON p.id_principal = pl.id_principal
+            JOIN principal pr ON pr.id = p.id_principal
+            LEFT JOIN sales sales_plafon ON sales_plafon.id = pl.id_sales
+            JOIN produk_harga_jual phj ON p.id = phj.id_produk AND pl.id_tipe_harga = phj.id_tipe_harga
+            LEFT JOIN master_ppn mp ON mp.id = p.id_ppn
+            LEFT JOIN produk_subbrand ps ON ps.id = p.id_subbrand
+            LEFT JOIN stok s ON p.id = s.produk_id AND s.cabang_id = :id_cabang
+            LEFT JOIN produk_uom u ON p.id = u.id_produk
+            WHERE (pl.id_user = :user_id OR sales_plafon.id_user = :user_id)
+            AND pl.id_customer = :customer_id
+            AND pl.id_principal IN :principal_ids
+            AND p.id_principal IN :principal_ids
+            AND COALESCE(pr.aktif, TRUE) = TRUE
+            AND UPPER(TRIM(COALESCE(pr.kode, ''))) NOT IN ('MIX', 'M1', 'M2', 'M3', 'MFB', 'MFT')
+            AND UPPER(TRIM(COALESCE(pr.nama, ''))) NOT IN ('MIX', 'M1', 'M2', 'M3', 'MFB', 'MFT')
+            AND NOT (UPPER(TRIM(COALESCE(pr.kode, ''))) ~ '^MIX[[:space:]#-]*[0-9]*$')
+            AND NOT (UPPER(TRIM(COALESCE(pr.nama, ''))) ~ '^MIX[[:space:]#-]*[0-9]*$')
+            GROUP BY p.id, pr.id, pr.nama, pr.kode, mp.id, ps.nama, phj.harga, s.jumlah_ready
+        """
+        return self.query().setRawQuery(query).bindparams({
+            "user_id": user_id,
+            "customer_id": customer_id,
+            "principal_ids": principal_ids,
+            "id_cabang": cabang_id
+        }).execute().fetchall().get()
+    

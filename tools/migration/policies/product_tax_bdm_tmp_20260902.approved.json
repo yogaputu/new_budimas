@@ -1,0 +1,10 @@
+{
+  "policy_id": "approved_product_tax_bdm_tmp_20260902",
+  "approval_status": "approved",
+  "approval_reference": "User approval in Codex task on 2026-09-02: use PPN 11% operationally.",
+  "rule": "All source products with an explicit FakturPajak value use ppn=11. A blank FakturPajak remains a structured hold and is skipped only through the exact approved hold manifest.",
+  "source_fakturpajak_to_ppn": {
+    "YA": 11,
+    "TIDAK": 11
+  }
+}

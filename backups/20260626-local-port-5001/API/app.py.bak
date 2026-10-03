@@ -1,0 +1,218 @@
+import json
+import os
+from flask_cors import CORS
+from flask import Flask, request
+from werkzeug.exceptions import HTTPException
+
+
+def load_local_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_local_env()
+
+
+def setup_google_application_credentials():
+    upload_driver = os.environ.get("FILE_UPLOAD_DRIVER", "local").lower()
+    if upload_driver not in ("gcs", "google", "cloud"):
+        return
+
+    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        return
+
+    credential_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "ptbudimas.json"
+    )
+    if os.path.exists(credential_path):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credential_path
+
+
+setup_google_application_credentials()
+
+from apps.conn2 import init_connection, native_db, db
+from apps.handler import handle_exception
+from apps.helper import *
+from apps.lib.pubsub import PubSub 
+from apps.routes.auth import auth
+from apps.routes.base import base
+from apps.routes.test import test
+from apps.routes.web import web
+from apps.routes.extra import extra
+from apps.routes.akuntansi import akuntansi
+from apps.routes.akuntansi import pubsub as pubsubroute
+from apps.routes.distribusi import distribusi
+from apps.routes.produk import produk
+from apps.routes.retur import retur
+from apps.routes.vouchers import voucher
+from apps.routes.stock_transfer import stock_transfer
+from apps.routes.DMS import dms
+from apps.routes.pajak import pajak
+from apps.routes.sales import sales
+from apps.routes.sales_kunjungan import sales_kunjungan
+from apps.routes.customer import customer
+from apps.routes.finance import finance
+from apps.routes.sales_canvas import sales_canvas
+from apps.routes.akuntasi import akuntasi
+from apps.routes.promo import promo
+from apps.routes.stock_opname import stock_opname
+from apps.routes.principal import principal
+from apps.routes.mobile_gateway import mobile_gateway
+from apps.routes.wms_mock import wms_mock
+from apps.routes.helper_driver import helper_driver
+from apps.routes.ai import ai
+from apps.routes.supervisor_audit import supervisor_audit
+
+app = Flask(__name__)
+db = init_connection(app)
+
+CORS(
+    app,
+    supports_credentials=True,
+    resources={
+        r"/api/*": {"origins": r".*"},
+        r"/inventory/*": {"origins": r".*"},
+        r"/transactions/*": {"origins": r".*"},
+        r"/loading/*": {"origins": r".*"},
+        r"/droping/*": {"origins": r".*"},
+        r"/transfer/*": {"origins": r".*"},
+        r"/incoming/*": {"origins": r".*"},
+        r"/picking/*": {"origins": r".*"},
+    },
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Sales-Id",
+        "X-Sales-Kode",
+        "X-Principle-Kode",
+        "X-User-Id",
+        "Accept",
+        "Origin"
+    ],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
+
+@app.before_request
+def log_request():
+    print(f"➡️ {request.method} {request.path}")
+
+# app.pubsub = PubSub(
+#     project_id="ptbudimas",
+#     credentials_json=json.dumps({"type": "service_account", "project_id": "ptbudimas",
+#                                  "private_key_id": "29b803f1PbWWqgKDBDorh525uecKaGZD21FGSoCeR",
+#                                  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCusPHcnQFNuI0Q\nQ4vMSbU/ERuhZAmqkg/sgWnogIQt47kmNjL2gMzVWQ7OuNUuYF5LTc4ECWcnOoyu\nXQj0bTohXNHz9eozxwUS6n0TL1DIzbz2g0CxKLuSHlis3Q4d1N7eFCHGmIycLbYO\nqCOPjpflmZgVEC9FW3LeHc5AiPLWu6srHI6kQlqnAwZKks5i9JnEhcSH6lPA0y2J\nwGyrJzTBeSRflFqSfaNwRgPQDVtoboDewze9BIHIfBf4nMg1ZL2lv0lj6mjSH5v4\nSxjxznfkFY9Yt/vI7kAzNpCr/eroVrsJXcqEoR9Gmt8OSKl/mivtJxhGbFZXC37w\nFdCEME9M9cSy9FvfHvcx2gMPkp1H5Dj4YaKufPRsAyon8Tf/u/fwFcc1V/o7o4da\nB8eUJuxqKz3FrJImh4LHK2wrnPgozmeCU4Q1klCC8IQItjYW3lcAEAMsZatKNr6u\nbdknW+Hd9NOxFhTuykBCY6czH3eReFaOWmM8tGylTzJl/kFYZfZ29sCwQNkE6mZW\nr7kYibsHoxMpGz3vs3eG1gcV6YA74V/U+G+6UZXALxNpIBda/TqNif4o02tjHFS6\npsYJTe5ED+K4kL13l3XtVyULcXpTlvqtL5t9/+JbEJfrwZPdlUJB10snEc2z6a5C\njsGsCS/H3jdm7cuhO+NzAXMdq92ei5Y9NtU4IqzXAQKBgQDVIFbkjAPtDC2jR/+O\nAXssJAa4AMLRbjdUvGs6dINkxwnsxmrz0/o+OnG1x71IAw828z57irj0NC+5nMl2\nebGjh47DggcVLE1RHcEy4JicSlquhRL2XJdJPN6pMUTmE5Htt2765pIOT+YFWIIe\nR2bTAkFgaGuVy3tjrHTBEHkr4QKBgQDR1UIU48BxtvfZYeqbCWwifkVEzWZ2VltE\n0uCElC1WfTWUSByJ3EpQUlItgEnMoo/ga0HulOXupNGc9199SYvhv8kOqRprmu8a\nG2arIfxewpE+tEelFpranrqheHlpVWkq44c5M3oF8El57Xhx4Hklt90A5K8lv9hY\nnRM4sOZusQKBgQCaLI/POx5n78Rf9uh+oMGqt9EIcLx95j4ulTL4kWqvj3C1kP+z\nrSe8tmiluH1Lx7LM7H/JvRt4xPu1SR9QDk6b3qc+9SQMhATWZjDpjiG4Be29i9Sg\n1XA3ccodGOAflA6fqW+mHv+PTOs3+MQABWTzxhDnHgKd1RpIi2vWcgVF4QKBgATY\nIIts6p91culg2lKz9/wf4CeDem8W9Up0d9x3s0hA4cDHnWkNXeXW0LDeOlXwFtQ+\nhaolY92Ljo9KIrk4vnL6w4CEJOkBDa4Tnd4rjbD+Wu4QqWrFR9PuQC7EIkFtSF1G\nHXQTnSiP8JJRCivO290kDoUbwnNjp3H8RlpTsy4xAoGALvGf11J/DQcGwYdyOr2v\nEGahreagzlq059hr2VILloRQ/dUBRMkvtA17fSD/flO4GOUhEJdSy7jrG0SF0c47\nC7F5Y2dcdZNLKiOcdatDlk9qRrUOAYfOb1VqE2FdwjeW5qxOs2RKcq2ASZqUR2Xf\nXJDKukYrvu90FSj9y83moGU=\n-----END PRIVATE KEY-----\n",
+#                                  "client_email": "budimasdoc@ptbudimas.iam.gserviceaccount.com",
+#                                  "client_id": "104937623940679024935",
+#                                  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+#                                  "token_uri": "https://oauth2.googleapis.com/token",
+#                                  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+#                                  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/budimasdoc%40ptbudimas.iam.gserviceaccount.com",
+#                                  "universe_domain": "googleapis.com"}),
+#     topics=['create_jurnal']
+# )
+app.pubsub = PubSub(
+    project_id="true-river-487414-b5",
+    credentials_json=json.dumps({"type": "service_account",
+                                "project_id": "true-river-487414-b5",
+                                "private_key_id": "e1f94ca99c63f97c86d44630e8c710ecc1a99733",
+                                "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDAcWwajkmAzf9K\nPUSthLknEHDV4+vWNVLEx60tGKci+StYAhMYg7mPFvx1R07Wd+ZzdYMujLoO+UxU\noAbAYJJM1dxpgdfB160xqtcnTwDemlkytSH3kAKpsSIcpGv1hBjCbb+N1Uds6Tbv\nJ6ZOI4+gUJgEsuhLsFmoYQWEm9G7VRUTaCMepKHVVduBZRxovIrpUJmHUO88sQPC\nIanp9Lu63zHWKI5gT1PCHr/TsLfjrNQXFnUSyNYjKH+FCiRxWA5J/C4k4fWRO9Qj\nJ/Kiv+q6BpiUnQERKOJQh1UqeTBpgilEvimBsP9keoUrDQRBM674QgyYYEJ0mqMg\nokLBIaPtAgMBAAECggEABmTxmp0WHb/tttT77mgPXuTrWuM/3glxJQJQsF1PvTHA\ns72EToQ4XjDKIq6qR/LXJwiSKBg09nQCI62z8iB2iM1yWjvrCpEICDNANhlbhgn+\nFlk+aUnRTNVXgZ9U/WUH2mE0xDNNNELR66n9mwsQP3UHsa0TWuOsY8cVgw2wyL10\nLCQGS0mJEOdrnsob4EF+N6CAWUEedEgUWJXFL8cy3f/tA94jVnvOD5MMChK/qnfJ\nwvA+sn8Tuva3VjBKAw9VbYsy4CEfoG0LWttaMnyVk6r/mNKy7K8GVh1KMO55mIyQ\nmkPilyX1rnSJdKvyRarFyD5xuAxURg+tJomh9JGSYQKBgQD0dcVVD1EPnmHLevCF\n/iM9FDtV2ugtamZ4gNxDpqOAadWw+2/KNN3fQyvbXfK/HscEyQgo2NxrW0/CkEQx\nt5IS8nla7obAf4CdhuTIh+GRHDr+GzBBFPU4gTCWgQtx9+uOVE+Cu2fdcvwfbIgd\nq5YKtkwP94xeUJEI2FftDW+TNwKBgQDJhwqJTBoQ5LKjI7B3Gjbrs8CfonSkODla\ndbCAIeKB/oKo2WkbR5IGoEzBD18njmnrw2Fus7Ignl2j7UsY5FAs/Ybp9P4gwr7o\nL4GVMrZHJzoCOxU4cJfAh5+ww37wl5ytUnesb+JtmoUt7OiHN7oD1R7C3yERMO2T\nKBSrTzab+wKBgDFvY4FpAIZ9C9+/M8aU9wFSBxG8m/kbLC+wN1rC5wt/24PXxOqK\nOFf+2G6bGAzIJ4zzLmA8Qo6/P2jkDbZUHgkQ2bOmyr9AyXyRm9BlkhrrL47VZrOy\njkhn77Bv1iWs8gitSgrw5PcmWo/sPbZqTYRLCySrdcpY1ouIXHeGoQqPAoGBAI2w\nCSNgww7PjB0REZebcbOj7LEPqgxvjztfdVmQ+UzGIR0Pxksstak8+NnfsdoA0c21\nz4Hii0FNtq5zPpJgq1IGad2Bp05nPYvHIsdAIVHDbZB188R7vOXbNNY1jMEhB0IA\nsi0leL/wnOQeJZoz/u+E3pzJ/di1WsNUsbuD9PQTAoGAOOym61jnyoBAh7HXbs+s\nGs1tF236u44ICO0Skv5yEME9M9cSy9FvfHvcx2gMPkp1H5Dj4YaKufPRsAyon8Tf\n5ECDO5fIFJiKIPbmJx/DcoJ5VzBAvaEQ1D2zW5FlWT98AIOyEyfGQxxynU/W1eKW\nzi69D1Vvf5yQb1LsXJEfv2Q=\n-----END PRIVATE KEY-----\n",
+                                "client_email": "pubsub@true-river-487414-b5.iam.gserviceaccount.com",
+                                "client_id": "113902435671575686494",
+                                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                "token_uri": "https://oauth2.googleapis.com/token",
+                                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                                "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pubsub%40true-river-487414-b5.iam.gserviceaccount.com",
+                                "universe_domain": "googleapis.com"}),
+    topics=['create_jurnal']
+)
+
+try:
+    print("Sedang memverifikasi topik di Google Cloud...")
+    topic_path = f"projects/true-river-487414-b5/topics/create_jurnal"
+    
+    if app.pubsub.publisher:
+        app.pubsub.publisher.get_topic(request={"topic": topic_path})
+        print("✅ KONEKSI REAL BERHASIL: Topik ditemukan di Google Cloud.")
+        
+    else:
+        print("ℹ️ STATUS: Berjalan dalam mode SIMULASI (Lokal).")
+except Exception as e:
+    print(f"❌ KONEKSI REAL GAGAL: {e}")
+
+app.register_error_handler(HTTPException, handle_exception)
+app.register_blueprint(pubsubroute)
+app.register_blueprint(auth)
+app.register_blueprint(base)
+app.register_blueprint(test)
+app.register_blueprint(web)
+app.register_blueprint(extra)
+app.register_blueprint(akuntansi)
+app.register_blueprint(distribusi)
+app.register_blueprint(produk)
+app.register_blueprint(retur)
+app.register_blueprint(voucher)
+app.register_blueprint(stock_transfer)
+app.register_blueprint(dms)
+app.register_blueprint(pajak)
+app.register_blueprint(sales)
+app.register_blueprint(sales_kunjungan)
+app.register_blueprint(customer)
+app.register_blueprint(finance)
+app.register_blueprint(sales_canvas)
+app.register_blueprint(akuntasi)
+app.register_blueprint(promo)
+app.register_blueprint(stock_opname)
+app.register_blueprint(principal)
+app.register_blueprint(mobile_gateway)
+app.register_blueprint(wms_mock)
+app.register_blueprint(helper_driver)
+app.register_blueprint(ai)
+app.register_blueprint(supervisor_audit)
+
+if __name__ == '__main__':
+    # 1. Define the base directory of your project (Asumsi app.py ada di root project)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # 2. Define the paths for the certificate and private key
+    CERT_FOLDER = os.path.join(BASE_DIR, 'cert')
+
+    # Assuming these are the server's files you want to use for Flask's SSL context:
+    CERT_FILE = os.path.join(CERT_FOLDER, 'client-cert.pem') 
+    KEY_FILE = os.path.join(CERT_FOLDER, 'client-key.pem')
+    # 3. Check for file existence to prevent FileNotFoundError
+    use_ssl = os.environ.get("USE_SSL", "true").lower() not in ("0", "false", "no")
+    if use_ssl and os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
+        print(f"✅ Starting server with SSL context...")
+        
+        # 4. Pass the full, verified paths to ssl_context
+        app.run(
+            host="0.0.0.0", 
+            port=5000, 
+            debug=True,
+            ssl_context=(CERT_FILE, KEY_FILE) # <-- FIX: This is what enables HTTPS
+        )
+    elif not use_ssl:
+        print("Starting server without SSL for local Android emulator testing...")
+        app.run(
+            host="0.0.0.0",
+            port=5000,
+            debug=True
+        )
+    else:
+        print("🛑 ERROR: SSL files not found in the 'cert' folder.")
+        print(f"Expected Certificate: {CERT_FILE}")
+        print(f"Expected Private Key: {KEY_FILE}")
+

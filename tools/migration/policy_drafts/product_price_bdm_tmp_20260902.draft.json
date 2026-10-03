@@ -1,0 +1,12 @@
+{
+  "policy_id": "draft_product_price_bdm_tmp_20260902",
+  "approval_status": "draft",
+  "review_note": "Candidate ordered mapping only. Confirm each legacy HargaA-E business meaning before approval; target type SW is intentionally unmapped.",
+  "source_price_columns": {
+    "hargaa": "MT",
+    "hargab": "GT",
+    "hargac": "EU",
+    "hargad": "KA",
+    "hargae": "WS"
+  }
+}

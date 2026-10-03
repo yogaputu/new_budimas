@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."inputsetoran" ("tanggal", "kode", "nama", "jumlah") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/InputSetoran.csv' WITH (FORMAT csv, HEADER true, NULL '')

@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."kunjunganfailed" ("tanggal", "kodecustomer", "kodesales", "alasan", "alasannoorder", "kodeprinciple", "id") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/KunjunganFailed.csv' WITH (FORMAT csv, HEADER true, NULL '')

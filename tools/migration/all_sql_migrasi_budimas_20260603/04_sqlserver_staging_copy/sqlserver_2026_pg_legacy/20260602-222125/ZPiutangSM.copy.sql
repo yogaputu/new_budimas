@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."zpiutangsm" ("tanggal", "nota", "kodesales", "namasales", "kodecustomer", "namacustomer", "jatuhtempo", "totalpenjualan", "totalretur", "terbayar", "operator") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/ZPiutangSM.csv' WITH (FORMAT csv, HEADER true, NULL '')

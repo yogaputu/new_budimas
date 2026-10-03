@@ -1,0 +1,1914 @@
+<script setup>
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  createSalesOrder,
+  getCustomerPlafons,
+  getEditableSalesOrder,
+  getSalesCustomers,
+  getSalesOrderProducts,
+  updateSalesOrder
+} from '@/api/salesOrder';
+import { getBranches, getCompanies, getPrincipals, getSales } from '@/api/master';
+import { previewUnifiedPromoSalesOrder } from '@/api/promo';
+import { useAuthStore } from '@/stores/auth';
+import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import {
+  branchMatchesCompany,
+  getLoginBranchId,
+  getLoginCompanyId,
+  getLoginSalesUserId,
+  getRowBranchIds,
+  getRowCompanyId,
+  getRowCompanyIds,
+  isSuperUser,
+  scopeRowsByLoginBranch,
+  scopeSalesRowsByLogin,
+  shouldLockToLoginSales
+} from '@/utils/accessScope';
+import { toLocalCompactDate, toLocalDateInputValue } from '@/utils/date';
+import AppEmptyState from '@/shared/components/AppEmptyState.vue';
+import AppFormField from '@/shared/components/AppFormField.vue';
+import AppModal from '@/shared/components/AppModal.vue';
+import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
+import PageHeader from '@/shared/components/PageHeader.vue';
+import { getEligiblePaymentVouchers } from '@/api/finance';
+
+const router = useRouter();
+const route = useRoute();
+const auth = useAuthStore();
+const minimumOrderDate = toLocalDateInputValue(new Date());
+
+const form = reactive({
+  branchId: '',
+  companyId: '',
+  salesUserId: '',
+  customerId: '',
+  principalIds: [],
+  orderNo: '',
+  orderDate: minimumOrderDate
+});
+
+const discountForm = reactive({
+  useUnifiedPromo: true,
+  manualType: 'percent',
+  manualValue: '',
+  manualNote: ''
+});
+
+const branchRows = ref([]);
+const companyRows = ref([]);
+const principalRows = ref([]);
+const salesRows = ref([]);
+const customers = ref([]);
+const plafons = ref([]);
+const products = ref([]);
+const rows = ref([]);
+const productSearch = ref('');
+const loadingSales = ref(false);
+const loadingCustomers = ref(false);
+const loadingPlafons = ref(false);
+const loadingProducts = ref(false);
+const loadingPromoPreview = ref(false);
+const loadingCreditNotes = ref(false);
+const submitting = ref(false);
+const hydratingEdit = ref(false);
+const editOriginalPlafonId = ref('');
+const showStockWarningModal = ref(false);
+const feedback = ref('');
+const errorMessage = ref('');
+const promoPreview = ref({ total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] });
+const eligibleCreditNotes = ref([]);
+const selectedCreditNoteNominals = reactive({});
+let promoPreviewTimer = null;
+
+const SYNTHETIC_PRINCIPAL_CODES = new Set(['MIX', 'M1', 'M2', 'M3', 'MFB', 'MFT']);
+
+const fallbackUserId = computed(() => getLoginSalesUserId(auth.user));
+const editOrderId = computed(() => route.params.id || route.query.edit_id || '');
+const isEditMode = computed(() => Boolean(editOrderId.value));
+const fallbackBranchId = computed(() => getLoginBranchId(auth.user));
+const fallbackCompanyId = computed(() => getLoginCompanyId(auth.user));
+const canUseLoginScope = computed(() => shouldLockToLoginSales(auth));
+const shouldLockBusinessScope = computed(() => !isSuperUser(auth));
+const selectedBranch = computed(() => branchRows.value.find((item) => String(item.id) === String(form.branchId || '')));
+const selectedSales = computed(() =>
+  salesRows.value.find((item) =>
+    [item.id_user, item.user_id, item.id, item.id_sales]
+      .filter((salesId) => salesId !== null && salesId !== undefined && salesId !== '')
+      .map((salesId) => String(salesId))
+      .includes(String(form.salesUserId || activeUserId.value || ''))
+  )
+);
+const activeUserId = computed(() => form.salesUserId || (canUseLoginScope.value ? fallbackUserId.value : ''));
+const activeBranchId = computed(() => form.branchId || selectedSales.value?.id_cabang || fallbackBranchId.value || '');
+const activeSalesName = computed(() => selectedSales.value?.nama || auth.user?.nama || auth.user?.nama_sales || auth.userName || 'Sales');
+
+const branchOptions = computed(() =>
+  scopeRowsByLoginBranch(branchRows.value, auth)
+    .filter((item) => !form.companyId || branchMatchesCompany(item, form.companyId))
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || item.nama_cabang || 'Cabang'}`
+    }))
+);
+
+function companyIdsForBranch(branchId) {
+  if (!branchId) return [];
+
+  const ids = new Set();
+  const branch = branchRows.value.find((item) => String(item.id) === String(branchId));
+  getRowCompanyIds(branch).forEach((companyId) => ids.add(String(companyId)));
+
+  companyRows.value.forEach((item) => {
+    if (getRowBranchIds(item).includes(String(branchId))) {
+      ids.add(String(item.id));
+    }
+  });
+
+  if (form.companyId) ids.add(String(form.companyId));
+  if (fallbackCompanyId.value) ids.add(String(fallbackCompanyId.value));
+
+  return Array.from(ids);
+}
+
+const companyOptions = computed(() =>
+  companyRows.value
+    .filter((item) => {
+      if (isSuperUser(auth)) return true;
+      const scopedCompanyIds = new Set(
+        scopeRowsByLoginBranch(branchRows.value, auth)
+          .flatMap((branch) => getRowCompanyIds(branch).map(String))
+          .filter(Boolean)
+      );
+      return scopedCompanyIds.has(String(item.id)) || String(item.id) === String(fallbackCompanyId.value || '');
+    })
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || item.nama_perusahaan || 'Perusahaan'}`
+    }))
+);
+
+const salesOptions = computed(() =>
+  scopeSalesRowsByLogin(salesRows.value, auth)
+    .filter((item) => !form.branchId || String(item.id_cabang || item.cabang_id || item.idCabang || '') === String(form.branchId))
+    .filter((item) => !form.companyId || salesMatchesCompany(item, form.companyId))
+    .map((item) => ({
+      value: String(item.id_user || item.id),
+      label: `${item.kode_sales || '-'} - ${item.nama || 'Sales'}${item.nama_cabang ? ` | ${item.nama_cabang}` : ''}`
+    }))
+);
+
+const salesSelectionRequiredMessage = computed(() =>
+  salesOptions.value.length
+    ? 'Pilih sales terlebih dahulu untuk memuat customer.'
+    : 'Sales bawahan belum tersedia untuk cabang/perusahaan ini.'
+);
+
+const customersWithRoute = computed(() =>
+  customers.value.filter((item) => item?.id_rute)
+);
+
+const customersWithoutRoute = computed(() =>
+  customers.value.filter((item) => !item?.id_rute)
+);
+
+const customerOptions = computed(() =>
+  customersWithRoute.value.map((item) => ({
+    value: String(item.id),
+    label: `${item.kode || '-'} - ${item.nama || 'Customer'}${item.nama_rute ? ` | ${item.nama_rute}` : ''}`
+  }))
+);
+
+const selectedCustomer = computed(() =>
+  customers.value.find((item) => String(item.id) === String(form.customerId))
+);
+
+const latestPlafonsByPrincipal = computed(() => {
+  const latestMap = new Map();
+
+  plafons.value.filter(isCleanPrincipalPlafon).forEach((item) => {
+    const principalKey = String(item.id_principal || '');
+    const currentId = Number(item.id_plafon || item.id || 0);
+    const existing = latestMap.get(principalKey);
+    const existingId = Number(existing?.id_plafon || existing?.id || 0);
+
+    if (!existing || currentId > existingId) {
+      latestMap.set(principalKey, item);
+    }
+  });
+
+  return Array.from(latestMap.values());
+});
+
+const selectedCustomerRouteWarning = computed(() => {
+  if (!form.customerId) {
+    return '';
+  }
+
+  if (selectedCustomer.value?.id_rute) {
+    return '';
+  }
+
+  return 'Customer ini belum memiliki rute di master customer, sehingga order tidak akan masuk ke Jadwal Pengiriman dan Picking.';
+});
+
+const principalOptions = computed(() =>
+  latestPlafonsByPrincipal.value.map((item) => ({
+    value: String(item.id_principal),
+    label: `${getPrincipalLabel(item)} | Plafon ${formatCurrency(item.limit_bon || item.sisa_bon || 0)}${Number(item.minimal_order || 0) > 0 ? ` | Min ${formatCurrency(item.minimal_order)}` : ''}`,
+    plafonId: Number(item.id_plafon || item.id || 0)
+  }))
+);
+
+const selectedPrincipalIds = computed(() => {
+  const availableIds = new Set(principalOptions.value.map((item) => String(item.value)));
+  return normalizePrincipalIds(form.principalIds).filter((id) => availableIds.has(String(id)));
+});
+
+const selectedPrincipalIdSet = computed(() => new Set(selectedPrincipalIds.value.map((id) => String(id))));
+
+const selectedPlafonIds = computed(() =>
+  isEditMode.value && editOriginalPlafonId.value
+    ? [Number(editOriginalPlafonId.value)]
+    :
+  latestPlafonsByPrincipal.value
+    .filter((item) => selectedPrincipalIdSet.value.has(String(item.id_principal)))
+    .map((item) => Number(item.id_plafon || item.id))
+    .filter(Boolean)
+);
+
+const selectedPlafonRows = computed(() =>
+  latestPlafonsByPrincipal.value.filter((item) => selectedPrincipalIdSet.value.has(String(item.id_principal)))
+);
+
+const selectedPaymentSystems = computed(() => {
+  const labels = selectedPlafonRows.value
+    .map((item) => normalizePaymentSystem(item.sistem_pembayaran))
+    .filter(Boolean)
+    .map((value) => (value === 'cash' ? 'Cash' : 'Kredit'));
+  return [...new Set(labels)];
+});
+
+const selectedPrincipalName = computed(() => {
+  const options = principalOptions.value.filter((item) => selectedPrincipalIdSet.value.has(String(item.value)));
+  if (!options.length) return '-';
+  if (options.length <= 2) return options.map((item) => item.label).join(', ');
+  return `${options.length} principal dipilih`;
+});
+
+function creditNoteKey(item) {
+  return `${item?.usage_type || 'credit_note'}:${item?.usage_id || item?.id_cn || item?.id || ''}`;
+}
+
+const selectedCreditNoteRows = computed(() =>
+  eligibleCreditNotes.value
+    .map((item) => ({
+      ...item,
+      selected_nominal: Number(selectedCreditNoteNominals[creditNoteKey(item)] || 0)
+    }))
+    .filter((item) => item.selected_nominal > 0)
+);
+
+const selectedCreditNoteTotal = computed(() =>
+  selectedCreditNoteRows.value.reduce((total, item) => total + Number(item.selected_nominal || 0), 0)
+);
+
+const orderSummary = computed(() => {
+  const subtotal = rows.value.reduce((total, item) => total + Number(item.subtotalorder || 0), 0);
+  const taxBeforeDiscount = rows.value.reduce((total, item) => total + Number(item.ppn_value || 0), 0);
+  const total = subtotal;
+  const totalPieces = rows.value.reduce((sum, item) => sum + Number(item.total_pieces || 0), 0);
+  const promoPreviewNominal = Number(promoPreview.value?.total_estimated_benefit || promoPreview.value?.total_estimated_cashback || 0);
+  const promoCashback = discountForm.useUnifiedPromo ? Math.min(Math.max(promoPreviewNominal, 0), subtotal) : 0;
+  const manualValue = toNumber(discountForm.manualValue);
+  const manualBase = Math.max(subtotal - promoCashback, 0);
+  const manualDiscount =
+    discountForm.manualType === 'percent'
+      ? manualBase * Math.min(manualValue, 100) / 100
+      : discountForm.manualType === 'nominal'
+        ? manualValue
+        : 0;
+  const manualDiscountClamped = Math.min(Math.max(manualDiscount, 0), manualBase);
+  const manualDiscountPercentEquivalent = manualBase > 0
+    ? (manualDiscountClamped / manualBase) * 100
+    : 0;
+  const totalDiscount = Math.min(promoCashback + manualDiscountClamped, subtotal);
+  const taxableBase = Math.max(subtotal - totalDiscount, 0);
+  const tax = rows.value.reduce((totalTax, item) => {
+    const rowSubtotal = Number(item.subtotalorder || 0);
+    const discountRatio = subtotal > 0 ? rowSubtotal / subtotal : 0;
+    const rowDiscount = totalDiscount * discountRatio;
+    const rowTaxableBase = Math.max(rowSubtotal - rowDiscount, 0);
+    return totalTax + rowTaxableBase * (toNumber(item.ppnRate) / 100);
+  }, 0);
+  const netTotal = taxableBase + tax;
+  const creditNoteTotal = Math.min(selectedCreditNoteTotal.value, netTotal);
+  const payableTotal = Math.max(netTotal - creditNoteTotal, 0);
+
+  return {
+    lines: rows.value.length,
+    subtotal,
+    tax,
+    taxBeforeDiscount,
+    total,
+    totalPieces,
+    promoCashback,
+    manualDiscount: manualDiscountClamped,
+    manualDiscountBase: manualBase,
+    manualDiscountPercentEquivalent,
+    totalDiscount,
+    taxableBase,
+    netTotal,
+    creditNoteTotal,
+    payableTotal
+  };
+});
+
+const qualifiedPromoGroups = computed(() =>
+  normalizeList(promoPreview.value?.groups).filter((item) => item.qualified)
+);
+
+const nearPromoGroups = computed(() =>
+  normalizeList(promoPreview.value?.groups).filter((item) => !item.qualified && Number(item.gap_qty || 0) > 0).slice(0, 3)
+);
+
+const stockWarnings = computed(() =>
+  rows.value
+    .filter((item) => Number(item.total_pieces || 0) > Number(item.stok_ready || 0))
+    .map((item) => `${item.nama || item.kode_sku || 'Produk'} (${Number(item.total_pieces || 0).toLocaleString('id-ID')} PCS order > ${Number(item.stok_ready || 0).toLocaleString('id-ID')} PCS ready)`)
+);
+
+const ppnWarnings = computed(() =>
+  getActiveOrderRows()
+    .filter((item) => !hasValidPpn(item))
+    .map((item) => item.nama || item.kode_sku || 'Produk tanpa nama')
+);
+
+const minimumOrderWarnings = computed(() =>
+  selectedPlafonRows.value
+    .map((plafon) => {
+      const minimum = Number(plafon.minimal_order || 0);
+      if (minimum <= 0) return '';
+
+      const principalSubtotal = getActiveOrderRows()
+        .filter((item) => String(item.id_principal || '') === String(plafon.id_principal || ''))
+        .reduce((sum, item) => sum + Number(item.subtotalorder || 0), 0);
+
+      if (principalSubtotal <= 0 || principalSubtotal >= minimum) return '';
+
+      return `${getPrincipalLabel(plafon)} minimal ${formatCurrency(minimum)}, order saat ini ${formatCurrency(principalSubtotal)}`;
+    })
+    .filter(Boolean)
+);
+
+const newCustomerCashWarning = computed(() => {
+  if (!selectedPlafonRows.value.length) return '';
+
+  const hasKnownTransaction = selectedPlafonRows.value.some((item) => Number(item.jumlah_transaksi || 0) > 0);
+  const hasNonCashPlafon = selectedPlafonRows.value.some((item) => normalizePaymentSystem(item.sistem_pembayaran) !== 'cash');
+
+  if (hasKnownTransaction || !hasNonCashPlafon) return '';
+
+  return 'Customer tanpa riwayat transaksi harus memakai sistem pembayaran Cash pada Plafon sebelum order pertama.';
+});
+
+const canLoadProducts = computed(() =>
+  form.branchId &&
+  form.companyId &&
+  form.customerId &&
+  selectedPrincipalIds.value.length &&
+  activeUserId.value &&
+  activeBranchId.value
+);
+
+const filteredRows = computed(() => {
+  const keyword = productSearch.value.trim().toLowerCase();
+  if (!keyword) return rows.value;
+
+  return rows.value.filter((item) =>
+    [
+      item.nama,
+      item.kode_sku,
+      item.subbrand_nama,
+      item.subbrand,
+      item.kategori_customer,
+      item.kategori_izin,
+      item.kategori_customer_toko,
+      item.kode,
+      item.barcode,
+      item.uom_1,
+      item.uom_2,
+      item.uom_3
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword))
+  );
+});
+
+function formatCurrency(value) {
+  return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+}
+
+function normalizePaymentSystem(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['cash', 'tunai'].includes(normalized)) return 'cash';
+  if (['kredit', 'credit'].includes(normalized)) return 'kredit';
+  return '';
+}
+
+function normalizeCategoryLetters(value) {
+  const seen = new Set();
+  return String(value || '')
+    .toUpperCase()
+    .split('')
+    .filter((char) => {
+      if (!/[A-Z]/.test(char) || seen.has(char)) return false;
+      seen.add(char);
+      return true;
+    })
+    .join('');
+}
+
+function normalizePrincipalIds(value) {
+  const rawValues = Array.isArray(value) ? value : String(value || '').split(',');
+
+  return rawValues
+    .map((item) => String(item || '').trim())
+    .filter((item) => item && item !== 'null' && item !== 'undefined');
+}
+
+function normalizePrincipalToken(value) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function isSyntheticPrincipalValue(value) {
+  const token = normalizePrincipalToken(value);
+  if (!token) return false;
+  return SYNTHETIC_PRINCIPAL_CODES.has(token) || /^MIX[\s#-]*\d*$/.test(token);
+}
+
+function principalRowById(principalId) {
+  return principalRows.value.find((item) => String(item.id) === String(principalId));
+}
+
+function isInactivePrincipalValue(value) {
+  const token = normalizePrincipalToken(value);
+  return ['0', 'FALSE', 'F', 'NONAKTIF', 'NON AKTIF', 'INACTIVE'].includes(token);
+}
+
+function idStringSet(values) {
+  return new Set(
+    values
+      .filter((value) => value !== null && value !== undefined && value !== '')
+      .map((value) => String(value))
+  );
+}
+
+function getPrincipalLabel(item) {
+  const principal = principalRowById(item?.id_principal);
+  const code = item?.kode_principal || item?.principal_kode || principal?.kode || '';
+  const name = item?.nama_principal || item?.principal_name || principal?.nama || principal?.text || `Principal ${item?.id_principal}`;
+
+  if (code && !String(name).toUpperCase().includes(String(code).toUpperCase())) {
+    return `${code} - ${name}`;
+  }
+
+  return name;
+}
+
+function principalMatchesSelectedCompany(item) {
+  if (!form.companyId) return true;
+
+  const principal = principalRowById(item?.id_principal);
+  const companyId = item?.id_perusahaan || item?.principal_id_perusahaan || principal?.id_perusahaan;
+  if (!companyId) return true;
+
+  return String(companyId) === String(form.companyId);
+}
+
+function plafonMatchesSelectedSales(item) {
+  const selectedUserIds = idStringSet([
+    activeUserId.value,
+    form.salesUserId,
+    selectedSales.value?.id_user,
+    selectedSales.value?.user_id,
+    selectedSales.value?.id
+  ]);
+  if (!selectedUserIds.size) return true;
+
+  const plafonUserIds = idStringSet([item?.id_user, item?.id_user_sales, item?.user_id]);
+  if ([...plafonUserIds].some((id) => selectedUserIds.has(id))) {
+    return true;
+  }
+
+  const selectedSalesIds = idStringSet([selectedSales.value?.id_sales, selectedSales.value?.sales_id]);
+  const plafonSalesIds = idStringSet([item?.id_sales, item?.sales_id]);
+  if ([...plafonSalesIds].some((id) => selectedSalesIds.has(id))) {
+    return true;
+  }
+
+  return false;
+}
+
+function isCleanPrincipalPlafon(item) {
+  const principalId = Number(item?.id_principal);
+  if (!Number.isFinite(principalId) || principalId <= 0) return false;
+
+  const principal = principalRowById(item.id_principal);
+  const activeValue = item?.aktif ?? item?.principal_aktif ?? principal?.aktif;
+  if (activeValue !== null && activeValue !== undefined && activeValue !== '' && isInactivePrincipalValue(activeValue)) {
+    return false;
+  }
+
+  const code = item?.kode_principal || item?.principal_kode || principal?.kode;
+  const name = item?.nama_principal || item?.principal_name || principal?.nama || principal?.text;
+
+  return (
+    !isSyntheticPrincipalValue(code) &&
+    !isSyntheticPrincipalValue(name) &&
+    principalMatchesSelectedCompany(item) &&
+    plafonMatchesSelectedSales(item)
+  );
+}
+
+function resetPrincipalSelection() {
+  form.principalIds = [];
+}
+
+function generateOrderNo() {
+  const stamp = new Date();
+  const date = toLocalCompactDate(stamp);
+  const time = `${stamp.getHours()}${stamp.getMinutes()}${stamp.getSeconds()}`.padStart(6, '0');
+  return `SO-${date}-${time}`;
+}
+
+function syncCompanyFromBranch(preserveCurrent = false) {
+  if (!form.branchId) {
+    form.companyId = '';
+    return;
+  }
+
+  const allowedCompanyIds = companyIdsForBranch(form.branchId);
+  if (!preserveCurrent || !allowedCompanyIds.includes(String(form.companyId || ''))) {
+    form.companyId = '';
+  }
+}
+
+function applyLoginBusinessScope() {
+  if (!shouldLockBusinessScope.value) return;
+
+  if (fallbackBranchId.value) {
+    form.branchId = String(fallbackBranchId.value);
+  }
+
+  if (fallbackCompanyId.value) {
+    form.companyId = String(fallbackCompanyId.value);
+  }
+}
+
+function selectDefaultSalesIfPossible() {
+  const options = salesOptions.value;
+
+  if (canUseLoginScope.value && fallbackUserId.value) {
+    const currentUserIsSales = options.some((item) => String(item.value) === String(fallbackUserId.value));
+    form.salesUserId = currentUserIsSales ? String(fallbackUserId.value) : '';
+    return;
+  }
+
+  if (form.salesUserId && !options.some((item) => String(item.value) === String(form.salesUserId))) {
+    form.salesUserId = '';
+  }
+
+  if (!form.salesUserId && options.length === 1) {
+    form.salesUserId = String(options[0].value);
+  }
+}
+
+function salesMatchesCompany(row, companyId) {
+  if (!companyId) return true;
+
+  const directCompanyId = getRowCompanyId(row);
+  if (directCompanyId) {
+    return String(directCompanyId) === String(companyId);
+  }
+
+  const principalIds = [
+    row?.id_principal,
+    row?.principal_id,
+    row?.id_principals,
+    row?.principal_ids
+  ]
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!principalIds.length) return false;
+
+  return principalIds.some((principalId) => {
+    const principal = principalRows.value.find((item) => String(item.id) === String(principalId));
+    return String(getRowCompanyId(principal)) === String(companyId);
+  });
+}
+
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : fallback;
+}
+
+function hasText(value) {
+  return String(value ?? '').trim() !== '';
+}
+
+function hasValidPpn(row) {
+  return row?.ppnMissing !== true;
+}
+
+function getUomLevel(field) {
+  return field === 'uom1' ? 1 : field === 'uom2' ? 2 : field === 'uom3' ? 3 : 0;
+}
+
+function getUomConversion(row, level) {
+  if (level === 1) {
+    return toNumber(row?.konversi_1, 1);
+  }
+
+  return toNumber(row?.[`konversi_${level}`]);
+}
+
+function isUomEnabled(row, level) {
+  if (!level) return false;
+  return hasText(row?.[`uom_${level}`]) && getUomConversion(row, level) > 0;
+}
+
+function formatUomLabel(row, level) {
+  const name = row?.[`uom_${level}`] || `UOM ${level} belum diset`;
+  if (level === 1) return name;
+  return `${name} x ${Number(getUomConversion(row, level) || 0).toLocaleString('id-ID')}`;
+}
+
+function normalizeProductRow(item) {
+  const price = toNumber(item.harga_jual);
+  const ppnRate = toNumber(item.ppn);
+  const backendPpnMissing = item.ppn_missing === true || ['true', 't', '1'].includes(String(item.ppn_missing ?? '').toLowerCase());
+  const hasPpnReference = item.id_ppn !== null && item.id_ppn !== undefined && item.id_ppn !== ''
+    ? true
+    : item.ppn !== null && item.ppn !== undefined && item.ppn !== '';
+  const ppnMissing = backendPpnMissing || !hasPpnReference;
+
+  return {
+    ...item,
+    row_key: String(item.id),
+    kategori_customer_label: normalizeCategoryLetters(item.kategori_customer) || 'Semua',
+    kategori_izin_label: normalizeCategoryLetters(item.kategori_izin) || 'Semua',
+    kategori_customer_toko_label: normalizeCategoryLetters(item.kategori_customer_toko) || '-',
+    uom1: 0,
+    uom2: 0,
+    uom3: 0,
+    harga_jual: price,
+    ppnRate,
+    ppnMissing,
+    subtotalorder: 0,
+    ppn_value: 0,
+    totalHarga: 0,
+    totalDiskon: 0,
+    total_pieces: 0,
+    vouchers: [],
+    voucherSelections: {},
+    discountDetails: {}
+  };
+}
+
+function recalculateRow(row) {
+  const pieces = isUomEnabled(row, 1) ? toNumber(row.uom1) : 0;
+  const box = isUomEnabled(row, 2) ? toNumber(row.uom2) : 0;
+  const carton = isUomEnabled(row, 3) ? toNumber(row.uom3) : 0;
+  const konversi2 = getUomConversion(row, 2);
+  const konversi3 = getUomConversion(row, 3);
+  const subtotal = (pieces + box * konversi2 + carton * konversi3) * toNumber(row.harga_jual);
+  const tax = subtotal * (toNumber(row.ppnRate) / 100);
+
+  row.uom1 = pieces;
+  row.uom2 = box;
+  row.uom3 = carton;
+  row.subtotalorder = subtotal;
+  row.ppn_value = tax;
+  row.totalHarga = subtotal;
+  row.total_pieces = pieces + box * konversi2 + carton * konversi3;
+}
+
+function updateQty(row, field, value) {
+  const level = getUomLevel(field);
+  if (!isUomEnabled(row, level)) {
+    row[field] = 0;
+    recalculateRow(row);
+    schedulePromoPreview();
+    return;
+  }
+
+  row[field] = toNumber(value);
+  recalculateRow(row);
+  schedulePromoPreview();
+}
+
+function getActiveOrderRows() {
+  return rows.value.filter((item) => Number(item.total_pieces || 0) > 0);
+}
+
+function buildPromoPreviewPayload() {
+  return {
+    order_date: form.orderDate,
+    id_cabang: form.branchId,
+    id_perusahaan: form.companyId,
+    id_principal: selectedPrincipalIds.value.length === 1 ? selectedPrincipalIds.value[0] : '',
+    id_principal_ids: selectedPrincipalIds.value.map((id) => Number(id)),
+    id_customer: form.customerId,
+    products: getActiveOrderRows().map((item) => ({
+      id_produk: Number(item.id),
+      id_principal: Number(item.id_principal),
+      id_subbrand: item.id_subbrand,
+      harga_jual: Number(toNumber(item.harga_jual).toFixed(2)),
+      pieces_order: Number(item.uom1 || 0),
+      box_order: Number(item.uom2 || 0),
+      karton_order: Number(item.uom3 || 0),
+      konversi_2: Number(getUomConversion(item, 2) || 0),
+      konversi_3: Number(getUomConversion(item, 3) || 0),
+      subtotalorder: Number(toNumber(item.subtotalorder).toFixed(2)),
+      total_pieces: Number(item.total_pieces || 0)
+    }))
+  };
+}
+
+async function refreshPromoPreview() {
+  const activeRows = getActiveOrderRows();
+  if (!activeRows.length) {
+    promoPreview.value = { total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] };
+    return;
+  }
+
+  loadingPromoPreview.value = true;
+  try {
+    const response = await previewUnifiedPromoSalesOrder(buildPromoPreviewPayload());
+    promoPreview.value = unwrapResponse(response) || { total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] };
+  } catch (error) {
+    promoPreview.value = { total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] };
+  } finally {
+    loadingPromoPreview.value = false;
+  }
+}
+
+function schedulePromoPreview() {
+  window.clearTimeout(promoPreviewTimer);
+  promoPreviewTimer = window.setTimeout(refreshPromoPreview, 450);
+}
+
+function clearCreditNoteSelection() {
+  Object.keys(selectedCreditNoteNominals).forEach((key) => {
+    delete selectedCreditNoteNominals[key];
+  });
+}
+
+function maxCreditNoteForItem(item) {
+  const currentValue = Number(selectedCreditNoteNominals[creditNoteKey(item)] || 0);
+  const otherSelected = Math.max(Number(selectedCreditNoteTotal.value || 0) - currentValue, 0);
+  const remainingOrder = Math.max(Number(orderSummary.value.netTotal || 0) - otherSelected, 0);
+  const itemRemaining = Number(item.sisa_nominal || item.eligible_nominal || item.nominal_awal || 0);
+  return Math.min(itemRemaining, remainingOrder);
+}
+
+function setCreditNoteSelection(item, checked) {
+  const key = creditNoteKey(item);
+  if (!checked) {
+    delete selectedCreditNoteNominals[key];
+    return;
+  }
+  selectedCreditNoteNominals[key] = maxCreditNoteForItem(item);
+}
+
+function updateCreditNoteNominal(item, value) {
+  const key = creditNoteKey(item);
+  const maxValue = maxCreditNoteForItem(item);
+  const nextValue = Math.min(toNumber(value), maxValue);
+  if (nextValue <= 0) {
+    delete selectedCreditNoteNominals[key];
+    return;
+  }
+  selectedCreditNoteNominals[key] = nextValue;
+}
+
+async function loadEligibleCreditNotes() {
+  clearCreditNoteSelection();
+  eligibleCreditNotes.value = [];
+
+  if (!form.customerId || !selectedPrincipalIds.value.length) {
+    return;
+  }
+
+  loadingCreditNotes.value = true;
+  try {
+    const response = await getEligiblePaymentVouchers({
+      id_customer: form.customerId,
+      id_principal: selectedPrincipalIds.value.length === 1 ? selectedPrincipalIds.value[0] : undefined,
+      id_principal_ids: selectedPrincipalIds.value.join(','),
+      id_cabang: activeBranchId.value || undefined,
+      id_perusahaan: form.companyId || undefined
+    });
+    const payload = unwrapResponse(response);
+    eligibleCreditNotes.value = normalizeList(payload?.rows || payload?.data?.rows || payload).map((item) => ({
+      ...item,
+      usage_type: item.usage_type || 'credit_note',
+      usage_id: item.usage_id || item.id_cn || item.id,
+      sisa_nominal: Number(item.sisa_nominal || item.eligible_nominal || item.nominal_awal || item.total_cn || 0),
+      eligible_nominal: Number(item.eligible_nominal || item.sisa_nominal || item.nominal_awal || item.total_cn || 0)
+    })).filter((item) => Number(item.sisa_nominal || 0) > 0);
+  } catch (error) {
+    eligibleCreditNotes.value = [];
+    errorMessage.value = normalizeError(error, 'Credit Note customer belum bisa dimuat.');
+  } finally {
+    loadingCreditNotes.value = false;
+  }
+}
+
+async function loadSalesRows() {
+  loadingSales.value = true;
+  errorMessage.value = '';
+
+  try {
+    const [branchesResponse, companiesResponse, principalsResponse, salesResponse] = await Promise.all([
+      getBranches(),
+      getCompanies(),
+      getPrincipals(),
+      getSales()
+    ]);
+    branchRows.value = normalizeList(unwrapResponse(branchesResponse));
+    companyRows.value = normalizeList(unwrapResponse(companiesResponse));
+    principalRows.value = normalizeList(unwrapResponse(principalsResponse));
+    salesRows.value = normalizeList(unwrapResponse(salesResponse));
+
+    applyLoginBusinessScope();
+    selectDefaultSalesIfPossible();
+
+    if (activeUserId.value) {
+      await loadCustomers();
+    }
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Daftar sales belum bisa dimuat.');
+    salesRows.value = [];
+  } finally {
+    loadingSales.value = false;
+  }
+}
+
+async function loadCustomers() {
+  if (!activeUserId.value) {
+    errorMessage.value = salesSelectionRequiredMessage.value;
+    return;
+  }
+
+  loadingCustomers.value = true;
+  errorMessage.value = '';
+
+  try {
+    const response = await getSalesCustomers(activeUserId.value);
+    customers.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Customer sales belum bisa dimuat.');
+    customers.value = [];
+  } finally {
+    loadingCustomers.value = false;
+  }
+}
+
+async function loadPlafons() {
+  plafons.value = [];
+  products.value = [];
+  rows.value = [];
+  eligibleCreditNotes.value = [];
+  clearCreditNoteSelection();
+  resetPrincipalSelection();
+
+  if (!form.customerId || !activeUserId.value) {
+    return;
+  }
+
+  loadingPlafons.value = true;
+  errorMessage.value = '';
+
+  try {
+    const response = await getCustomerPlafons({
+      id_user: activeUserId.value,
+      id_customer: form.customerId,
+      include_all: 1,
+      sales_scope: 1
+    });
+    plafons.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Plafon customer belum bisa dimuat.');
+    plafons.value = [];
+  } finally {
+    loadingPlafons.value = false;
+  }
+}
+
+async function fetchProductRows(principalIds) {
+  const normalizedPrincipalIds = normalizePrincipalIds(principalIds);
+  if (!normalizedPrincipalIds.length) return [];
+
+  const response = await getSalesOrderProducts({
+    user_id: activeUserId.value,
+    customer_id: form.customerId,
+    principal_id: normalizedPrincipalIds[0],
+    principal_ids: normalizedPrincipalIds.join(','),
+    id_cabang: activeBranchId.value
+  });
+
+  return normalizeList(unwrapResponse(response));
+}
+
+async function loadProducts() {
+  products.value = [];
+  rows.value = [];
+  feedback.value = '';
+
+  if (!canLoadProducts.value) {
+    errorMessage.value = 'Pilih customer dan minimal satu principal dulu. Pastikan user login memiliki cabang.';
+    return;
+  }
+
+  loadingProducts.value = true;
+  errorMessage.value = '';
+
+  try {
+    const principalIds = selectedPrincipalIds.value;
+    let productRows = await fetchProductRows(principalIds);
+
+    if (principalIds.length > 1) {
+      const perPrincipalResponses = await Promise.all(principalIds.map((principalId) => fetchProductRows([principalId])));
+      const uniqueRows = new Map();
+      [...productRows, ...perPrincipalResponses.flat()].forEach((item) => {
+        const key = `${item.id_principal || ''}:${item.id || item.id_produk || ''}`;
+        if (key !== ':' && !uniqueRows.has(key)) {
+          uniqueRows.set(key, item);
+        }
+      });
+      productRows = Array.from(uniqueRows.values());
+    }
+
+    products.value = productRows;
+    rows.value = products.value.map(normalizeProductRow);
+    productSearch.value = '';
+    promoPreview.value = { total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] };
+    await loadEligibleCreditNotes();
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Produk order belum bisa dimuat.');
+    products.value = [];
+    rows.value = [];
+  } finally {
+    loadingProducts.value = false;
+  }
+}
+
+function hydrateRowsFromDetails(details = []) {
+  const detailsByProduct = new Map(
+    normalizeList(details).map((item) => [String(item.id_produk), item])
+  );
+
+  let matched = 0;
+  rows.value = rows.value.map((item) => {
+    const detail = detailsByProduct.get(String(item.id));
+    if (!detail) return item;
+
+    matched += 1;
+    const next = {
+      ...item,
+      uom1: Number(detail.pieces_order || 0),
+      uom2: Number(detail.box_order || 0),
+      uom3: Number(detail.karton_order || 0),
+      harga_jual: Number(detail.hargaorder || item.harga_jual || 0)
+    };
+    recalculateRow(next);
+    return next;
+  });
+
+  if (matched < detailsByProduct.size) {
+    errorMessage.value = 'Sebagian produk lama tidak muncul di daftar produk aktif. Cek principal/customer atau master produk sebelum update.';
+  }
+}
+
+async function loadOrderForEdit() {
+  if (!editOrderId.value) return;
+
+  hydratingEdit.value = true;
+  errorMessage.value = '';
+  feedback.value = '';
+
+  try {
+    const response = await getEditableSalesOrder(editOrderId.value);
+    const payload = unwrapResponse(response) || {};
+    const header = payload.header || {};
+    const details = normalizeList(payload.details);
+
+    if (Number(header.status_order ?? -999) !== 0) {
+      errorMessage.value = 'Order ini sudah masuk proses operasional, jadi tidak bisa diedit dari halaman input.';
+      return;
+    }
+
+    editOriginalPlafonId.value = String(header.id_plafon || '');
+    form.orderNo = header.no_order || form.orderNo;
+    form.orderDate = toLocalDateInputValue(header.tanggal_order || form.orderDate) || form.orderDate;
+    form.branchId = String(header.id_cabang || header.id_cabang_order || '');
+    form.companyId = String(header.id_perusahaan || '');
+    form.salesUserId = String(header.id_user_sales || header.id_user_plafon || '');
+
+    await loadCustomers();
+    form.customerId = String(header.id_customer || '');
+    await loadPlafons();
+    form.principalIds = normalizePrincipalIds([header.id_principal]);
+    await loadProducts();
+    hydrateRowsFromDetails(details);
+
+    discountForm.useUnifiedPromo = Number(header.unified_promo_nominal || 0) > 0;
+    discountForm.manualType = header.manual_discount_type || 'percent';
+    discountForm.manualValue = header.manual_discount_value ?? '';
+    discountForm.manualNote = header.order_discount_note || '';
+    await refreshPromoPreview();
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Data order untuk edit belum bisa dimuat.');
+  } finally {
+    hydratingEdit.value = false;
+  }
+}
+
+function buildPayload() {
+  const activeRows = getActiveOrderRows();
+
+  return {
+    id_plafon: selectedPlafonIds.value,
+    id_cabang: activeBranchId.value,
+    id_principal_ids: selectedPrincipalIds.value.map((id) => Number(id)),
+    no_sales_order: form.orderNo || generateOrderNo(),
+    tanggal_order: form.orderDate,
+    nama_sales: activeSalesName.value,
+    allow_overstock_order: 1,
+    subtotal_penjualan: Number(orderSummary.value.subtotal.toFixed(2)),
+    subtotal_diskon: Number(orderSummary.value.totalDiscount.toFixed(2)),
+    pajak: Number(orderSummary.value.tax.toFixed(2)),
+    total_penjualan: Number(orderSummary.value.netTotal.toFixed(2)),
+    credit_note_nominal: Number(orderSummary.value.creditNoteTotal.toFixed(2)),
+    credit_note_usages: selectedCreditNoteRows.value.map((item) => ({
+      usage_type: item.usage_type || 'credit_note',
+      usage_id: Number(item.usage_id || item.id_cn || item.id),
+      kode: item.kode || item.kode_cn || '',
+      nominal: Number(item.selected_nominal || 0)
+    })),
+    total_dana_diterima: 0,
+    products: activeRows.map((item) => ({
+      id_produk: Number(item.id),
+      id_principal: Number(item.id_principal),
+      harga_jual: Number(toNumber(item.harga_jual).toFixed(2)),
+      pieces_order: Number(item.uom1 || 0),
+      box_order: Number(item.uom2 || 0),
+      karton_order: Number(item.uom3 || 0),
+      subtotalorder: Number(toNumber(item.subtotalorder).toFixed(2)),
+      totalDiskon: 0,
+      ppn_value: Number(toNumber(item.ppn_value).toFixed(2)),
+      ppn_rate: Number(toNumber(item.ppnRate).toFixed(2)),
+      totalHarga: Number(toNumber(item.totalHarga).toFixed(2)),
+      vouchers: [],
+      voucherSelections: {},
+      discountDetails: {},
+      total_pieces: Number(item.total_pieces || 0)
+    })),
+    trade_promo_preview: promoPreview.value,
+    promo_application: {
+      use_unified_promo: discountForm.useUnifiedPromo,
+      id_cabang: form.branchId,
+      id_perusahaan: form.companyId,
+      id_principal: selectedPrincipalIds.value.length === 1 ? selectedPrincipalIds.value[0] : null,
+      id_principal_ids: selectedPrincipalIds.value.map((id) => Number(id)),
+      id_customer: form.customerId,
+      unified_promo_nominal: Number(orderSummary.value.promoCashback.toFixed(2)),
+      manual_discount_type: discountForm.manualType || null,
+      manual_discount_value: Number(toNumber(discountForm.manualValue).toFixed(4)),
+      manual_discount_percent_equivalent: Number(orderSummary.value.manualDiscountPercentEquivalent.toFixed(4)),
+      manual_discount_nominal: Number(orderSummary.value.manualDiscount.toFixed(2)),
+      manual_discount_note: discountForm.manualNote || '',
+      total_before_discount: Number(orderSummary.value.total.toFixed(2)),
+      total_discount: Number(orderSummary.value.totalDiscount.toFixed(2)),
+      total_after_discount: Number(orderSummary.value.netTotal.toFixed(2)),
+      credit_note_nominal: Number(orderSummary.value.creditNoteTotal.toFixed(2)),
+      payable_after_credit_note: Number(orderSummary.value.payableTotal.toFixed(2))
+    },
+    manual_discount_type: discountForm.manualType || null,
+    manual_discount_value: Number(toNumber(discountForm.manualValue).toFixed(4)),
+    manual_discount_percent_equivalent: Number(orderSummary.value.manualDiscountPercentEquivalent.toFixed(4)),
+    manual_discount_nominal: Number(orderSummary.value.manualDiscount.toFixed(2)),
+    order_discount_note: discountForm.manualNote || '',
+    unified_promo_nominal: Number(orderSummary.value.promoCashback.toFixed(2)),
+    order_discount_total: Number(orderSummary.value.totalDiscount.toFixed(2))
+  };
+}
+
+async function submitOrder({ ignoreStockWarning = false } = {}) {
+  feedback.value = '';
+  errorMessage.value = '';
+
+  if (!form.branchId || !form.companyId) {
+    errorMessage.value = 'Pilih cabang dan perusahaan terlebih dahulu.';
+    return;
+  }
+
+  if (!activeUserId.value) {
+    errorMessage.value = 'Sales wajib dipilih.';
+    return;
+  }
+
+  if (!form.customerId || !selectedPrincipalIds.value.length || !form.orderDate) {
+    errorMessage.value = 'Customer, minimal satu principal, dan tanggal order wajib diisi.';
+    return;
+  }
+
+  if (form.orderDate < minimumOrderDate) {
+    errorMessage.value = `Tanggal order minimal ${minimumOrderDate}.`;
+    return;
+  }
+
+  if (!selectedCustomer.value?.id_rute) {
+    errorMessage.value = 'Customer belum memiliki rute. Lengkapi rute di Master Customer dulu sebelum membuat order.';
+    return;
+  }
+
+  if (!selectedPlafonIds.value.length) {
+    errorMessage.value = 'Plafon untuk principal terpilih belum tersedia.';
+    return;
+  }
+
+  if (newCustomerCashWarning.value) {
+    errorMessage.value = newCustomerCashWarning.value;
+    return;
+  }
+
+  if (!rows.value.some((item) => Number(item.total_pieces || 0) > 0)) {
+    errorMessage.value = 'Isi minimal satu produk dengan jumlah lebih dari 0.';
+    return;
+  }
+
+  if (minimumOrderWarnings.value.length) {
+    errorMessage.value = `Order di bawah minimal: ${minimumOrderWarnings.value.join('; ')}`;
+    return;
+  }
+
+  if (ppnWarnings.value.length) {
+    errorMessage.value = `PPN produk belum lengkap: ${ppnWarnings.value.join(', ')}. Lengkapi PPN di Master Produk sebelum order disimpan.`;
+    return;
+  }
+
+  if (selectedCreditNoteTotal.value > orderSummary.value.netTotal + 0.01) {
+    errorMessage.value = 'Nominal Credit Note tidak boleh melebihi total nota.';
+    return;
+  }
+
+  if (stockWarnings.value.length && !ignoreStockWarning) {
+    showStockWarningModal.value = true;
+    return;
+  }
+
+  submitting.value = true;
+
+  try {
+    const payload = buildPayload();
+    if (isEditMode.value) {
+      await updateSalesOrder(editOrderId.value, payload);
+      feedback.value = `Order berhasil diperbarui. Cek kembali di daftar order atau lanjut verifikasi.`;
+      return;
+    }
+
+    await createSalesOrder(payload);
+    form.orderNo = generateOrderNo();
+    rows.value = rows.value.map((item) => {
+      const next = { ...item, uom1: 0, uom2: 0, uom3: 0 };
+      recalculateRow(next);
+      return next;
+    });
+    promoPreview.value = { total_estimated_benefit: 0, total_estimated_cashback: 0, qualified_count: 0, groups: [] };
+    await loadEligibleCreditNotes();
+    feedback.value = `Order berhasil dibuat. Cek di Distribusi Order untuk verifikasi.`;
+  } catch (error) {
+    errorMessage.value = normalizeError(error, 'Order belum berhasil dibuat.');
+  } finally {
+    submitting.value = false;
+  }
+}
+
+function confirmSubmitWithLowStock() {
+  showStockWarningModal.value = false;
+  submitOrder({ ignoreStockWarning: true });
+}
+
+watch(() => form.branchId, (value, previousValue) => {
+  if (hydratingEdit.value) return;
+  if (value === previousValue) return;
+  if (shouldLockBusinessScope.value && fallbackBranchId.value && String(value || '') !== String(fallbackBranchId.value)) {
+    applyLoginBusinessScope();
+    return;
+  }
+
+  if (form.branchId && form.companyId && !companyIdsForBranch(form.branchId).includes(String(form.companyId))) {
+    form.branchId = shouldLockBusinessScope.value && fallbackBranchId.value ? String(fallbackBranchId.value) : '';
+    return;
+  }
+
+  form.salesUserId = '';
+  form.customerId = '';
+  resetPrincipalSelection();
+  customers.value = [];
+  plafons.value = [];
+    products.value = [];
+    rows.value = [];
+    eligibleCreditNotes.value = [];
+    clearCreditNoteSelection();
+    productSearch.value = '';
+    selectDefaultSalesIfPossible();
+});
+
+watch(() => form.companyId, (value, previousValue) => {
+  if (hydratingEdit.value) return;
+  if (value === previousValue) return;
+  if (shouldLockBusinessScope.value && fallbackCompanyId.value && String(value || '') !== String(fallbackCompanyId.value)) {
+    applyLoginBusinessScope();
+    return;
+  }
+
+  if (form.branchId && form.companyId && !companyIdsForBranch(form.branchId).includes(String(form.companyId))) {
+    form.branchId = shouldLockBusinessScope.value && fallbackBranchId.value ? String(fallbackBranchId.value) : '';
+  }
+
+  form.salesUserId = '';
+  form.customerId = '';
+  resetPrincipalSelection();
+  customers.value = [];
+  plafons.value = [];
+  products.value = [];
+  rows.value = [];
+  eligibleCreditNotes.value = [];
+  clearCreditNoteSelection();
+  productSearch.value = '';
+  selectDefaultSalesIfPossible();
+});
+
+watch(() => form.salesUserId, () => {
+  if (hydratingEdit.value) return;
+  form.customerId = '';
+  resetPrincipalSelection();
+  customers.value = [];
+  plafons.value = [];
+  products.value = [];
+  rows.value = [];
+  eligibleCreditNotes.value = [];
+  clearCreditNoteSelection();
+  productSearch.value = '';
+  loadCustomers();
+});
+watch(() => form.customerId, () => {
+  if (hydratingEdit.value) return;
+  eligibleCreditNotes.value = [];
+  clearCreditNoteSelection();
+  loadPlafons();
+});
+watch(() => form.principalIds, () => {
+  if (hydratingEdit.value) return;
+  products.value = [];
+  rows.value = [];
+  eligibleCreditNotes.value = [];
+  clearCreditNoteSelection();
+  productSearch.value = '';
+});
+
+onMounted(async () => {
+  form.orderNo = generateOrderNo();
+  await loadSalesRows();
+  if (isEditMode.value) {
+    await loadOrderForEdit();
+  } else if (activeUserId.value && !customers.value.length) {
+    await loadCustomers();
+  }
+});
+</script>
+
+<template>
+  <div class="space-y-6">
+    <PageHeader :title="isEditMode ? 'Edit Sales Order' : 'Sales Order Entry'">
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          @click="router.push({ name: 'sales-order-list' })"
+        >
+          Daftar Order
+        </button>
+
+        <button
+          class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          @click="router.push({ name: 'distribution-orders' })"
+        >
+          Verifikasi
+        </button>
+      </div>
+    </PageHeader>
+
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <p class="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Principal</p>
+        <p class="mt-3 truncate text-sm font-bold text-slate-950 dark:text-white">{{ selectedPrincipalName }}</p>
+      </article>
+
+      <article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <p class="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Baris</p>
+        <p class="mt-3 text-3xl font-bold text-slate-950 dark:text-white">{{ orderSummary.lines }}</p>
+      </article>
+
+      <article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <p class="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Total PCS</p>
+        <p class="mt-3 text-3xl font-bold text-slate-950 dark:text-white">{{ orderSummary.totalPieces.toLocaleString('id-ID') }}</p>
+      </article>
+
+      <article class="rounded-3xl border border-brand-200 bg-brand-50 p-5 shadow-sm dark:border-brand-500/30 dark:bg-brand-500/10">
+        <p class="text-xs font-bold uppercase tracking-[0.25em] text-brand-700 dark:text-brand-300">Total Nota</p>
+        <p class="mt-3 text-2xl font-bold text-brand-900 dark:text-brand-200">{{ formatCurrency(orderSummary.netTotal) }}</p>
+        <p v-if="orderSummary.creditNoteTotal > 0" class="mt-1 text-xs font-semibold text-brand-800 dark:text-brand-200">
+          Sisa {{ formatCurrency(orderSummary.payableTotal) }}
+        </p>
+      </article>
+    </section>
+
+    <section
+      v-if="rows.length"
+      class="rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10"
+    >
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[0.25em] text-emerald-700 dark:text-emerald-300">Potongan Promo All-In</p>
+          <h3 class="mt-2 text-2xl font-bold text-emerald-950 dark:text-emerald-100">
+            {{ loadingPromoPreview ? 'Menghitung...' : formatCurrency(orderSummary.promoCashback) }}
+          </h3>
+          <p class="mt-1 text-sm text-emerald-800 dark:text-emerald-200">
+            Dipakai saat order disimpan. Pembayaran nanti hanya membaca nota yang sudah terpotong, tidak memakai voucher/promo lama.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white/70 px-4 py-2 text-sm font-semibold text-emerald-800 dark:border-emerald-400/40 dark:bg-slate-950/60 dark:text-emerald-100">
+            <input v-model="discountForm.useUnifiedPromo" type="checkbox" class="h-4 w-4 rounded border-emerald-300">
+            Pakai promo otomatis
+          </label>
+          <button
+            class="rounded-2xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-400/40 dark:text-emerald-100"
+            :disabled="loadingPromoPreview"
+            @click="refreshPromoPreview"
+          >
+            Refresh Promo
+          </button>
+        </div>
+      </div>
+
+      <div v-if="qualifiedPromoGroups.length || nearPromoGroups.length" class="mt-4 grid gap-3 xl:grid-cols-2">
+        <div
+          v-for="group in qualifiedPromoGroups"
+          :key="`${group.program_id}-${group.id_subbrand}-${group.matched_rule_id}`"
+          class="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm dark:border-emerald-500/30 dark:bg-slate-950"
+        >
+          <p class="font-bold text-slate-950 dark:text-white">{{ group.target_name || group.subbrand_nama || group.rule_group || 'Promo all-in' }}</p>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ group.nama_program }} | {{ Number(group.qty_ctn || 0).toLocaleString('id-ID') }} ctn</p>
+          <p class="mt-2 font-semibold text-emerald-700 dark:text-emerald-300">
+            Benefit {{ formatCurrency(group.estimated_benefit || group.estimated_cashback) }}
+          </p>
+        </div>
+        <div
+          v-for="group in nearPromoGroups"
+          :key="`near-${group.program_id}-${group.id_subbrand}`"
+          class="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm dark:border-amber-500/30 dark:bg-slate-950"
+        >
+          <p class="font-bold text-slate-950 dark:text-white">{{ group.target_name || group.subbrand_nama || group.rule_group || 'Promo all-in' }}</p>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ group.nama_program }} | kurang {{ Number(group.gap_qty || 0).toLocaleString('id-ID') }} ctn ke strata berikutnya</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="rows.length"
+      class="rounded-[28px] border border-amber-200 bg-amber-50 p-5 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10"
+    >
+      <div class="grid gap-4 xl:grid-cols-[1fr_0.9fr_1.1fr_1.2fr]">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[0.25em] text-amber-700 dark:text-amber-300">Potongan Manual Deal</p>
+          <p class="mt-2 text-sm text-amber-900 dark:text-amber-100">
+            Isi hanya jika ada deal khusus di luar promo otomatis. Bisa persen atau nominal.
+          </p>
+        </div>
+        <label class="block">
+          <span class="mb-1 block text-xs font-bold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300">Tipe Potongan</span>
+          <select
+            v-model="discountForm.manualType"
+            class="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-amber-400 dark:border-amber-400/30 dark:bg-slate-950 dark:text-white"
+          >
+            <option value="">Tidak ada</option>
+            <option value="percent">Persen (%)</option>
+            <option value="nominal">Nominal (Rp)</option>
+          </select>
+        </label>
+        <AppFormField
+          v-model="discountForm.manualValue"
+          label="Nilai Potongan"
+          type="number"
+          placeholder="0"
+        />
+        <AppFormField
+          v-model="discountForm.manualNote"
+          label="Catatan Deal"
+          placeholder="Contoh: deal outlet / approval principal"
+        />
+      </div>
+
+      <div class="mt-4 grid gap-3 md:grid-cols-4">
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">DPP Awal</p>
+          <p class="mt-1 font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.total) }}</p>
+        </div>
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Promo</p>
+          <p class="mt-1 font-bold text-emerald-700 dark:text-emerald-300">{{ formatCurrency(orderSummary.promoCashback) }}</p>
+        </div>
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Manual</p>
+          <p class="mt-1 font-bold text-amber-700 dark:text-amber-300">{{ formatCurrency(orderSummary.manualDiscount) }}</p>
+          <p v-if="orderSummary.manualDiscount > 0" class="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200">
+            Setara {{ Number(orderSummary.manualDiscountPercentEquivalent || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}%
+          </p>
+        </div>
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">DPP + PPN Setelah Potongan</p>
+          <p class="mt-1 text-lg font-bold text-brand-700 dark:text-brand-300">{{ formatCurrency(orderSummary.netTotal) }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="rows.length"
+      class="rounded-[28px] border border-sky-200 bg-sky-50 p-5 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/10"
+    >
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[0.25em] text-sky-700 dark:text-sky-300">Credit Note Order</p>
+          <h3 class="mt-2 text-2xl font-bold text-sky-950 dark:text-sky-100">{{ formatCurrency(orderSummary.creditNoteTotal) }}</h3>
+          <p class="mt-1 text-sm text-sky-800 dark:text-sky-200">
+            CN yang dipilih akan di-reserve ke order ini dan langsung mengurangi sisa tagihan saat pembayaran.
+          </p>
+        </div>
+        <button
+          class="rounded-2xl border border-sky-300 px-4 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-400/40 dark:text-sky-100"
+          :disabled="loadingCreditNotes"
+          @click="loadEligibleCreditNotes"
+        >
+          {{ loadingCreditNotes ? 'Memuat...' : 'Refresh CN' }}
+        </button>
+      </div>
+
+      <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Total Nota</p>
+          <p class="mt-1 font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.netTotal) }}</p>
+        </div>
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">CN Dipilih</p>
+          <p class="mt-1 font-bold text-sky-700 dark:text-sky-300">{{ formatCurrency(orderSummary.creditNoteTotal) }}</p>
+        </div>
+        <div class="rounded-2xl bg-white/80 px-4 py-3 dark:bg-slate-950/60">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Sisa Tagihan</p>
+          <p class="mt-1 text-lg font-bold text-brand-700 dark:text-brand-300">{{ formatCurrency(orderSummary.payableTotal) }}</p>
+        </div>
+      </div>
+
+      <div v-if="!eligibleCreditNotes.length" class="mt-4 rounded-2xl border border-dashed border-sky-300 px-4 py-3 text-sm text-sky-800 dark:border-sky-300/30 dark:text-sky-100/80">
+        Tidak ada CN aktif untuk customer dan principal terpilih.
+      </div>
+
+      <div v-else class="mt-4 grid gap-3 xl:grid-cols-2">
+        <label
+          v-for="item in eligibleCreditNotes"
+          :key="creditNoteKey(item)"
+          class="rounded-2xl border border-sky-200 bg-white px-4 py-3 text-sm dark:border-sky-500/30 dark:bg-slate-950"
+        >
+          <div class="flex items-start gap-3">
+            <input
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-sky-300"
+              :checked="Number(selectedCreditNoteNominals[creditNoteKey(item)] || 0) > 0"
+              @change="setCreditNoteSelection(item, $event.target.checked)"
+            >
+            <div class="min-w-0 flex-1">
+              <p class="font-bold text-slate-950 dark:text-white">{{ item.kode || item.kode_cn || item.no_cn || 'Credit Note' }}</p>
+              <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {{ item.nama_principal || item.principal || 'Principal' }} | Sisa {{ formatCurrency(item.sisa_nominal) }}
+              </p>
+              <input
+                class="mt-3 w-full rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-sky-400 disabled:bg-slate-100 disabled:text-slate-400 dark:border-sky-400/30 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800"
+                type="number"
+                min="0"
+                :max="maxCreditNoteForItem(item)"
+                :disabled="Number(selectedCreditNoteNominals[creditNoteKey(item)] || 0) <= 0"
+                :value="selectedCreditNoteNominals[creditNoteKey(item)] || ''"
+                placeholder="Nominal dipakai"
+                @input="updateCreditNoteNominal(item, $event.target.value)"
+              >
+            </div>
+          </div>
+        </label>
+      </div>
+    </section>
+
+    <section class="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-950 dark:text-white">Order Header</h3>
+        </div>
+
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+          {{ activeSalesName }}
+        </span>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <AppSearchSelect
+          v-model="form.companyId"
+          label="Perusahaan"
+          placeholder="Pilih perusahaan"
+          :options="companyOptions"
+          :disabled="shouldLockBusinessScope && !!fallbackCompanyId"
+          empty-text="Perusahaan belum tersedia."
+        />
+
+        <AppSearchSelect
+          v-model="form.branchId"
+          label="Cabang"
+          :placeholder="form.companyId ? 'Pilih cabang' : 'Pilih perusahaan dahulu'"
+          :options="branchOptions"
+          :disabled="!form.companyId || (shouldLockBusinessScope && !!fallbackBranchId)"
+          empty-text="Pilih perusahaan terlebih dahulu."
+        />
+
+        <AppSearchSelect
+          v-model="form.salesUserId"
+          label="Sales"
+          placeholder="Pilih sales"
+          :options="salesOptions"
+          :loading="loadingSales"
+          :disabled="!form.branchId || !form.companyId || (canUseLoginScope && !!fallbackUserId)"
+          empty-text="Sales bawahan belum tersedia."
+        />
+
+        <AppSearchSelect
+          v-model="form.customerId"
+          label="Customer"
+          placeholder="Pilih customer"
+          :options="customerOptions"
+          :loading="loadingCustomers"
+          :disabled="!activeUserId"
+          :empty-text="salesSelectionRequiredMessage"
+        />
+
+        <AppSearchSelect
+          v-model="form.principalIds"
+          label="Principal"
+          placeholder="Pilih principal"
+          :options="principalOptions"
+          :loading="loadingPlafons"
+          multiple
+          :disabled="!form.customerId"
+          empty-text="Pilih customer dahulu."
+        />
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-2">
+
+        <AppFormField
+          v-model="form.orderNo"
+          label="No Order"
+          placeholder="Auto"
+        />
+
+        <AppFormField
+          v-model="form.orderDate"
+          label="Tanggal"
+          type="date"
+          :min="minimumOrderDate"
+        />
+      </div>
+
+      <div class="mt-5 flex flex-wrap justify-between gap-3">
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="rounded-2xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+            :disabled="loadingProducts || !canLoadProducts"
+            @click="loadProducts"
+          >
+            {{ loadingProducts ? 'Memuat...' : 'Muat Produk' }}
+          </button>
+
+          <button
+            class="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            @click="loadCustomers"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <button
+          class="rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+          :disabled="submitting || !rows.length"
+          @click="submitOrder"
+        >
+          {{ submitting ? 'Submit...' : isEditMode ? 'Update Order' : 'Submit Order' }}
+        </button>
+      </div>
+
+      <div v-if="feedback" class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+        {{ feedback }}
+      </div>
+
+      <div v-if="customersWithoutRoute.length" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        {{ customersWithoutRoute.length }} customer belum memiliki rute.
+      </div>
+
+      <div v-if="selectedCustomerRouteWarning" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        {{ selectedCustomerRouteWarning }}
+      </div>
+
+      <div v-if="selectedPaymentSystems.length" class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+        Sistem pembayaran plafon: <span class="font-bold">{{ selectedPaymentSystems.join(', ') }}</span>
+      </div>
+
+      <div v-if="minimumOrderWarnings.length" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        Order di bawah minimal:
+        <span class="font-semibold">{{ minimumOrderWarnings.join('; ') }}</span>
+      </div>
+
+      <div v-if="newCustomerCashWarning" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+        {{ newCustomerCashWarning }}
+      </div>
+
+      <div v-if="ppnWarnings.length" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+        PPN belum lengkap: {{ ppnWarnings.join(', ') }}. Lengkapi dahulu di Master Produk supaya nilai invoice tidak salah.
+      </div>
+
+      <div v-if="errorMessage" class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+        {{ errorMessage }}
+      </div>
+
+      <div v-if="stockWarnings.length" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        Stok kurang: {{ stockWarnings.join(', ') }}
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-950">
+        <div>
+          <h3 class="text-lg font-bold text-slate-950 dark:text-white">Product Entry</h3>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Cari produk berdasarkan nama, SKU, barcode, atau UOM tanpa menghapus jumlah yang sudah diisi.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="relative block min-w-[260px]">
+            <span class="sr-only">Cari produk</span>
+            <input
+              v-model="productSearch"
+              type="search"
+              placeholder="Cari nama / SKU produk"
+              class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
+            >
+          </label>
+
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+            {{ filteredRows.length }} / {{ rows.length }} Produk
+          </span>
+
+          <button
+            class="rounded-2xl bg-emerald-600 px-5 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+            :disabled="submitting || !rows.length"
+            @click="submitOrder"
+          >
+            {{ submitting ? 'Submit...' : isEditMode ? 'Update' : 'Submit' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="loadingProducts" class="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+        Memuat produk...
+      </div>
+
+      <div v-else-if="rows.length" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+          <thead class="sticky top-0 bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+            <tr>
+              <th class="px-4 py-3">Produk</th>
+              <th class="px-4 py-3">Stok Ready</th>
+              <th class="px-4 py-3">Harga</th>
+              <th class="px-4 py-3">Qty Order</th>
+              <th class="px-4 py-3 text-right">Total</th>
+            </tr>
+          </thead>
+
+          <tbody class="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
+            <tr v-if="!filteredRows.length">
+              <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                Tidak ada produk yang cocok dengan pencarian "{{ productSearch }}".
+              </td>
+            </tr>
+            <tr
+              v-for="item in filteredRows"
+              :key="item.row_key"
+              class="bg-white transition hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900"
+              :class="Number(item.total_pieces || 0) > Number(item.stok_ready || 0) ? '!bg-rose-50/80 dark:!bg-rose-500/5' : ''"
+            >
+              <td class="px-4 py-3 align-top">
+                <p class="font-bold text-slate-950 dark:text-white">{{ item.nama || '-' }}</p>
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ item.kode_sku || '-' }}</p>
+                <p v-if="item.subbrand_nama || item.subbrand" class="mt-1 text-xs font-semibold text-brand-600 dark:text-brand-300">
+                  {{ item.subbrand_nama || item.subbrand }}
+                </p>
+                <p v-if="item.nama_principal || item.kode_principal" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {{ item.kode_principal ? `${item.kode_principal} - ` : '' }}{{ item.nama_principal || 'Principal' }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Izin produk {{ item.kategori_customer_label }} | Plafon {{ item.kategori_izin_label }} | Customer {{ item.kategori_customer_toko_label }}
+                </p>
+              </td>
+
+              <td class="px-4 py-3 align-top">
+                <p :class="Number(item.total_pieces || 0) > Number(item.stok_ready || 0) ? 'font-bold text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'">
+                  {{ Number(item.stok_ready || 0).toLocaleString('id-ID') }} PCS
+                </p>
+                <p class="mt-1 text-xs text-slate-400">
+                  Total setelah konversi UOM
+                </p>
+                <p v-if="Number(item.total_pieces || 0) > Number(item.stok_ready || 0)" class="mt-1 text-xs text-rose-500">
+                  Over
+                </p>
+              </td>
+
+              <td class="px-4 py-3 align-top text-slate-700 dark:text-slate-300">
+                {{ formatCurrency(item.harga_jual) }}
+              </td>
+
+              <td class="px-4 py-3 align-top">
+                <div class="grid min-w-[320px] gap-2 sm:grid-cols-3">
+                  <label class="block">
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 1) }}</span>
+                    <input
+                      :value="item.uom1"
+                      type="number"
+                      min="0"
+                      step="1"
+                      :disabled="!isUomEnabled(item, 1)"
+                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                      @input="updateQty(item, 'uom1', $event.target.value)"
+                    >
+                    <span v-if="!isUomEnabled(item, 1)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM belum lengkap</span>
+                  </label>
+                  <label class="block">
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 2) }}</span>
+                    <input
+                      :value="item.uom2"
+                      type="number"
+                      min="0"
+                      step="1"
+                      :disabled="!isUomEnabled(item, 2)"
+                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                      @input="updateQty(item, 'uom2', $event.target.value)"
+                    >
+                    <span v-if="!isUomEnabled(item, 2)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM/konversi belum lengkap</span>
+                  </label>
+                  <label class="block">
+                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 3) }}</span>
+                    <input
+                      :value="item.uom3"
+                      type="number"
+                      min="0"
+                      step="1"
+                      :disabled="!isUomEnabled(item, 3)"
+                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                      @input="updateQty(item, 'uom3', $event.target.value)"
+                    >
+                    <span v-if="!isUomEnabled(item, 3)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM/konversi belum lengkap</span>
+                  </label>
+                </div>
+                <p v-if="!hasValidPpn(item)" class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                  PPN produk belum terisi. Produk ini tidak bisa disimpan ke order sebelum PPN dilengkapi.
+                </p>
+              </td>
+
+              <td class="px-4 py-3 text-right align-top">
+                <p class="font-bold text-slate-950 dark:text-white">{{ formatCurrency(item.totalHarga) }}</p>
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  DPP baris, {{ Number(item.total_pieces || 0).toLocaleString('id-ID') }} pcs
+                </p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <AppEmptyState
+        v-else
+        title="Produk belum dimuat"
+        description="Pilih customer dan satu atau beberapa principal, lalu muat produk."
+      />
+    </section>
+
+    <section class="sticky bottom-4 z-20 rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Subtotal</p>
+            <p class="font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.subtotal) }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">PPN Setelah Potongan</p>
+            <p class="font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.tax) }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">DPP Awal</p>
+            <p class="font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.total) }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Potongan</p>
+            <p class="font-bold text-emerald-700 dark:text-emerald-300">{{ formatCurrency(orderSummary.totalDiscount) }}</p>
+            <p v-if="orderSummary.manualDiscount > 0" class="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              Manual {{ Number(orderSummary.manualDiscountPercentEquivalent || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}%
+            </p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Total Nota</p>
+            <p class="text-lg font-bold text-brand-700 dark:text-brand-300">{{ formatCurrency(orderSummary.netTotal) }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Credit Note</p>
+            <p class="font-bold text-sky-700 dark:text-sky-300">{{ formatCurrency(orderSummary.creditNoteTotal) }}</p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Sisa Tagihan</p>
+            <p class="text-lg font-bold text-slate-950 dark:text-white">{{ formatCurrency(orderSummary.payableTotal) }}</p>
+          </div>
+        </div>
+
+        <button
+          class="rounded-2xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+          :disabled="submitting || !rows.length"
+          @click="submitOrder"
+        >
+          {{ submitting ? 'Submit...' : isEditMode ? 'Update Sales Order' : 'Submit Sales Order' }}
+        </button>
+      </div>
+    </section>
+
+    <AppModal
+      :open="showStockWarningModal"
+      title="Stok Produk Kurang"
+      description="Order tetap bisa dilanjutkan. Pengurangan stok akan diproses saat verifikasi distribusi."
+      size="lg"
+      @close="showStockWarningModal = false"
+    >
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          Beberapa produk dipesan melebihi stok ready saat ini. Jika dilanjutkan, tim distribusi akan memvalidasi stok pada tahap verifikasi.
+        </div>
+
+        <div class="max-h-72 space-y-2 overflow-y-auto pr-1">
+          <div
+            v-for="warning in stockWarnings"
+            :key="warning"
+            class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+          >
+            {{ warning }}
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            class="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            :disabled="submitting"
+            @click="showStockWarningModal = false"
+          >
+            Cek Ulang
+          </button>
+          <button
+            class="rounded-2xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-950/20 hover:bg-amber-600 disabled:opacity-50"
+            :disabled="submitting"
+            @click="confirmSubmitWithLowStock"
+          >
+            {{ submitting ? 'Menyimpan...' : 'Tetap Simpan Order' }}
+          </button>
+        </div>
+      </template>
+    </AppModal>
+  </div>
+</template>

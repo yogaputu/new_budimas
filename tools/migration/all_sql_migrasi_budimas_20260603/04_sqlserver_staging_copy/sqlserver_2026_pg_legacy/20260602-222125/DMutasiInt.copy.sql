@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."dmutasiint" ("nota", "tanggal", "reff", "kodestok", "namabarang", "unit", "perunit", "satuan", "jumlah") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/DMutasiInt.csv' WITH (FORMAT csv, HEADER true, NULL '')

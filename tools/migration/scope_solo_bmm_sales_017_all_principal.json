@@ -1,0 +1,16 @@
+{
+  "scope_name": "solo_bmm_sales_017_all_principal",
+  "branch": {
+    "id_cabang": 5,
+    "kode_cabang": "SLO",
+    "area_codes": []
+  },
+  "company": {
+    "id_perusahaan": 1,
+    "kode_perusahaan": "BMM",
+    "principal_codes": []
+  },
+  "sales_codes": ["017"],
+  "include_inactive": false,
+  "notes": "UAT per sales 017. Semua data SQL Server DIST diarahkan ke SOLO/BMM tanpa filter area/principal."
+}

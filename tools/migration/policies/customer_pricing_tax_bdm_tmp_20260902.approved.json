@@ -1,0 +1,17 @@
+{
+  "policy_id": "approved_customer_pricing_tax_bdm_tmp_20260902",
+  "approval_status": "approved",
+  "approval_reference": "User approval in Codex task on 2026-09-02: use PPN 11% operationally and map A-E to MT/GT/EU/KA/WS.",
+  "rule": "All imported BDM/TMP customers use is_ppn=1 regardless of legacy FP; FP remains retained in frozen staging as audit evidence.",
+  "source_opsharga_to_price_type_code": {
+    "A": "MT",
+    "B": "GT",
+    "C": "EU",
+    "D": "KA",
+    "E": "WS"
+  },
+  "source_fp_to_is_ppn": {
+    "T": 1,
+    "Y": 1
+  }
+}

@@ -1,0 +1,1130 @@
+<script setup>
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { getBranches, getCompanies } from '@/api/master';
+import {
+  createManualJournal,
+  getAccountCoaList,
+  getFiturMalList,
+  getJournalTriggerHealth,
+  getManualJournalDetail,
+  getManualJournalList,
+  getManualJournalSourceModules,
+  updateManualJournal
+} from '@/api/finance';
+import { useAuthStore } from '@/stores/auth';
+import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import { getLoginBranchId, getRowBranchIds, getRowCompanyId, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
+import AppModal from '@/shared/components/AppModal.vue';
+import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
+import AppTable from '@/shared/components/AppTable.vue';
+import PageHeader from '@/shared/components/PageHeader.vue';
+
+const authStore = useAuthStore();
+
+const debitCreditOptions = [
+  { value: '1', label: 'Debit' },
+  { value: '2', label: 'Kredit' }
+];
+
+const filters = reactive({
+  search: '',
+  branchId: '',
+  companyId: ''
+});
+
+const form = reactive({
+  id_jurnal_mal: '',
+  id_cabang: '',
+  id_perusahaan: '',
+  id_fitur_mal: '',
+  id_coa_main: '',
+  nama_mal: ''
+});
+
+const rows = ref([]);
+const branches = ref([]);
+const companies = ref([]);
+const fiturRows = ref([]);
+const sourceRows = ref([]);
+const coaRows = ref([]);
+const triggerRows = ref([]);
+const detailLines = ref([]);
+const loading = reactive({
+  list: false,
+  refs: false,
+  health: false,
+  save: false,
+  detail: false,
+  auditDetail: false
+});
+const modalOpen = ref(false);
+const detailModalOpen = ref(false);
+const auditModalOpen = ref(false);
+const mode = ref('create');
+const selectedRow = ref(null);
+const selectedDetail = ref(null);
+const selectedAuditRow = ref(null);
+const selectedAuditTemplateId = ref('');
+const selectedAuditDetail = ref(null);
+const feedback = ref('');
+const actionError = ref('');
+const pageError = ref('');
+let syncingFormContext = false;
+
+const fallbackBranchId = computed(() => getLoginBranchId(authStore.user));
+const canAccessAllBranches = computed(() => isSuperUser(authStore));
+
+const branchOptions = computed(() =>
+  scopeRowsByLoginBranch(branches.value, authStore).map((item) => ({
+    value: String(item.id),
+    label: `${item.kode ? `${item.kode} - ` : ''}${item.nama || item.nama_cabang || `Cabang ${item.id}`}`
+  }))
+);
+
+function companyIdsForBranch(branchId) {
+  if (!branchId) return [];
+
+  const ids = new Set();
+  const branch = branches.value.find((item) => String(item.id) === String(branchId));
+  const directCompanyId = getRowCompanyId(branch);
+  if (directCompanyId) ids.add(String(directCompanyId));
+
+  companies.value.forEach((item) => {
+    if (getRowBranchIds(item).some((id) => String(id) === String(branchId))) {
+      ids.add(String(item.id));
+    }
+  });
+
+  return [...ids];
+}
+
+function resolveBranchIdForCompany(companyId) {
+  if (!companyId) return '';
+
+  const company = companies.value.find((item) => String(item.id) === String(companyId));
+  const companyBranchId = getRowBranchIds(company)[0];
+  if (companyBranchId) return String(companyBranchId);
+
+  const branch = branches.value.find((item) => String(getRowCompanyId(item)) === String(companyId));
+  return branch?.id ? String(branch.id) : '';
+}
+
+function toCompanyOption(item) {
+  return {
+    value: String(item.id),
+    label: item.nama || item.nama_perusahaan || `Perusahaan ${item.id}`
+  };
+}
+
+const filterCompanyOptions = computed(() => {
+  const allowedCompanyIds = companyIdsForBranch(filters.branchId);
+  return companies.value
+    .filter((item) => allowedCompanyIds.includes(String(item.id)))
+    .map(toCompanyOption);
+});
+
+const formCompanyOptions = computed(() => {
+  const allowedCompanyIds = companyIdsForBranch(form.id_cabang);
+  return companies.value
+    .filter((item) => allowedCompanyIds.includes(String(item.id)))
+    .map(toCompanyOption);
+});
+
+const fiturOptions = computed(() =>
+  fiturRows.value.map((item) => ({
+    value: String(item.id_fitur_mal),
+    label: item.nama_fitur_mal || `Fitur ${item.id_fitur_mal}`
+  }))
+);
+
+const coaOptions = computed(() =>
+  coaRows.value.map((item) => ({
+    value: String(item.id_coa),
+    label: `${item.nomor_akun || '-'} - ${item.nama_akun || 'COA'}`
+  }))
+);
+
+const sourceOptions = computed(() =>
+  sourceRows.value.map((item) => ({
+    value: String(item.id_source_data),
+    label: `${item.nama_tabel || 'tabel'}.${item.nama_kolom_view || item.nama_kolom_db || 'kolom'}`
+  }))
+);
+
+const columns = [
+  { key: 'nama_mal', label: 'Nama Setting' },
+  { key: 'nama_perusahaan', label: 'Perusahaan', render: (row) => row.nama_perusahaan || resolveCompanyName(row.id_perusahaan) },
+  { key: 'fitur_label', label: 'Fitur', render: (row) => row.nama_fitur_mal || resolveFeatureName(row.id_fitur_mal) },
+  { key: 'main_coa_label', label: 'COA Utama', render: (row) => row.nama_main_coa ? `${row.main_coa_id || '-'} - ${row.nama_main_coa}` : resolveCoaName(row.main_coa_id) },
+  { key: 'detail_count', label: 'Baris', render: (row) => Number(row.detail_count || normalizeDetailCount(row.detail)) },
+  { key: 'action_hint', label: 'Aksi', render: () => 'Lihat detail' }
+];
+
+const detailPreviewColumns = [
+  { key: 'urutan', label: 'Urutan' },
+  { key: 'coa_label', label: 'COA', render: (row) => resolveCoaName(row.id_coa) },
+  { key: 'source_label', label: 'Source', render: (row) => resolveSourceLabel(row.id_source_data) },
+  {
+    key: 'type_label',
+    label: 'Posisi',
+    render: (row) => ({
+      text: String(row.type) === '1' ? 'Debit' : 'Kredit',
+      className:
+        String(row.type) === '1'
+          ? 'inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700'
+          : 'inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700'
+    })
+  }
+];
+
+const detailViewColumns = [
+  { key: 'urutan', label: 'Urutan' },
+  { key: 'coa_label', label: 'COA', render: (row) => formatDetailCoa(row) },
+  { key: 'source_label', label: 'Source Modul', render: (row) => formatDetailSource(row) },
+  {
+    key: 'type_label',
+    label: 'Posisi',
+    render: (row) => formatPosition(row.type)
+  }
+];
+
+const triggerColumns = [
+  { key: 'id_fitur_mal', label: 'ID' },
+  { key: 'nama_fitur_mal', label: 'Proses' },
+  { key: 'nama_perusahaan', label: 'Perusahaan', render: (row) => row.nama_perusahaan || 'Belum diset' },
+  { key: 'total_template', label: 'Template' },
+  { key: 'total_baris', label: 'Baris' },
+  { key: 'total_debit', label: 'Debit' },
+  { key: 'total_kredit', label: 'Kredit' },
+  { key: 'action_hint', label: 'Aksi', render: (row) => Number(row.total_template || 0) ? 'Lihat detail' : 'Belum ada template' },
+  {
+    key: 'status_label',
+    label: 'Status',
+    render: (row) => ({
+      text: row.status === 'ready' ? 'Siap' : 'Perlu Setup',
+      className:
+        row.status === 'ready'
+          ? 'inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700'
+          : 'inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700'
+    })
+  }
+];
+
+const filteredRows = computed(() => {
+  const query = filters.search.trim().toLowerCase();
+  if (!query) return rows.value;
+
+  return rows.value.filter((item) =>
+    [
+      item.nama_mal,
+      resolveCompanyName(item.id_perusahaan),
+      resolveFeatureName(item.id_fitur_mal),
+      resolveCoaName(item.main_coa_id)
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query))
+  );
+});
+
+const auditTemplateOptions = computed(() =>
+  normalizeTemplates(selectedAuditRow.value?.templates).map((item) => ({
+    value: String(item.id_jurnal_mal),
+    label: `${item.nama_mal || `Template ${item.id_jurnal_mal}`}${item.nama_main_coa ? ` | ${item.nama_main_coa}` : ''}`
+  }))
+);
+
+const selectedAuditDetailRows = computed(() => {
+  if (Array.isArray(selectedAuditDetail.value?.detail)) {
+    return selectedAuditDetail.value.detail;
+  }
+
+  return normalizeList(selectedAuditDetail.value?.detail);
+});
+
+const selectedAuditSummary = computed(() => {
+  const row = selectedAuditRow.value || {};
+  const template = normalizeTemplates(row.templates).find((item) => String(item.id_jurnal_mal) === String(selectedAuditTemplateId.value)) || {};
+  const detail = selectedAuditDetail.value || {};
+
+  return {
+    proses: row.nama_fitur_mal || '-',
+    perusahaan: row.nama_perusahaan || 'Belum diset',
+    nama_mal: detail.nama_mal || template.nama_mal || '-',
+    main_coa: template.nama_main_coa
+      ? `${template.main_coa_id || '-'} - ${template.nama_main_coa}`
+      : resolveCoaName(detail.main_coa_id || template.main_coa_id),
+    total_debit: selectedAuditDetailRows.value.filter((item) => String(item.type) === '1').length,
+    total_kredit: selectedAuditDetailRows.value.filter((item) => String(item.type) === '2').length
+  };
+});
+
+const selectedDetailRows = computed(() => {
+  if (Array.isArray(selectedDetail.value?.detail)) {
+    return selectedDetail.value.detail;
+  }
+
+  return normalizeList(selectedDetail.value?.detail);
+});
+
+const selectedDetailSummary = computed(() => {
+  const detail = selectedDetail.value || {};
+  const row = selectedRow.value || {};
+
+  return {
+    nama_mal: detail.nama_mal || row.nama_mal || '-',
+    perusahaan: row.nama_perusahaan || resolveCompanyName(detail.id_perusahaan || row.id_perusahaan),
+    fitur: row.nama_fitur_mal || resolveFeatureName(detail.id_fitur_mal || row.id_fitur_mal),
+    main_coa: row.nama_main_coa
+      ? `${row.main_coa_id || '-'} - ${row.nama_main_coa}`
+      : resolveCoaName(detail.main_coa_id || row.main_coa_id),
+    total_baris: selectedDetailRows.value.length || Number(row.detail_count || 0)
+  };
+});
+
+const editingDetailSummary = computed(() => {
+  const totalDebit = detailLines.value.filter((item) => String(item.type) === '1').length;
+  const totalKredit = detailLines.value.filter((item) => String(item.type) === '2').length;
+  const incompleteRows = detailLines.value.filter(
+    (item) => !item.id_coa || !item.id_source_data || !item.type || !item.urutan || !item.id_modul
+  ).length;
+  const duplicateKeys = new Set();
+  const duplicatedRows = detailLines.value.filter((item) => {
+    if (!item.id_coa || !item.id_source_data || !item.type) return false;
+    const key = `${item.id_coa}:${item.id_source_data}:${item.type}`;
+    if (duplicateKeys.has(key)) return true;
+    duplicateKeys.add(key);
+    return false;
+  }).length;
+
+  return {
+    totalRows: detailLines.value.length,
+    totalDebit,
+    totalKredit,
+    incompleteRows,
+    duplicatedRows,
+    isReady: totalDebit > 0 && totalKredit > 0 && incompleteRows === 0
+  };
+});
+
+const editingStatusCards = computed(() => [
+  { label: 'Total Baris', value: editingDetailSummary.value.totalRows, tone: 'text-slate-900' },
+  { label: 'Debit', value: editingDetailSummary.value.totalDebit, tone: editingDetailSummary.value.totalDebit ? 'text-emerald-700' : 'text-rose-700' },
+  { label: 'Kredit', value: editingDetailSummary.value.totalKredit, tone: editingDetailSummary.value.totalKredit ? 'text-emerald-700' : 'text-rose-700' },
+  { label: 'Belum Lengkap', value: editingDetailSummary.value.incompleteRows, tone: editingDetailSummary.value.incompleteRows ? 'text-amber-700' : 'text-emerald-700' }
+]);
+
+const saveDisabled = computed(() => loading.save || loading.refs || loading.detail || !editingDetailSummary.value.isReady);
+
+const editingValidationMessage = computed(() => {
+  if (!detailLines.value.length) return 'Minimal satu baris detail wajib diisi.';
+  if (!editingDetailSummary.value.totalDebit || !editingDetailSummary.value.totalKredit) {
+    return 'Template wajib memiliki minimal satu baris debit dan satu baris kredit.';
+  }
+  if (editingDetailSummary.value.incompleteRows) {
+    return `${editingDetailSummary.value.incompleteRows} baris detail belum lengkap.`;
+  }
+  if (editingDetailSummary.value.duplicatedRows) {
+    return `${editingDetailSummary.value.duplicatedRows} baris memiliki kombinasi COA, source, dan posisi yang sama.`;
+  }
+  return '';
+});
+
+function normalizeDetailCount(detail) {
+  if (Array.isArray(detail)) return detail.length;
+  return Number(detail?.length || detail?.count || 0);
+}
+
+function normalizeTemplates(templates) {
+  if (Array.isArray(templates)) {
+    return templates.filter((item) => item?.id_jurnal_mal);
+  }
+
+  if (typeof templates === 'string') {
+    try {
+      return normalizeTemplates(JSON.parse(templates));
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function resolveCompanyName(id) {
+  return companies.value.find((item) => String(item.id) === String(id))?.nama || '-';
+}
+
+function resolveFeatureName(id) {
+  return fiturRows.value.find((item) => String(item.id_fitur_mal) === String(id))?.nama_fitur_mal || '-';
+}
+
+function resolveCoaName(id) {
+  const row = coaRows.value.find((item) => String(item.id_coa) === String(id));
+  return row ? `${row.nomor_akun || '-'} - ${row.nama_akun || 'COA'}` : '-';
+}
+
+function resolveSourceLabel(id) {
+  const row = sourceRows.value.find((item) => String(item.id_source_data) === String(id));
+  return row ? `${row.nama_tabel || 'tabel'}.${row.nama_kolom_view || row.nama_kolom_db || 'kolom'}` : '-';
+}
+
+function formatDetailCoa(row) {
+  const optionLabel = resolveCoaName(row.id_coa);
+  if (optionLabel !== '-') return optionLabel;
+  return row.nama_akun ? `${row.id_coa || '-'} - ${row.nama_akun}` : '-';
+}
+
+function formatDetailSource(row) {
+  const optionLabel = resolveSourceLabel(row.id_source_data);
+  if (optionLabel !== '-') return optionLabel;
+  return row.nama_kolom_view || '-';
+}
+
+function formatPosition(type) {
+  return {
+    text: String(type) === '1' ? 'Debit' : 'Kredit',
+    className:
+      String(type) === '1'
+        ? 'inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700'
+        : 'inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700'
+  };
+}
+
+function makeEmptyLine(order = detailLines.value.length + 1) {
+  return {
+    id_mal_detail: '',
+    id_coa: '',
+    id_source_data: '',
+    id_modul: '',
+    type: '1',
+    urutan: order
+  };
+}
+
+function resetForm() {
+  Object.assign(form, {
+    id_jurnal_mal: '',
+    id_cabang: '',
+    id_perusahaan: '',
+    id_fitur_mal: '',
+    id_coa_main: '',
+    nama_mal: ''
+  });
+  detailLines.value = [makeEmptyLine(1)];
+}
+
+function buildPayload() {
+  return {
+    ...(form.id_jurnal_mal ? { id_jurnal_mal: Number(form.id_jurnal_mal) } : {}),
+    id_perusahaan: Number(form.id_perusahaan),
+    id_fitur_mal: Number(form.id_fitur_mal),
+    id_coa_main: Number(form.id_coa_main),
+    nama_mal: form.nama_mal.trim(),
+    detail: detailLines.value.map((line, index) => ({
+      ...(line.id_mal_detail ? { id_mal_detail: Number(line.id_mal_detail) } : {}),
+      id_coa: Number(line.id_coa),
+      id_modul: Number(line.id_modul),
+      id_source_data: Number(line.id_source_data),
+      type: Number(line.type),
+      urutan: Number(line.urutan || index + 1)
+    }))
+  };
+}
+
+async function loadReferences() {
+  loading.refs = true;
+  try {
+    const [branchResponse, companyResponse, fiturResponse, sourceResponse] = await Promise.all([
+      getBranches(),
+      getCompanies(),
+      getFiturMalList(),
+      getManualJournalSourceModules()
+    ]);
+
+    branches.value = normalizeList(unwrapResponse(branchResponse));
+    companies.value = normalizeList(unwrapResponse(companyResponse));
+    fiturRows.value = normalizeList(unwrapResponse(fiturResponse));
+    sourceRows.value = normalizeList(unwrapResponse(sourceResponse));
+
+    if (!canAccessAllBranches.value && fallbackBranchId.value) {
+      filters.branchId = String(fallbackBranchId.value);
+    }
+  } catch (error) {
+    pageError.value = normalizeError(error, 'Referensi jurnal manual belum bisa dimuat.');
+  } finally {
+    loading.refs = false;
+  }
+}
+
+async function loadCoaOptions() {
+  if (!form.id_perusahaan) {
+    coaRows.value = [];
+    return;
+  }
+
+  try {
+    const response = await getAccountCoaList({ id_perusahaan: form.id_perusahaan, include_children: 'true' });
+    coaRows.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    actionError.value = normalizeError(error, 'Daftar COA belum bisa dimuat.');
+    coaRows.value = [];
+  }
+}
+
+async function loadRows() {
+  loading.list = true;
+  pageError.value = '';
+  if (filters.branchId && !filters.companyId) {
+    rows.value = [];
+    loading.list = false;
+    return;
+  }
+
+  try {
+    const response = await getManualJournalList({
+      id_perusahaan: filters.companyId || undefined
+    });
+    rows.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    rows.value = [];
+    pageError.value = normalizeError(error, 'Daftar jurnal manual belum bisa dimuat.');
+  } finally {
+    loading.list = false;
+  }
+}
+
+async function loadTriggerHealth() {
+  loading.health = true;
+  try {
+    const response = await getJournalTriggerHealth({
+      id_perusahaan: filters.companyId || undefined
+    });
+    triggerRows.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    pageError.value = normalizeError(error, 'Audit trigger jurnal belum bisa dimuat.');
+    triggerRows.value = [];
+  } finally {
+    loading.health = false;
+  }
+}
+
+async function reloadPageData() {
+  await Promise.all([loadRows(), loadTriggerHealth()]);
+}
+
+function addLine() {
+  detailLines.value.push(makeEmptyLine(detailLines.value.length + 1));
+}
+
+function removeLine(index) {
+  if (detailLines.value.length === 1) {
+    detailLines.value = [makeEmptyLine(1)];
+    return;
+  }
+  detailLines.value.splice(index, 1);
+  detailLines.value = detailLines.value.map((item, lineIndex) => ({ ...item, urutan: lineIndex + 1 }));
+}
+
+function syncSourceMetadata(line) {
+  const source = sourceRows.value.find((item) => String(item.id_source_data) === String(line.id_source_data));
+  line.id_modul = source?.id_modul ? String(source.id_modul) : '';
+}
+
+async function openCreate() {
+  mode.value = 'create';
+  detailModalOpen.value = false;
+  selectedRow.value = null;
+  selectedDetail.value = null;
+  feedback.value = '';
+  actionError.value = '';
+  resetForm();
+  syncingFormContext = true;
+  form.id_cabang = String(filters.branchId || (!canAccessAllBranches.value ? fallbackBranchId.value : '') || '');
+  form.id_perusahaan = String(filters.companyId || '');
+  await nextTick();
+  syncingFormContext = false;
+  await loadCoaOptions();
+  modalOpen.value = true;
+}
+
+async function openDetail(row) {
+  selectedRow.value = row;
+  selectedDetail.value = null;
+  feedback.value = '';
+  actionError.value = '';
+  loading.detail = true;
+
+  try {
+    const response = await getManualJournalDetail(row.id_jurnal_mal);
+    const payload = unwrapResponse(response) || response?.data?.data || {};
+    selectedDetail.value = {
+      ...payload,
+      detail: Array.isArray(payload?.detail) ? payload.detail : normalizeList(payload?.detail)
+    };
+    detailModalOpen.value = true;
+  } catch (error) {
+    pageError.value = normalizeError(error, 'Detail jurnal manual belum bisa dimuat.');
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function openAuditDetail(row) {
+  selectedAuditRow.value = row;
+  selectedAuditDetail.value = null;
+  actionError.value = '';
+
+  const templates = normalizeTemplates(row.templates);
+  if (!templates.length) {
+    selectedAuditTemplateId.value = '';
+    auditModalOpen.value = true;
+    actionError.value = 'Trigger ini belum memiliki template jurnal. Tambahkan setting dulu dari tombol Tambah Setting.';
+    return;
+  }
+
+  selectedAuditTemplateId.value = String(templates[0].id_jurnal_mal);
+  auditModalOpen.value = true;
+  await loadAuditTemplateDetail(selectedAuditTemplateId.value);
+}
+
+async function loadAuditTemplateDetail(templateId = selectedAuditTemplateId.value) {
+  if (!templateId) {
+    selectedAuditDetail.value = null;
+    return;
+  }
+
+  loading.auditDetail = true;
+  actionError.value = '';
+
+  try {
+    const response = await getManualJournalDetail(templateId);
+    const payload = unwrapResponse(response) || response?.data?.data || {};
+    selectedAuditDetail.value = {
+      ...payload,
+      detail: Array.isArray(payload?.detail) ? payload.detail : normalizeList(payload?.detail)
+    };
+  } catch (error) {
+    selectedAuditDetail.value = null;
+    actionError.value = normalizeError(error, 'Detail template audit belum bisa dimuat.');
+  } finally {
+    loading.auditDetail = false;
+  }
+}
+
+async function openEdit(row) {
+  mode.value = 'edit';
+  detailModalOpen.value = false;
+  auditModalOpen.value = false;
+  selectedRow.value = row;
+  selectedDetail.value = null;
+  feedback.value = '';
+  actionError.value = '';
+  resetForm();
+  loading.detail = true;
+
+  try {
+    const response = await getManualJournalDetail(row.id_jurnal_mal);
+    const payload = unwrapResponse(response) || response?.data?.data || {};
+    const detail = Array.isArray(payload?.detail) ? payload.detail : normalizeList(payload?.detail);
+
+    syncingFormContext = true;
+    Object.assign(form, {
+      id_jurnal_mal: String(row.id_jurnal_mal || ''),
+      id_cabang: String(resolveBranchIdForCompany(payload.id_perusahaan || row.id_perusahaan) || filters.branchId || (!canAccessAllBranches.value ? fallbackBranchId.value : '') || ''),
+      id_perusahaan: String(payload.id_perusahaan || row.id_perusahaan || ''),
+      id_fitur_mal: String(payload.id_fitur_mal || row.id_fitur_mal || ''),
+      id_coa_main: String(payload.main_coa_id || row.main_coa_id || ''),
+      nama_mal: payload.nama_mal || row.nama_mal || ''
+    });
+
+    await nextTick();
+    syncingFormContext = false;
+    await loadCoaOptions();
+
+    detailLines.value = detail.length
+      ? detail.map((item, index) => ({
+          id_mal_detail: item.id_mal_detail ? String(item.id_mal_detail) : '',
+          id_coa: item.id_coa ? String(item.id_coa) : '',
+          id_source_data: item.id_source_data ? String(item.id_source_data) : '',
+          id_modul: item.id_modul ? String(item.id_modul) : '',
+          type: item.type ? String(item.type) : '1',
+          urutan: Number(item.urutan || index + 1)
+        }))
+      : [makeEmptyLine(1)];
+
+    selectedDetail.value = payload;
+    modalOpen.value = true;
+  } catch (error) {
+    actionError.value = normalizeError(error, 'Detail jurnal manual belum bisa dimuat.');
+  } finally {
+    loading.detail = false;
+  }
+}
+
+async function editSelectedDetail() {
+  if (!selectedRow.value) return;
+  await openEdit(selectedRow.value);
+}
+
+async function save() {
+  if (!form.id_perusahaan || !form.id_fitur_mal || !form.id_coa_main || !form.nama_mal.trim()) {
+    actionError.value = 'Perusahaan, fitur, COA utama, dan nama setting wajib diisi.';
+    return;
+  }
+
+  if (editingValidationMessage.value && !editingDetailSummary.value.duplicatedRows) {
+    actionError.value = editingValidationMessage.value;
+    return;
+  }
+
+  loading.save = true;
+  feedback.value = '';
+  actionError.value = '';
+
+  try {
+    const payload = buildPayload();
+    if (mode.value === 'create') {
+      await createManualJournal(payload);
+      feedback.value = 'Setting jurnal manual berhasil ditambahkan.';
+      resetForm();
+      coaRows.value = [];
+    } else {
+      await updateManualJournal(payload);
+      feedback.value = 'Setting jurnal manual berhasil diperbarui.';
+    }
+
+    await loadRows();
+  } catch (error) {
+    actionError.value = normalizeError(error, 'Setting jurnal manual belum berhasil disimpan.');
+  } finally {
+    loading.save = false;
+  }
+}
+
+watch(
+  () => form.id_perusahaan,
+  async () => {
+    if (syncingFormContext) return;
+    form.id_coa_main = '';
+    detailLines.value = detailLines.value.map((item) => ({
+      ...item,
+      id_coa: ''
+    }));
+    await loadCoaOptions();
+  }
+);
+
+watch(
+  () => filters.branchId,
+  (branchId, previousBranchId) => {
+    if (String(branchId || '') === String(previousBranchId || '')) return;
+    filters.companyId = '';
+    rows.value = [];
+  }
+);
+
+watch(
+  () => form.id_cabang,
+  (branchId, previousBranchId) => {
+    if (syncingFormContext) return;
+    if (String(branchId || '') === String(previousBranchId || '')) return;
+    form.id_perusahaan = '';
+    form.id_coa_main = '';
+    coaRows.value = [];
+    detailLines.value = detailLines.value.map((item) => ({
+      ...item,
+      id_coa: ''
+    }));
+  }
+);
+
+onMounted(async () => {
+  await loadReferences();
+  await loadRows();
+  await loadTriggerHealth();
+});
+</script>
+
+<template>
+  <div class="space-y-6">
+    <PageHeader
+      title="Jurnal Setting"
+      description="Bangun template mapping jurnal per fitur/modul agar proses akuntansi otomatis mengikuti COA yang sudah ditetapkan."
+    />
+
+    <section class="panel p-5">
+      <div class="grid gap-4 xl:grid-cols-[1.5fr_1fr_1fr_auto_auto]">
+        <div>
+          <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Cari Setting</label>
+          <input
+            v-model="filters.search"
+            type="text"
+            placeholder="Cari nama setting, perusahaan, fitur, atau COA"
+            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none"
+          />
+        </div>
+        <AppSearchSelect
+          v-model="filters.branchId"
+          label="Cabang"
+          placeholder="Pilih cabang"
+          :options="branchOptions"
+          :disabled="!canAccessAllBranches && !!fallbackBranchId"
+          empty-text="Cabang belum tersedia."
+        />
+        <AppSearchSelect
+          v-model="filters.companyId"
+          label="Perusahaan"
+          placeholder="Pilih perusahaan"
+          :options="filterCompanyOptions"
+          :disabled="!filters.branchId"
+          empty-text="Pilih cabang terlebih dahulu."
+        />
+        <button class="self-end rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="reloadPageData">
+          Reload
+        </button>
+        <button class="self-end rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white" @click="openCreate">
+          Tambah Setting
+        </button>
+      </div>
+    </section>
+
+    <section class="panel p-5">
+      <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Audit Trigger Jurnal</h2>
+          <p class="mt-1 text-sm text-slate-500">
+            Cek proses operasional mana yang sudah punya template jurnal debit-kredit sebelum transaksi membentuk jurnal otomatis.
+          </p>
+        </div>
+        <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="loadTriggerHealth">
+          Refresh Audit
+        </button>
+      </div>
+      <AppTable
+        :columns="triggerColumns"
+        :rows="triggerRows"
+        :loading="loading.health"
+        :paginated="false"
+        clickable-rows
+        row-key="id"
+        empty-message="Belum ada data audit trigger jurnal."
+        @row-click="openAuditDetail"
+      />
+    </section>
+
+    <AppModal
+      :open="auditModalOpen"
+      :title="`Detail Audit Trigger ${selectedAuditRow?.id_fitur_mal || ''}`"
+      description="Lihat template jurnal yang dipakai trigger ini, termasuk baris debit dan kreditnya."
+      size="5xl"
+      @close="auditModalOpen = false"
+    >
+      <div class="space-y-5">
+        <section v-if="actionError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {{ actionError }}
+        </section>
+
+        <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Proses</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedAuditSummary.proses }}</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Perusahaan</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedAuditSummary.perusahaan }}</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Debit</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedAuditSummary.total_debit }} baris</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Kredit</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedAuditSummary.total_kredit }} baris</p>
+          </article>
+        </section>
+
+        <section v-if="auditTemplateOptions.length" class="grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <AppSearchSelect
+            v-model="selectedAuditTemplateId"
+            label="Template Jurnal"
+            placeholder="Pilih template"
+            :options="auditTemplateOptions"
+            empty-text="Belum ada template."
+            @update:model-value="loadAuditTemplateDetail"
+          />
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">COA Utama</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedAuditSummary.main_coa }}</p>
+          </article>
+        </section>
+
+        <section>
+          <div class="mb-3">
+            <h3 class="text-base font-semibold text-slate-900">Baris Debit / Kredit</h3>
+            <p class="mt-1 text-sm text-slate-500">Inilah akun dan source modul yang akan dipakai saat trigger jurnal berjalan.</p>
+          </div>
+          <AppTable
+            :columns="detailViewColumns"
+            :rows="selectedAuditDetailRows"
+            :loading="loading.auditDetail"
+            :paginated="false"
+            row-key="id_mal_detail"
+            empty-message="Belum ada detail debit/kredit untuk template ini."
+          />
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-end gap-3">
+          <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="auditModalOpen = false">
+            Tutup
+          </button>
+          <button
+            v-if="selectedAuditTemplateId"
+            class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="loading.auditDetail"
+            @click="openEdit({ id_jurnal_mal: selectedAuditTemplateId, id_perusahaan: selectedAuditDetail?.id_perusahaan, id_fitur_mal: selectedAuditDetail?.id_fitur_mal, main_coa_id: selectedAuditDetail?.main_coa_id, nama_mal: selectedAuditDetail?.nama_mal })"
+          >
+            Edit Template
+          </button>
+        </div>
+      </template>
+    </AppModal>
+
+    <section v-if="pageError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      {{ pageError }}
+    </section>
+
+    <AppTable
+      :columns="columns"
+      :rows="filteredRows"
+      :loading="loading.list"
+      row-key="id_jurnal_mal"
+      clickable-rows
+      empty-message="Belum ada setting jurnal manual."
+      @row-click="openDetail"
+    />
+
+    <AppModal
+      :open="detailModalOpen"
+      :title="`Detail Jurnal Setting ${selectedRow?.id_jurnal_mal || ''}`"
+      description="Lihat ringkasan template jurnal sebelum melakukan perubahan."
+      size="5xl"
+      @close="detailModalOpen = false"
+    >
+      <div class="space-y-5">
+        <section v-if="actionError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {{ actionError }}
+        </section>
+
+        <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Nama Setting</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedDetailSummary.nama_mal }}</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Perusahaan</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedDetailSummary.perusahaan }}</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Fitur</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedDetailSummary.fitur }}</p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Total Baris</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedDetailSummary.total_baris }}</p>
+          </article>
+        </section>
+
+        <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-xs font-medium uppercase tracking-wide text-slate-500">COA Utama</p>
+          <p class="mt-2 text-sm font-semibold text-slate-900">{{ selectedDetailSummary.main_coa }}</p>
+        </section>
+
+        <section>
+          <div class="mb-3">
+            <h3 class="text-base font-semibold text-slate-900">Detail Mapping</h3>
+            <p class="mt-1 text-sm text-slate-500">Urutan COA debit dan kredit yang dipakai saat jurnal otomatis terbentuk.</p>
+          </div>
+          <AppTable
+            :columns="detailViewColumns"
+            :rows="selectedDetailRows"
+            :loading="loading.detail"
+            :paginated="false"
+            row-key="id_mal_detail"
+            empty-message="Belum ada detail mapping."
+          />
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-end gap-3">
+          <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="detailModalOpen = false">
+            Tutup
+          </button>
+          <button
+            class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="loading.detail"
+            @click="editSelectedDetail"
+          >
+            Edit Setting
+          </button>
+        </div>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="modalOpen"
+      :title="mode === 'create' ? 'Tambah Jurnal Manual' : `Edit Jurnal Manual ${selectedRow?.id_jurnal_mal || ''}`"
+      description="Susun fitur, COA utama, dan urutan akun debit/kredit berdasarkan source modul yang dipakai sistem."
+      size="6xl"
+      @close="modalOpen = false"
+    >
+      <div class="space-y-5">
+        <section v-if="feedback" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {{ feedback }}
+        </section>
+        <section v-if="actionError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {{ actionError }}
+        </section>
+
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AppSearchSelect
+            v-model="form.id_cabang"
+            label="Cabang"
+            placeholder="Pilih cabang"
+            :options="branchOptions"
+            :disabled="mode === 'edit' || (!canAccessAllBranches && !!fallbackBranchId)"
+            empty-text="Cabang belum tersedia."
+          />
+          <AppSearchSelect
+            v-model="form.id_perusahaan"
+            label="Perusahaan"
+            placeholder="Pilih perusahaan"
+            :options="formCompanyOptions"
+            :disabled="!form.id_cabang"
+            empty-text="Pilih cabang terlebih dahulu."
+          />
+          <AppSearchSelect
+            v-model="form.id_fitur_mal"
+            label="Fitur Jurnal"
+            placeholder="Pilih fitur jurnal"
+            :options="fiturOptions"
+            empty-text="Daftar fitur belum tersedia."
+          />
+          <AppSearchSelect
+            v-model="form.id_coa_main"
+            label="COA Utama"
+            placeholder="Pilih akun utama"
+            :options="coaOptions"
+            empty-text="COA utama belum tersedia untuk perusahaan ini."
+          />
+          <div>
+            <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Nama Setting</label>
+            <input v-model="form.nama_mal" type="text" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none" />
+          </div>
+        </div>
+
+        <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <article v-for="card in editingStatusCards" :key="card.label" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">{{ card.label }}</p>
+            <p :class="['mt-2 text-lg font-black', card.tone]">{{ card.value }}</p>
+          </article>
+        </section>
+
+        <section
+          v-if="editingValidationMessage"
+          :class="[
+            'rounded-2xl border px-4 py-3 text-sm',
+            editingDetailSummary.duplicatedRows && editingDetailSummary.isReady
+              ? 'border-amber-200 bg-amber-50 text-amber-700'
+              : 'border-rose-200 bg-rose-50 text-rose-700'
+          ]"
+        >
+          {{ editingValidationMessage }}
+        </section>
+
+        <section class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-semibold text-slate-900">Detail Mapping Jurnal</h3>
+              <p class="mt-1 text-sm text-slate-500">Setiap source modul akan diarahkan ke COA tertentu dengan posisi debit atau kredit.</p>
+            </div>
+            <button class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" @click="addLine">
+              Tambah Baris
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            <article
+              v-for="(line, index) in detailLines"
+              :key="`${line.id_mal_detail || 'new'}-${index}`"
+              class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 xl:grid-cols-[0.6fr_1.4fr_1.5fr_0.8fr_auto]"
+            >
+              <div>
+                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Urutan</label>
+                <input v-model.number="line.urutan" type="number" min="1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none" />
+              </div>
+              <AppSearchSelect
+                v-model="line.id_coa"
+                label="COA"
+                placeholder="Pilih COA"
+                :options="coaOptions"
+                empty-text="COA belum tersedia untuk perusahaan ini."
+              />
+              <AppSearchSelect
+                v-model="line.id_source_data"
+                label="Source Modul"
+                placeholder="Pilih source modul"
+                :options="sourceOptions"
+                empty-text="Source modul belum tersedia."
+                @update:model-value="syncSourceMetadata(line)"
+              />
+              <AppSearchSelect
+                v-model="line.type"
+                label="Posisi"
+                placeholder="Debit / Kredit"
+                :options="debitCreditOptions"
+                empty-text="Pilih posisi jurnal."
+              />
+              <div class="flex items-end justify-end">
+                <button class="rounded-xl border border-rose-200 px-4 py-3 text-sm font-medium text-rose-600" @click="removeLine(index)">
+                  Hapus
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="selectedDetail?.detail?.length" class="space-y-3">
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Preview Detail Existing</h3>
+            <p class="mt-1 text-sm text-slate-500">Ringkasan ini membantu membandingkan struktur lama dengan perubahan yang sedang Anda edit.</p>
+          </div>
+          <AppTable
+            :columns="detailPreviewColumns"
+            :rows="selectedDetail.detail"
+            :paginated="false"
+            row-key="id_mal_detail"
+            empty-message="Belum ada detail existing."
+          />
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-end gap-3">
+          <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="modalOpen = false">
+            Tutup
+          </button>
+          <button
+            class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="saveDisabled"
+            @click="save"
+          >
+            {{ loading.save ? 'Menyimpan...' : mode === 'create' ? 'Simpan Setting' : 'Perbarui Setting' }}
+          </button>
+        </div>
+      </template>
+    </AppModal>
+  </div>
+</template>

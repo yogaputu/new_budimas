@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."hreturbeli" ("tanggal", "nota", "kodeprinciple", "namaprinciple", "keterangan", "notabeli", "totalretur", "stnota", "useradd", "tgladd", "userbatal", "tglbatal", "ketbatal") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/HReturBeli.csv' WITH (FORMAT csv, HEADER true, NULL '')

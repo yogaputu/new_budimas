@@ -1,0 +1,140 @@
+﻿DAFTAR SQL MIGRASI BUDIMAS - 2026-06-03
+Root: D:\laragon\www\budimas\new_budimas\tools\migration\all_sql_migrasi_budimas_20260603
+Total SQL: 112
+
+[01_schema_feature_migrations]
+- 01_schema_feature_migrations\20260517_archive_clear_legacy_promo_voucher.sql
+- 01_schema_feature_migrations\20260517_payment_voucher_usage.sql
+- 01_schema_feature_migrations\20260517_unified_promo_all_in.sql
+- 01_schema_feature_migrations\20260518_master_ppn_produk.sql
+- 01_schema_feature_migrations\20260519_credit_note_refund.sql
+- 01_schema_feature_migrations\20260519_order_discount_columns.sql
+- 01_schema_feature_migrations\20260519_runtime_schema_manual.sql
+- 01_schema_feature_migrations\20260521_ai_readonly_access.sql
+- 01_schema_feature_migrations\20260522_seed_jurnal_fitur_27_33.sql
+- 01_schema_feature_migrations\20260523_principal_special_rule.sql
+- 01_schema_feature_migrations\20260524_setup_jurnal_canvas_discount_settings.sql
+- 01_schema_feature_migrations\20260524_setup_jurnal_canvas_discount_settings_adminer_minimal.sql
+- 01_schema_feature_migrations\20260524_setup_jurnal_canvas_discount_settings_adminer_plain.sql
+- 01_schema_feature_migrations\20260524_setup_jurnal_canvas_discount_settings_no_union.sql
+- 01_schema_feature_migrations\20260524_setup_jurnal_legacy_safe_notes.sql
+- 01_schema_feature_migrations\20260525_coa_opening_balance.sql
+- 01_schema_feature_migrations\20260525_setup_jurnal_legacy_safe_adminer.sql
+- 01_schema_feature_migrations\20260525_supervisor_audit_log.sql
+- 01_schema_feature_migrations\20260602_inventory_ledger_hpp.sql
+- 01_schema_feature_migrations\20260602_sales_supervisor_map.sql
+- 01_schema_feature_migrations\20260604_principal_active_status.sql
+- 01_schema_feature_migrations\20260604_retur_tracking_indexes.sql
+
+[02_legacy_mapping_public]
+- 02_legacy_mapping_public\map_legacy_mobile_payments_2026_to_public.sql
+- 02_legacy_mapping_public\map_legacy_payments_2026_to_public.sql
+- 02_legacy_mapping_public\map_legacy_purchase_2026_to_public.sql
+- 02_legacy_mapping_public\map_legacy_retur_2026_to_public.sql
+- 02_legacy_mapping_public\map_legacy_sales_2025_ar_to_public.sql
+- 02_legacy_mapping_public\map_legacy_sales_2026_to_public.sql
+
+[03_preview_master_mapping\tmp_audit_preview_migration]
+- 03_preview_master_mapping\tmp_audit_preview_migration\preview_insert_customer.sql
+- 03_preview_master_mapping\tmp_audit_preview_migration\preview_insert_principal.sql
+- 03_preview_master_mapping\tmp_audit_preview_migration\preview_insert_produk_external_mapping.sql
+
+[03_preview_master_mapping\tools_migration_tmp_audit_preview_migration]
+- 03_preview_master_mapping\tools_migration_tmp_audit_preview_migration\preview_insert_customer.sql
+- 03_preview_master_mapping\tools_migration_tmp_audit_preview_migration\preview_insert_principal.sql
+- 03_preview_master_mapping\tools_migration_tmp_audit_preview_migration\preview_insert_produk_external_mapping.sql
+
+[04_sqlserver_staging_copy\sqlserver_2025_ar_pg_legacy\targeted_2025_ar]
+- 04_sqlserver_staging_copy\sqlserver_2025_ar_pg_legacy\targeted_2025_ar\copy_to_pg.sql
+
+[04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-215805]
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-215805\ZTagTO.copy.sql
+
+[04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-215906]
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-215906\ZTagTO.copy.sql
+
+[04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222010]
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222010\BarangSubBrand.copy.sql
+
+[04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222041]
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222041\BarangBrand.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222041\BarangSubBrand.copy.sql
+
+[04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125]
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\AnalisaSupervisor.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\BarangBrand.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\BarangSubBrand.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Customer.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DAdjGudang.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DBayarSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DDraftNota.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DDraftNotaGK.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DGK.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DJualKanvas.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DJualSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DJualSMAndroid.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DKG.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DManifest.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DMutasiInt.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DPembelian.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DReturBeli.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DReturSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DReturSMAndroid.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\DTAGTO.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HAdjGudang.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HargaLog.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HBayarSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HDraft.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HDraftGK.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HGK.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HJualKanvas.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HJualSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HJualSMAndroid.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HKG.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HManifest.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HMutasiInt.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HPembelian.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HReturBeli.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HReturSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HReturSMAndroid.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HStokKanvas.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\HTAGTO.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\InputSetoran.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Kendaraan.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Klaim.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\KlaimReal.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\KunjunganFailed.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\KunjunganSales.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\LogUser.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ORDER_VDIST.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Pembayaran.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\PicKiriman.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Plafon.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Plafon_Backup.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\RealisasiTO.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\RegistrasiCustomer.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\Sales.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\STOK.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\StokOpnameAndroid.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\WMSKartuStok.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZDBayarSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZDReturBeli.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZHBayarSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZHJualSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZJualDetail.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZKlaimReal.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZPiutangSM.copy.sql
+- 04_sqlserver_staging_copy\sqlserver_2026_pg_legacy\20260602-222125\ZTagTO.copy.sql
+
+[99_full_legacy_bundle]
+- 99_full_legacy_bundle\00_run_all_legacy_migration_2026.sql
+- 99_full_legacy_bundle\00_run_all_legacy_migration_2026_psql_runner.sql
+
+[99_full_legacy_bundle\steps]
+- 99_full_legacy_bundle\steps\01_map_legacy_sales_2026_to_public.sql
+- 99_full_legacy_bundle\steps\02_map_legacy_sales_2025_ar_to_public.sql
+- 99_full_legacy_bundle\steps\03_map_legacy_payments_2026_to_public.sql
+- 99_full_legacy_bundle\steps\04_map_legacy_mobile_payments_2026_to_public.sql
+- 99_full_legacy_bundle\steps\05_map_legacy_purchase_2026_to_public.sql
+- 99_full_legacy_bundle\steps\06_map_legacy_retur_2026_to_public.sql
+

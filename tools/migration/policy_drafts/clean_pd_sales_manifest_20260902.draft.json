@@ -1,0 +1,83 @@
+{
+  "policy_id": "draft_clean_pd_sales_manifest_20260902",
+  "approval_status": "draft",
+  "purpose": "Read-only manifest for canonical BDM Solo and TMP Solo HJualSM/DJualSM documents whose source status is exactly PD. This file is a review contract only and is never an authorization to import or post transactions.",
+  "source_scope": {
+    "canonical_header_table": "HJualSM",
+    "canonical_detail_table": "DJualSM",
+    "source_status_exact": "PD",
+    "excluded_source_families": [
+      "HJualSMAndroid",
+      "DJualSMAndroid"
+    ]
+  },
+  "frozen_stage_scope": {
+    "purpose": "Accept only the final, jointly attested BDM/TMP August 2026 sales freeze. The stage run window, maintenance-window identity, consistency mode, isolation, and the canonical header/detail selection pair are all part of this review contract.",
+    "consistency_mode": "maintenance_freeze_serializable",
+    "maintenance_freeze_attested": true,
+    "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+    "source_transaction_isolation": "SERIALIZABLE",
+    "window_start": "2026-08-01T00:00:00",
+    "window_end_exclusive": "2026-09-01T00:00:00",
+    "header_selection": {
+      "mode": "date",
+      "date_column": "Tanggal"
+    },
+    "detail_selection": {
+      "mode": "child",
+      "parent_table": "HJualSM",
+      "child_key_column": "Nota",
+      "parent_key_column": "Nota",
+      "parent_date_column": "Tanggal"
+    }
+  },
+  "target_draft_mapping": {
+    "sales_order": {
+      "status_order": 0,
+      "label": "draft_unconfirmed",
+      "no_order": "{document_prefix}{source_nota}",
+      "tanggal_faktur": null,
+      "tanggal_terkirim": null
+    },
+    "faktur": {
+      "status_faktur": 0,
+      "label": "draft_unissued",
+      "no_faktur": null,
+      "issuance": "deferred_until_a_separate_numbering_and_issue_policy_is_approved"
+    }
+  },
+  "money_reconciliation": {
+    "header_detail_total_tolerance_rp": "0.05",
+    "discount_percentage_formula": "net_after_percent = gross × (1 - Disc1/100) × (1 - Disc2/100) × (1 - Disc3/100)",
+    "discount_amount_components": [
+      "DiscRp",
+      "DiscRp1",
+      "DiscRp2",
+      "DiscRp3"
+    ],
+    "review_rule": "Discount percentage components are sequential/compound, never interpreted by merely adding the percentages. This report preserves raw components and reconciles source totals within Rp0.05; it does not recalculate or post target financial values."
+  },
+  "must_hold_when": [
+    "source master or UOM conversion map is absent, changed, or ambiguous",
+    "header/detail source identity, date, quantity, or total does not reconcile exactly within the reviewed tolerance",
+    "source return/payment is nonzero, or an explicit lifecycle signal (UserPK, UserReal, StTranfer, UserBatal, KetBatal) is present; default TglReal/TglBatal timestamps alone are audit-only",
+    "the target does not support a numberless faktur draft",
+    "a generated sales-order number or source-qualified identity is already occupied"
+  ],
+  "prohibited_effects": [
+    "faktur_number_assignment",
+    "delivery_confirmation",
+    "picking",
+    "stock_or_hpp_ledger",
+    "payment_or_receivable_settlement",
+    "return_or_credit_note",
+    "manifest_or_route_assignment",
+    "SQL_Server_write",
+    "production_connection_switch"
+  ],
+  "apply_preconditions": [
+    "A separate approved PD import policy and importer are required.",
+    "Opening stock/HPP and AR/plafon strategy must remain explicitly reconciled before operational cutover.",
+    "The report plan SHA and frozen stage fingerprints must be rebuilt and re-approved in a serializable apply transaction."
+  ]
+}

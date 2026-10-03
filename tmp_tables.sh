@@ -1,0 +1,1 @@
+printf '%s\n' 'budimas' | sudo -S -u postgres psql -d budimas_dev -Atqc "select table_schema||'.'||table_name from information_schema.tables where table_name ilike '%purchase%' or table_name ilike '%order%' order by 1 limit 120;"

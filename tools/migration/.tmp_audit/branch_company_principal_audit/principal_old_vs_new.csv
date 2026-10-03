@@ -1,0 +1,43 @@
+﻿old_kode,old_nama,old_active,new_id,new_kode,new_nama,new_id_perusahaan,new_perusahaan,match_type
+11,PT.KINO INDONESIA,0,,,,,,missing
+11A,KINO PC 2,0,,,,,,missing
+15,PT SMART,0,,,,,,missing
+17,PT. GUNUNG SLAMAT,0,7,17,PT SINAR SOSRO GUNUNG SLAMAT,1,PT Budimas Makmur Mulia,kode
+24,PT REMS SURABAYA,0,,,,,,missing
+28,PT.CIPTA KARYA UTAMA,0,15,28,MONDELEZ INDONESIA TRADING,2,PT TIGA MUTIARA PRIMA,kode
+29,PT.UNIVERSAL CIPTA PANGAN,0,,,,,,missing
+32,PT.TRESNO JOYO,0,,,,,,missing
+37,CV.RODA MAS,0,,,,,,missing
+38,CV.KARAGEN INDONESIA,0,,,,,,missing
+41,PT. FUMAKILLA NOMOS,0,,,,,,missing
+42,X,1,,,,,,missing
+43,PT.PUNCAK MASA KEEMASAN INDO,0,,,,,,missing
+46,PT.YABETA INDONESIA/NEFERTITI,0,,,,,,missing
+47,PT.UNITED WARU BISCUIT MANUFAC,0,,,,,,missing
+49,PT.BAHTERA CIPTA RAGA PRIMA,0,,,,,,missing
+50,PT.SUKANDA DJAYA,0,,,,,,missing
+51,CV.DJAYA RAYA UTAMA,0,,,,,,missing
+53,PT.PERINTIS KARYA SENTOSA,0,,,,,,missing
+58,PT.ANGGANA CATUR PRIMA,0,,,,,,missing
+59,PT.ANEKA INDO MAKMUR,0,,,,,,missing
+60,PT.NUTRIFOOD INDONESIA,1,9,60,PT NUTRIFOOD INDONESIA,1,PT Budimas Makmur Mulia,kode
+60A,NFI GIMMICK,1,,,,,,missing
+61,PT.MANDRAVA WANGI,0,,,,,,missing
+62,PT.TATA GLOBAL SENTOSA,0,,,,,,missing
+63,PT GODREJ INDONESIA,1,6,63,PT GODREJ DISTRIBUTION INDONESIA,1,PT Budimas Makmur Mulia,kode
+63,PT GODREJ INDONESIA,1,70,63,PT GODREJ CONSUMER PRODUCTS INDONESIA,1,PT Budimas Makmur Mulia,kode
+67,MIX SOSIS FINNA,0,,,,,,missing
+68,GBU PLAST,0,,,,,,missing
+BK,PT.BRANDS KONNECT INTERN,1,,,,,,missing
+BM,UD. BUDIMAS,0,,,,,,missing
+DB,DANONE BISCUITS INDONESIA,0,,,,,,missing
+DP,DOLPHIN PT,0,4,DP,PT DOLPHIN FOOD  BEVERAGES INDUSTRY,1,PT Budimas Makmur Mulia,kode
+ET,ENERGIZER,1,5,ET,PT ENERGIZER INDONESIA,1,PT Budimas Makmur Mulia,kode
+M1,MIX 1,0,,,,,,missing
+M2,MIX 2,0,,,,,,missing
+M3,MIX 3,1,,,,,,missing
+M4,PT GUNUNG SLAMAT,0,,,,,,missing
+M5,MIX 5,0,,,,,,missing
+M6,MIX 6,1,,,,,,missing
+MFB,Mix Food Budimas,1,,,,,,missing
+NU,PT. NIRAMAS UTAMA NIAGA,0,,,,,,missing

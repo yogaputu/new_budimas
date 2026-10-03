@@ -1,0 +1,100 @@
+{
+  "scope": "Create a shipment draft directly from Jadwal Pengiriman by selecting existing confirmed notes",
+  "status": "DEPLOYED_AND_VERIFIED",
+  "published_at": "2026-10-01T16:59:19.767256+00:00",
+  "verified_date": "2026-10-01",
+  "api_origin_unchanged": "https://erp.budimas.swakarya.my.id:9092",
+  "local_built_entrypoint": "/assets/index-CC3dUeyK.js",
+  "local_built_index_sha256": "d6d597a1b92c99857f402a1d8b8540390392b068e757a5ce300ba071408bbc69",
+  "frontend_root": "/Users/macairm2/www/new_budimas",
+  "frontend_files": [
+    "src/api/distribution.js",
+    "src/composables/useShipmentNotePicker.js",
+    "src/modules/distribution/components/ScheduleDraftCreateModal.vue",
+    "src/modules/distribution/pages/ScheduleFleetPage.vue",
+    "tests/shipment-note-picker.test.mjs",
+    "tests/browser/shipment-schedule-create.mjs"
+  ],
+  "backend_root": "/Users/macairm2/www/API",
+  "backend_runtime_files": [
+    {
+      "path": "apps/routes/distribusi.py",
+      "local_before_sha256": "35fb08fe067e0201448dd05a729acc75a1451b5971613da5a3c814e831009977",
+      "after_sha256": "4a86e2735fcfa4c358a77c6c1484be3dc668ca0ef8a1e976e8682bcfc31a7511"
+    },
+    {
+      "path": "apps/services/SalesOrder.py",
+      "local_before_sha256": "8278e7dcf2b005f429e8b74c5f11d04becf7da11d970d014f4b8b1b0f0492ea6",
+      "after_sha256": "f5c9c0037ff61ac20a0162022550434fbf02ed99f4fc5c455fcd049a6979880c"
+    }
+  ],
+  "backend_test_files": ["apps/test/test_schedule_draft_orders.py"],
+  "behavior": {
+    "entry": "Jadwal Pengiriman > Buat Draf Kiriman",
+    "scope": "Require selected company/branch and existing shipment update permission; server checks both against authoritative actor scope",
+    "candidate_api": "GET /api/distribusi/shipment-draft-orders",
+    "candidates": "Server forces status_order=1 and excludes existing fleet/date assignments before pagination; not limited to scheduler's own sales user ID",
+    "existing_sales_api": "Original sales/supervisor access behavior is unchanged; query parameters cannot enable the internal schedule scope",
+    "filters": "Inclusive note-date range and note/customer search; 50 notes per page",
+    "selection": "Persists across pages; filter changes clear selection; maximum 100 notes from the same company, branch and route",
+    "save": "Reuse existing ShipmentDraftModal and POST /api/distribusi/update; retain transactional status, assignment, scope and duplicate validation",
+    "after_save": "Close creation flow, show Draf Kiriman, clear schedule search and refresh the schedule list",
+    "printing": "Existing individual/bulk print flow preserved"
+  },
+  "verification": {
+    "frontend_tests_passed": 45,
+    "api_regression_tests_passed": 335,
+    "production_build": "PASS; existing Browserslist age and large-chunk warnings",
+    "sql_smoke": "PASS actual count/filter query in isolated in-memory PostgreSQL: inclusive dates, multiple sales users, no unconfirmed/assigned/out-of-scope notes",
+    "browser_create": "PASS permission gate, scoped confirmed notes, invalid dates, mixed-route rejection, cross-page selection, back navigation, 409 retention, exact save payload, list refresh, retry and mobile layout",
+    "browser_print_regression": "PASS individual/bulk print, page selection, separate sheets, atomic failure/stale cancellation and popup feedback",
+    "visual_review": "Desktop note picker, shipment form and mobile viewport inspected",
+    "browser_business_api_requests_intercepted": true,
+    "browser_tests_production_business_api_requests": 0,
+    "production_read_only_api_checks_passed": 13,
+    "production_existing_confirmed_note_verified": true,
+    "production_restricted_account": "permission restriction verified",
+    "production_public_file_hashes_verified": 192,
+    "deployed_browser_create_test": "PASS with intercepted business APIs; no production test transaction",
+    "deployed_browser_print_test": "PASS with intercepted business APIs and stubbed printing; no physical printer test",
+    "production_browser_health_status": 200,
+    "production_browser_anonymous_sales_status": 401,
+    "production_browser_anonymous_candidates_status": 401,
+    "production_entrypoints_443_and_9092_match": true,
+    "production_verification_completed_at": "2026-10-01T16:59:41.574Z",
+    "production_business_mutations": 0
+  },
+  "production": {
+    "host": "58.147.185.142",
+    "ssh_port": 9999,
+    "api_root": "/www/wwwroot/API",
+    "frontend_root": "/www/wwwroot/new_budimas",
+    "frontend_published_to_root_and_dist": true,
+    "frontend_files": 192,
+    "frontend_entrypoint": "/assets/index-CC3dUeyK.js",
+    "frontend_index_sha256": "d6d597a1b92c99857f402a1d8b8540390392b068e757a5ce300ba071408bbc69",
+    "api_runtime_files_installed": 2,
+    "api_activated_at": "2026-10-01T16:58:53.270728+00:00",
+    "api_verified_at": "2026-10-01T16:59:08.645831+00:00",
+    "graceful_reload_master_pid": 2303,
+    "backup_archive": "/www/backup/budimas-schedule-create-20261001.IECtV1/files-before.tar.gz",
+    "backup_sha256": "b0e58767f1807a23593623d476b487e34103a1ed4d7a26acc56e38b31f89a0ab",
+    "release_bundle_sha256": "d85945e3ff392c34c5bd70be21e4f73e82cea50b12b5f3b95a6cd4b7b99c2d49",
+    "old_frontend_assets_and_htaccess_preserved": true,
+    "database_migrations": 0,
+    "deployment_artifacts": "/tmp/budimas-schedule-create-deploy.mnZfbf",
+    "rollback": "Restore apps/routes/distribusi.py, apps/services/SalesOrder.py and both frontend index.html files from the backup archive, then gracefully reload the verified current production uWSGI master. Retain frontend assets; no database rollback is needed."
+  },
+  "database_migration_required": false,
+  "new_dependencies_required": false,
+  "apk_changes": false,
+  "deployment_order_completed": [
+    "Verify production runtime hashes against local baselines; preserve any concurrent changes and create a server backup",
+    "Deploy both API runtime files together and gracefully reload the verified production master",
+    "Verify the new read-only candidate endpoint: anonymous 401, scope/permission rejection, confirmed-only notes and date pagination",
+    "Publish frontend assets, replacing index.html last and retaining old assets and .htaccess",
+    "Check deployed browser behavior using intercepted business API calls; do not create production test transactions"
+  ],
+  "artifacts": "/tmp/budimas-schedule-create.50fduW",
+  "local_prechange_backups": ["frontend-before.tar.gz", "api-before.tar.gz"]
+}

@@ -1,0 +1,16 @@
+{
+  "scope_name": "solo_bmm_full_master",
+  "branch": {
+    "id_cabang": 5,
+    "kode_cabang": "SLO",
+    "area_codes": []
+  },
+  "company": {
+    "id_perusahaan": 1,
+    "kode_perusahaan": "BMM",
+    "principal_codes": []
+  },
+  "sales_codes": [],
+  "include_inactive": false,
+  "notes": "Full master aktif dari SQL Server DIST. Semua data diarahkan ke Cabang SOLO dan PT Budimas Makmur Mulia sesuai keputusan UAT."
+}

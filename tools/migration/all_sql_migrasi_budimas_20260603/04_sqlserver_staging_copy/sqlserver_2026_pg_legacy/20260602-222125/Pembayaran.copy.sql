@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."pembayaran" ("nokwitansi", "tanggal", "kodecustomer", "kodesales", "nota", "totaltagihan", "totalbayar", "status", "metode", "nobukti", "idkunjungan") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/Pembayaran.csv' WITH (FORMAT csv, HEADER true, NULL '')

@@ -1,0 +1,36 @@
+# main.py
+
+import os
+from apps import app # <-- Import the 'app' instance from 'apps.py'
+
+# 1. Define the base directory of your project
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 2. Define the paths for the certificate and private key
+CERT_FOLDER = os.path.join(BASE_DIR, 'cert')
+
+# Assuming these are the server's files you want to use for Flask's SSL context:
+CERT_FILE = os.path.join(CERT_FOLDER, 'client-cert.pem') 
+KEY_FILE = os.path.join(CERT_FOLDER, 'client-key.pem')   
+
+# The server-ca.pem is usually for client certificate verification (mTLS), 
+# and not needed in this basic app.run() call.
+
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "ptbudimas.json"
+
+if __name__ == '__main__':
+    # 3. Check for file existence to prevent FileNotFoundError
+    if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
+        print(f"✅ Starting server with SSL context...")
+        
+        # 4. Pass the full, verified paths to ssl_context
+        app.run(
+            host="0.0.0.0", 
+            port=5000, 
+            debug=True,
+            ssl_context=(CERT_FILE, KEY_FILE) # <-- FIX: This is what enables HTTPS
+        )
+    else:
+        print("🛑 ERROR: SSL files not found in the 'cert' folder.")
+        print(f"Expected Certificate: {CERT_FILE}")
+        print(f"Expected Private Key: {KEY_FILE}")

@@ -1,0 +1,11 @@
+{
+  "missing_customers": 5294,
+  "missing_principals": 35,
+  "missing_sales": 186,
+  "missing_products": 11173,
+  "external_C015_mapping_rows": 37,
+  "active_principal_sql_rows": 6,
+  "active_customer_sql_rows": 5152,
+  "product_external_mapping_candidates": 501,
+  "output_dir": "D:\\laragon\\www\\budimas\\new_budimas\\.tmp_audit\\preview_migration"
+}

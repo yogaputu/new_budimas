@@ -1,0 +1,813 @@
+import api from './axios';
+
+function getBaseTableAll(table, params) {
+  return api.get(`/api/base/${table}/all`, { params });
+}
+
+function toFormPayload(payload = {}) {
+  const form = new URLSearchParams();
+
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      form.append(key, value);
+    }
+  });
+
+  return form;
+}
+
+function createBaseTableRecord(table, payload, params) {
+  return api.post(`/api/base/${table}`, toFormPayload(payload), {
+    params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  });
+}
+
+function updateBaseTableRecord(table, id, payload) {
+  return api.put(`/api/base/${table}`, toFormPayload(payload), {
+    params: {
+      where: JSON.stringify({
+        id: `=${Number(id)}`
+      })
+    },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  });
+}
+
+function updateBaseTableRecordByKey(table, key, id, payload) {
+  return api.put(`/api/base/${table}`, toFormPayload(payload), {
+    params: {
+      where: JSON.stringify({
+        [key]: `=${Number(id)}`
+      })
+    },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  });
+}
+
+function deleteBaseTableRecord(table, id) {
+  return deleteBaseTableRecordByKey(table, 'id', id);
+}
+
+function deleteBaseTableRecordByKey(table, key, id) {
+  return api.delete(`/api/base/${table}`, {
+    params: {
+      where: JSON.stringify({
+        [key]: `=${Number(id)}`
+      })
+    }
+  });
+}
+
+export function getUsers(params) {
+  return api.get('/api/extra/getUser', { params });
+}
+
+export function getDriverUsers(params) {
+  return api.get('/api/extra/user/option/driver', { params });
+}
+
+export function getHelperUsers(params) {
+  return api.get('/api/extra/user/option/helper', { params });
+}
+
+export function createUser(payload, params) {
+  return createBaseTableRecord('users', payload, params);
+}
+
+export function updateUser(id, payload) {
+  return updateBaseTableRecord('users', id, payload);
+}
+
+export function deleteUser(id) {
+  return deleteBaseTableRecord('users', id);
+}
+
+export function getSales(params) {
+  return api.get('/api/extra/getSales', { params });
+}
+
+export function getSupervisorSalesVisitReport(params) {
+  return api.get('/api/sales-kunjungan/supervisor-report', { params });
+}
+
+export function getSupervisorSalesCallplanCalendar(params) {
+  return api.get('/api/sales-kunjungan/supervisor-callplan-calendar', { params });
+}
+
+export function getSupervisorSalesPerformanceChecklist(params) {
+  return api.get('/api/sales-kunjungan/supervisor-performance-checklist', { params });
+}
+
+export function saveSupervisorSalesPerformanceChecklistNote(payload) {
+  return api.post('/api/sales-kunjungan/supervisor-performance-checklist/note', payload);
+}
+
+export function saveSupervisorSalesPerformanceChecklistItem(payload) {
+  return api.post('/api/sales-kunjungan/supervisor-performance-checklist/item', payload);
+}
+
+export function getBranches(params) {
+  return api.get('/api/extra/getCabang', { params });
+}
+
+export function createBranch(payload) {
+  return createBaseTableRecord('cabang', payload);
+}
+
+export function updateBranch(id, payload) {
+  return updateBaseTableRecord('cabang', id, payload);
+}
+
+export function deleteBranch(id) {
+  return deleteBaseTableRecord('cabang', id);
+}
+
+export function getPrincipals(params) {
+  return api.get('/api/extra/getPrincipal', { params });
+}
+
+export function getCustomers(params) {
+  return api.get('/api/extra/getCustomer', { params });
+}
+
+export function getAllCustomers(params) {
+  return getBaseTableAll('customer', params);
+}
+
+export function getCustomersTable(params) {
+  return api.get('/api/extra/getCustomer', {
+    params: {
+      draw: 1,
+      start: 0,
+      length: 100,
+      'search[value]': params?.search || '',
+      'order[0][column]': 1,
+      'order[0][dir]': 'asc',
+      'columns[1][data]': 'nama'
+    }
+  });
+}
+
+export function createCustomer(payload) {
+  return createBaseTableRecord('customer', payload);
+}
+
+export function updateCustomer(id, payload) {
+  return updateBaseTableRecord('customer', id, payload);
+}
+
+export function deleteCustomer(id) {
+  return deleteBaseTableRecord('customer', id);
+}
+
+export function getCustomerOptions(params) {
+  return api.get('/api/extra/getCustomerOpt', { params });
+}
+
+export function getProductOptions(params) {
+  return api.get('/api/extra/produk/option', { params });
+}
+
+export function getProductStockReady(params) {
+  return api.get('/api/produk/stok-ready', { params });
+}
+
+export function getProducts(params) {
+  return api.get('/api/extra/getProduk', { params });
+}
+
+export function getProductDetail(id) {
+  return api.get('/api/produk/get-produk', {
+    params: {
+      id_produk: id
+    }
+  });
+}
+
+export function getProductUoms(id) {
+  return api.get(`/api/extra/produk/uoms/${id}`);
+}
+
+export function createProductDetail(payload) {
+  return api.post('/api/extra/produk/detail', payload);
+}
+
+export function deleteProductDetail(id) {
+  return api.delete(`/api/extra/produk/detail/${id}`);
+}
+
+export function getProductBrands(params) {
+  return api.get('/api/extra/produk/brands/options', { params });
+}
+
+export function getProductCategories(params) {
+  return api.get('/api/extra/produk/categories/options', { params });
+}
+
+export function getProductSubbrands(params) {
+  return api.get('/api/extra/produk/subbrands/options', { params });
+}
+
+export function createProductBrand(payload) {
+  return createBaseTableRecord('produk_brand', payload);
+}
+
+export function createProductCategory(payload) {
+  return createBaseTableRecord('produk_kategori', payload);
+}
+
+export function createProductSubbrand(payload) {
+  return api.post('/api/extra/produk/subbrands/options', payload);
+}
+
+export function updateProductSubbrand(id, payload) {
+  return api.put(`/api/extra/produk/subbrands/options/${id}`, payload);
+}
+
+export function deleteProductSubbrand(id) {
+  return api.delete(`/api/extra/produk/subbrands/options/${id}`);
+}
+
+export function getProductStatuses(params) {
+  return api.get('/api/extra/produk/statuses/options', { params });
+}
+
+export function getProductPriceTypes(params) {
+  return api.get('/api/extra/produk/price-types/options', { params });
+}
+
+export function getPriceTypes(params) {
+  return getBaseTableAll('produk_tipe_harga', params);
+}
+
+export function createPriceType(payload) {
+  return createBaseTableRecord('produk_tipe_harga', payload);
+}
+
+export function updatePriceType(id, payload) {
+  return updateBaseTableRecord('produk_tipe_harga', id, payload);
+}
+
+export function deletePriceType(id) {
+  return deleteBaseTableRecord('produk_tipe_harga', id);
+}
+
+export function getProductPpnOptions(params) {
+  return api.get('/api/extra/produk/ppn/options', { params });
+}
+
+export function getProductPpnList(params) {
+  return api.get('/api/extra/produk/ppn', { params });
+}
+
+export function createProductPpn(payload) {
+  return api.post('/api/extra/produk/ppn', payload);
+}
+
+export function updateProductPpn(id, payload) {
+  return api.put(`/api/extra/produk/ppn/${id}`, payload);
+}
+
+export function deleteProductPpn(id) {
+  return api.delete(`/api/extra/produk/ppn/${id}`);
+}
+
+export function getPrincipalRules(params) {
+  return api.get('/api/extra/principal-rules', { params });
+}
+
+export function createPrincipalRule(payload) {
+  return api.post('/api/extra/principal-rules', payload);
+}
+
+export function updatePrincipalRule(id, payload) {
+  return api.put(`/api/extra/principal-rules/${id}`, payload);
+}
+
+export function deletePrincipalRule(id) {
+  return api.delete(`/api/extra/principal-rules/${id}`);
+}
+
+export function getSalesPrincipalGroups(params) {
+  return api.get('/api/extra/sales-principal-groups', { params });
+}
+
+export function createSalesPrincipalGroup(payload) {
+  return api.post('/api/extra/sales-principal-groups', payload);
+}
+
+export function updateSalesPrincipalGroup(id, payload) {
+  return api.put(`/api/extra/sales-principal-groups/${id}`, payload);
+}
+
+export function deleteSalesPrincipalGroup(id) {
+  return api.delete(`/api/extra/sales-principal-groups/${id}`);
+}
+
+export function getCustomerProductRules(params) {
+  return api.get('/api/extra/customer-product-rules', { params });
+}
+
+export function createCustomerProductRule(payload) {
+  return api.post('/api/extra/customer-product-rules', payload);
+}
+
+export function updateCustomerProductRule(id, payload) {
+  return api.put(`/api/extra/customer-product-rules/${id}`, payload);
+}
+
+export function deleteCustomerProductRule(id) {
+  return api.delete(`/api/extra/customer-product-rules/${id}`);
+}
+
+export function getProductCompletenessSummary(params) {
+  return api.get('/api/extra/produk/completeness-summary', { params });
+}
+
+export function updateProductDetail(id, payload) {
+  return api.put(`/api/extra/produk/detail/${id}`, payload);
+}
+
+export function updateProductPrice(id, payload) {
+  return api.put(`/api/extra/produk/prices/${id}`, payload);
+}
+
+export function getPrincipalPriceRows(principalId, params) {
+  return api.get(`/api/extra/produk/prices/bulk/${principalId}`, { params });
+}
+
+export function bulkUpdateProductPrices(payload) {
+  return api.put('/api/extra/produk/prices/bulk', payload);
+}
+
+export function createProductUom(payload) {
+  return createBaseTableRecord('produk_uom', payload);
+}
+
+export function updateProductUom(id, payload) {
+  return updateBaseTableRecord('produk_uom', id, payload);
+}
+
+export function deleteProductUom(id) {
+  return deleteBaseTableRecord('produk_uom', id);
+}
+
+export function getProductOptionsByPrincipal(id, params) {
+  return api.get(`/api/extra/produk/option/principal/${id}`, { params });
+}
+
+export function getFleets(params) {
+  return api.get('/api/extra/getArmada', { params });
+}
+
+export function getFleetTypes(params) {
+  return getBaseTableAll('armada_tipe', params);
+}
+
+export function createFleet(payload) {
+  return createBaseTableRecord('armada', payload);
+}
+
+export function updateFleet(id, payload) {
+  return updateBaseTableRecord('armada', id, payload);
+}
+
+export function deleteFleet(id) {
+  return deleteBaseTableRecord('armada', id);
+}
+
+export function getDrivers(params) {
+  return api.get('/api/extra/getDriver', { params });
+}
+
+export function getHelpers(params) {
+  return api.get('/api/extra/getHelper', { params });
+}
+
+export function createDriver(payload) {
+  return createBaseTableRecord('driver', payload);
+}
+
+export function updateDriver(id, payload) {
+  return updateBaseTableRecord('driver', id, payload);
+}
+
+export function deleteDriver(id) {
+  return deleteBaseTableRecord('driver', id);
+}
+
+export function createHelper(payload) {
+  return createBaseTableRecord('helper', payload);
+}
+
+export function updateHelper(id, payload) {
+  return updateBaseTableRecord('helper', id, payload);
+}
+
+export function deleteHelper(id) {
+  return deleteBaseTableRecord('helper', id);
+}
+
+export function getPositions(params) {
+  return getBaseTableAll('jabatan', params);
+}
+
+export function getDepartments(params) {
+  return getBaseTableAll('departemen', params);
+}
+
+export function getCustomerTypes(params) {
+  return getBaseTableAll('customer_tipe', params);
+}
+
+export function getSalesTypes(params) {
+  return getBaseTableAll('sales_tipe', params);
+}
+
+export function getCompanies(params) {
+  return api.get('/api/extra/getPerusahaan', { params });
+}
+
+export function replaceCompanyBranches(companyId, branchIds) {
+  return api.put(`/api/extra/perusahaan/${companyId}/cabang`, {
+    id_cabang: Array.isArray(branchIds) ? branchIds : []
+  });
+}
+
+export function getRoutes(params) {
+  return api.get('/api/extra/getRute', { params });
+}
+
+export function getClosedPeriods(params) {
+  return api.get('/api/extra/getPeriodeClosed', { params });
+}
+
+export function getBudgets(params) {
+  return api.get('/api/extra/getBudget', { params });
+}
+
+export function getPlafons(params) {
+  const page = Math.max(0, Number(params?.page || 1) - 1);
+  const limit = Number(params?.limit || 50);
+  const search = String(params?.search || params?.filters || '').trim();
+
+  return api.get('/api/base/plafon/paginate', {
+    params: {
+      page,
+      limit,
+      order: params?.order || 'desc',
+      field: params?.field || 'id',
+      filters: search,
+      columns: JSON.stringify([
+        'plafon.id as id',
+        'plafon.id_customer as id_customer',
+        'plafon.id_principal as id_principal',
+        'plafon.id_sales as id_sales',
+        'plafon.limit_bon as limit_bon',
+        'plafon.kode as kode',
+        'plafon.id_user as id_user',
+        'plafon.id_tipe_harga as id_tipe_harga',
+        'plafon.top as top',
+        'plafon.lock_order as lock_order',
+        'plafon.sisa_bon as sisa_bon',
+        'plafon.tempo as tempo',
+        'plafon.tempo_label as tempo_label',
+        'plafon.kategori_izin as kategori_izin',
+        'plafon.minimal_order as minimal_order',
+        'plafon.sistem_pembayaran as sistem_pembayaran',
+        'customer.kode as kode_customer',
+        'customer.nama as nama_customer',
+        'customer.id_cabang as id_cabang',
+        'sales_detail.kode_sales as kode_sales',
+        'sales_user.nama as nama_sales',
+        'sales.id_user as id_user_sales',
+        'principal.id_perusahaan as id_perusahaan',
+        'principal.nama as nama_principal',
+        'users.nama as nama_user',
+        'produk_tipe_harga.nama as tipe_harga'
+      ]),
+      join: JSON.stringify([
+        'left join customer',
+        'left join sales',
+        'left join sales_detail',
+        'left join users sales_user',
+        'left join principal',
+        'left join users',
+        'left join produk_tipe_harga'
+      ]),
+      on: JSON.stringify([
+        'on customer.id = plafon.id_customer',
+        'on sales.id = plafon.id_sales',
+        'on sales_detail.id_sales = sales.id',
+        'on sales_user.id = sales.id_user',
+        'on principal.id = plafon.id_principal',
+        'on users.id = plafon.id_user',
+        'on produk_tipe_harga.id = plafon.id_tipe_harga'
+      ])
+    }
+  });
+}
+
+export function getFeatureUsers(params) {
+  return api.get('/api/extra/getFiturUser', { params });
+}
+
+export function getFeatureUsersDistinct(params) {
+  return api.get('/api/extra/getUserAksesDistinct', { params });
+}
+
+export function getFeatureUserAvailable(userId, params) {
+  return api.get('/api/extra/getFiturUserTersedia', {
+    params: {
+      ...params,
+      id: userId
+    }
+  });
+}
+
+export function getFeaturePositionAssignments(positionId, params) {
+  return api.get('/api/extra/getFiturJabatan', {
+    params: {
+      ...params,
+      id: positionId
+    }
+  });
+}
+
+export function getFeaturePositionAvailable(positionId, params) {
+  return api.get('/api/extra/getFiturJabatanTersedia', {
+    params: {
+      ...params,
+      id: positionId
+    }
+  });
+}
+
+export function getFeatures(params) {
+  return getBaseTableAll('fitur', params);
+}
+
+export function createFeature(payload) {
+  return createBaseTableRecord('fitur', payload);
+}
+
+export function getStatuses(params) {
+  return getBaseTableAll('status', params);
+}
+
+export function getSalesDetails(salesId, params = {}) {
+  return getBaseTableAll('sales_detail', {
+    ...params,
+    clause: JSON.stringify({
+      id_sales: `=${Number(salesId)}`
+    })
+  });
+}
+
+export function getSalesPrincipalAssignments(salesId, params = {}) {
+  return getBaseTableAll('sales_principal_assignment', {
+    ...params,
+    clause: JSON.stringify({
+      id_sales: `=${Number(salesId)}`
+    })
+  });
+}
+
+export function getPlafonSchedules(plafonId, params = {}) {
+  return getBaseTableAll('plafon_jadwal', {
+    ...params,
+    clause: JSON.stringify({
+      id_plafon: `=${Number(plafonId)}`
+    })
+  });
+}
+
+export function getRegionsLevel1(params) {
+  return getBaseTableAll('wilayah1', params);
+}
+
+export function getRegionsLevel2(wilayah1Id, params = {}) {
+  return getBaseTableAll('wilayah2', {
+    ...params,
+    clause: JSON.stringify({
+      id_wilayah1: `= ${Number(wilayah1Id)}`
+    })
+  });
+}
+
+export function getRegionsLevel3(wilayah2Id, params = {}) {
+  return getBaseTableAll('wilayah3', {
+    ...params,
+    clause: JSON.stringify({
+      id_wilayah2: `= ${Number(wilayah2Id)}`
+    })
+  });
+}
+
+export function getRegionsLevel4(wilayah3Id, params = {}) {
+  return getBaseTableAll('wilayah4', {
+    ...params,
+    clause: JSON.stringify({
+      id_wilayah3: `= ${Number(wilayah3Id)}`
+    })
+  });
+}
+
+export function createPosition(payload) {
+  return createBaseTableRecord('jabatan', payload);
+}
+
+export function updatePosition(id, payload) {
+  return updateBaseTableRecord('jabatan', id, payload);
+}
+
+export function deletePosition(id) {
+  return deleteBaseTableRecord('jabatan', id);
+}
+
+export function createDepartment(payload) {
+  return createBaseTableRecord('departemen', payload);
+}
+
+export function updateDepartment(id, payload) {
+  return updateBaseTableRecord('departemen', id, payload);
+}
+
+export function deleteDepartment(id) {
+  return deleteBaseTableRecord('departemen', id);
+}
+
+export function createCustomerType(payload) {
+  return createBaseTableRecord('customer_tipe', payload);
+}
+
+export function updateCustomerType(id, payload) {
+  return updateBaseTableRecord('customer_tipe', id, payload);
+}
+
+export function deleteCustomerType(id) {
+  return deleteBaseTableRecord('customer_tipe', id);
+}
+
+export function createSalesType(payload) {
+  return createBaseTableRecord('sales_tipe', payload);
+}
+
+export function updateSalesType(id, payload) {
+  return updateBaseTableRecord('sales_tipe', id, payload);
+}
+
+export function deleteSalesType(id) {
+  return deleteBaseTableRecord('sales_tipe', id);
+}
+
+export function createCompany(payload, params) {
+  return createBaseTableRecord('perusahaan', payload, params);
+}
+
+export function updateCompany(id, payload) {
+  return updateBaseTableRecord('perusahaan', id, payload);
+}
+
+export function deleteCompany(id) {
+  return deleteBaseTableRecord('perusahaan', id);
+}
+
+export function createRoute(payload) {
+  return createBaseTableRecord('rute', payload);
+}
+
+export function updateRoute(id, payload) {
+  return updateBaseTableRecord('rute', id, payload);
+}
+
+export function deleteRoute(id) {
+  return deleteBaseTableRecord('rute', id);
+}
+
+export function createClosedPeriod(payload) {
+  return createBaseTableRecord('periode_closed', payload);
+}
+
+export function updateClosedPeriod(id, payload) {
+  return updateBaseTableRecordByKey('periode_closed', 'id_periode', id, payload);
+}
+
+export function deleteClosedPeriod(id) {
+  return deleteBaseTableRecordByKey('periode_closed', 'id_periode', id);
+}
+
+export function createBudget(payload) {
+  return createBaseTableRecord('budget', payload);
+}
+
+export function updateBudget(id, payload) {
+  return updateBaseTableRecord('budget', id, payload);
+}
+
+export function deleteBudget(id) {
+  return deleteBaseTableRecord('budget', id);
+}
+
+export function createPrincipal(payload) {
+  return createBaseTableRecord('principal', payload);
+}
+
+export function updatePrincipal(id, payload) {
+  return updateBaseTableRecord('principal', id, payload);
+}
+
+export function deletePrincipal(id) {
+  return deleteBaseTableRecord('principal', id);
+}
+
+export function createSales(payload, params) {
+  return createBaseTableRecord('sales', payload, params);
+}
+
+export function updateSales(id, payload) {
+  return updateBaseTableRecord('sales', id, payload);
+}
+
+export function deleteSales(id) {
+  return deleteBaseTableRecord('sales', id);
+}
+
+export function createSalesDetail(payload, params) {
+  return createBaseTableRecord('sales_detail', payload, params);
+}
+
+export function updateSalesDetail(id, payload) {
+  return updateBaseTableRecord('sales_detail', id, payload);
+}
+
+export function deleteSalesDetail(id) {
+  return deleteBaseTableRecord('sales_detail', id);
+}
+
+export function createSalesPrincipalAssignment(payload, params) {
+  return createBaseTableRecord('sales_principal_assignment', payload, params);
+}
+
+export function deleteSalesPrincipalAssignment(id) {
+  return deleteBaseTableRecord('sales_principal_assignment', id);
+}
+
+export function createFeatureUserAssignment(payload) {
+  return createBaseTableRecord('users_akses', payload);
+}
+
+export function deleteFeatureUserAssignment(id) {
+  return deleteBaseTableRecord('users_akses', id);
+}
+
+export function createFeaturePositionAssignment(payload) {
+  return createBaseTableRecord('jabatan_akses', payload);
+}
+
+export function deleteFeaturePositionAssignment(id) {
+  return deleteBaseTableRecord('jabatan_akses', id);
+}
+
+export function createPlafon(payload) {
+  return createBaseTableRecord('plafon', payload);
+}
+
+export function updatePlafon(id, payload) {
+  return updateBaseTableRecord('plafon', id, payload);
+}
+
+export function deletePlafon(id) {
+  return deleteBaseTableRecord('plafon', id);
+}
+
+export function createPlafonSchedule(payload) {
+  return createBaseTableRecord('plafon_jadwal', payload);
+}
+
+export function updatePlafonSchedule(id, payload) {
+  return updateBaseTableRecord('plafon_jadwal', id, payload);
+}
+
+export function deletePlafonSchedule(id) {
+  return deleteBaseTableRecord('plafon_jadwal', id);
+}
+
+export function createRegion(level, payload) {
+  return createBaseTableRecord(`wilayah${level}`, payload);
+}
+
+export function updateRegion(level, id, payload) {
+  return updateBaseTableRecord(`wilayah${level}`, id, payload);
+}
+
+export function deleteRegion(level, id) {
+  return deleteBaseTableRecord(`wilayah${level}`, id);
+}

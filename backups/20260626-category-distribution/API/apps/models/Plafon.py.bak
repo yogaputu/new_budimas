@@ -1,0 +1,113 @@
+from apps.conn2 import db
+from apps.datatables import DataTables, DictMapper
+from apps.models.BaseModel import BaseModel
+from  apps.query   import  DB
+from  apps.helper  import  *
+from  flask        import  request
+
+from apps.widget import btn_actions, btn_details
+
+
+class Plafon(BaseModel):
+    __tablename__ = 'plafon'
+
+    # Kolom tabel
+    id_customer = BaseModel.foreign('customer.id')
+    id_principal = BaseModel.foreign('principal.id')
+    id_sales = BaseModel.integer()
+    limit_bon = BaseModel.float()
+    kode = BaseModel.string(25)
+    id_user = BaseModel.foreign('users.id')
+    id_tipe_harga = BaseModel.foreign('produk_tipe_harga.id')
+    top = BaseModel.integer()
+    lock_order = BaseModel.string(1)
+    sisa_bon = BaseModel.float()
+    tempo = BaseModel.integer()
+    tempo_label = BaseModel.string(80)
+
+    # Relationships
+    customer = BaseModel.one_to_many('Customer', 'customer', [id_customer])
+    principal = BaseModel.one_to_many('Principal', 'principal', [id_principal])
+    user = BaseModel.one_to_many('User', 'users', [id_user])
+    tipe_harga = BaseModel.one_to_many('ProdukTipeHarga', 'produk_tipe_harga', [id_tipe_harga])
+
+    def __repr__(self):
+        return f"Plafon('{self.id}')"
+
+    def set(self, data=None):
+        if data:
+            self.id = data.get('id')
+            self.id_customer = data.get('id_customer')
+            self.id_principal = data.get('id_principal')
+            self.limit_bon = data.get('limit_bon')
+            self.kode = data.get('kode')
+            self.id_user = data.get('id_user')
+            self.id_tipe_harga = data.get('id_tipe_harga')
+            self.top = data.get('top')
+            self.lock_order = data.get('lock_order')
+            self.sisa_bon = data.get('sisa_bon')
+            self.tempo = data.get('tempo')
+            self.tempo_label = data.get('tempo_label')
+        return self
+
+    base_query = """
+                                    
+            SELECT      plafon             .*,
+                        customer           .kode  AS  kode_customer,
+                        customer           .nama  AS  nama_customer,
+                        principal          .nama  AS  nama_principal,
+                        users              .nama  AS  nama_user,
+                        produk_tipe_harga  .nama  AS  tipe_harga
+                                    
+            FROM        plafon
+                                    
+            LEFT JOIN   customer 
+                ON      customer            .id             = 
+                        plafon              .id_customer
+                                    
+            LEFT JOIN   principal 
+                ON      principal           .id             = 
+                        plafon              .id_principal
+                                    
+            LEFT JOIN   users 
+                ON      users               .id             = 
+                        plafon              .id_user
+                                    
+            LEFT JOIN   produk_tipe_harga
+                ON      produk_tipe_harga   .id             = 
+                        plafon              .id_tipe_harga
+                                    
+        """
+
+    @classmethod
+    def all(cls):
+        return DB(request).setRawQuery(cls.base_query).execute().fetchall().get()
+    
+    @classmethod
+    def all_table(cls):
+        return DataTables(db).handle(
+            base_query=cls.base_query,
+            transformer=lambda data: (
+                DictMapper(data)
+                .to_dict()
+                .add_col(lambda i: "", "")
+                .add_col(lambda i: btn_actions(i['id']), "actions")
+                .add_col(lambda i: btn_details(i['id']), "detail_jadwal")
+                .get()
+            )
+        )
+    
+    @classmethod
+    def all_csv(cls):
+        # use orm only for csv export
+        query = """
+            SELECT plafon.*, 
+              plafon_jadwal.id_tipe_kunjungan,
+              plafon_jadwal.id_hari,
+              plafon_jadwal.id_minggu,
+              plafon_jadwal.id_status 
+            FROM plafon
+            JOIN plafon_jadwal ON plafon_jadwal.id_plafon = plafon.id             
+          """
+        return DB(request).setRawQuery(query).execute().fetchall().get()
+

@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."hdraft" ("nota", "tanggal", "ket", "useradd", "tgladd", "stdraft") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/HDraft.csv' WITH (FORMAT csv, HEADER true, NULL '')

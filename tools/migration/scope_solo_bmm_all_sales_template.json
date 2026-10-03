@@ -1,0 +1,16 @@
+{
+  "scope_name": "solo_bmm_all_sales_template",
+  "branch": {
+    "id_cabang": 5,
+    "kode_cabang": "SLO",
+    "area_codes": []
+  },
+  "company": {
+    "id_perusahaan": 1,
+    "kode_perusahaan": "BMM",
+    "principal_codes": []
+  },
+  "sales_codes": [],
+  "include_inactive": false,
+  "notes": "SQL Server DIST dianggap seluruhnya milik Cabang SOLO dan PT Budimas Makmur Mulia. Isi sales_codes untuk import bertahap per sales."
+}

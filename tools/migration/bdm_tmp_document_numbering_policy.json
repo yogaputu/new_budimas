@@ -1,0 +1,22 @@
+{
+  "policy_version": 1,
+  "purpose": "Keep BDM Solo and TMP Solo document identifiers unique in PostgreSQL while preserving their original SQL Server numbers in migration_bdm_tmp_202608.sales_document_map.",
+  "sources": {
+    "bdm_solo_dist": {
+      "target_prefix": "BDM-SLO/",
+      "target_company_id": 1,
+      "target_branch_id": 5
+    },
+    "tmp_solo_dist": {
+      "target_prefix": "TMP-SLO/",
+      "target_company_id": 2,
+      "target_branch_id": 5
+    }
+  },
+  "rules": {
+    "sales_order_no_order": "{target_prefix}{source_nota}",
+    "faktur_no_faktur": "{target_prefix}{source_nota}",
+    "original_document_number": "Retain source table + source_nota in the source-aware document registry; do not overwrite it with the prefixed value.",
+    "idempotency_key": "source_system + source_table + lower(trim(source_nota))"
+  }
+}

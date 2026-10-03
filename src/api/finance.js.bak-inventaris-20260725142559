@@ -1,0 +1,341 @@
+import api from './axios';
+
+function toFormPayload(payload = {}) {
+  const form = new URLSearchParams();
+
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      form.append(key, value);
+    }
+  });
+
+  return form;
+}
+
+function baseFormRequestConfig(params) {
+  return {
+    params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  };
+}
+
+export function getDueReceivables(plafonId, params) {
+  return api.get(`/api/finance/list-tagihan-jatuh-tempo/${plafonId}`, { params });
+}
+
+export function getFinanceInvoices(plafonId, params) {
+  return api.get(`/api/finance/list-faktur/${plafonId}`, { params });
+}
+
+export function updateFinanceInvoiceStatuses(payload) {
+  return api.post('/api/finance/update-status-fakturs', payload);
+}
+
+export function createPayment(payload) {
+  return api.post('/api/finance/create-payment', payload);
+}
+
+export function getEligiblePaymentVouchers(params) {
+  return api.get('/api/finance/eligible-payment-vouchers', { params });
+}
+
+export function getCustomerDepositHistory(params) {
+  return api.get('/api/finance/riwayat-setoran-customer', { params });
+}
+
+export function getCustomerReceivableBalances(params) {
+  return api.get('/api/finance/customer-receivable-balances', { params });
+}
+
+export function getCustomerReceivableInvoices(params) {
+  return api.get('/api/finance/customer-receivable-invoices', { params });
+}
+
+export function getSalesPaymentRecap(params) {
+  return api.get('/api/finance/rekap-pembayaran-sales', { params });
+}
+
+export function submitSalesPaymentRecap(payload) {
+  return api.post('/api/finance/submit-rekap-pembayaran-sales', payload);
+}
+
+export function getDepositGroups(type = 'cash', params) {
+  const endpoint = type === 'noncash' ? '/api/akuntansi/list-setoran-non-tunai' : '/api/akuntansi/list-setoran-tunai';
+  return api.get(endpoint, { params });
+}
+
+export function getDepositGroupDetail(params) {
+  return api.get('/api/akuntansi/detail-setoran', { params });
+}
+
+export function getCashDepositConfirmations(params) {
+  return api.get('/api/akuntansi/get-list-konfirmasi-setoran-tunai', { params });
+}
+
+export function getCashDepositConfirmationDetail(namaPj, draftTanggalInput) {
+  return api.get(`/api/akuntansi/get-detail-setoran-tunai/${encodeURIComponent(namaPj)}/${draftTanggalInput}`);
+}
+
+export function saveCashierDeposit(payload) {
+  return api.post('/api/akuntansi/simpan-kasir-setoran', payload);
+}
+
+export function createDepositRecord(payload) {
+  return api.post('/api/akuntansi/create-setoran', payload);
+}
+
+export function updateDepositRecord(id, payload) {
+  return api.put(`/api/akuntansi/update-setoran/${id}`, payload);
+}
+
+export function deleteDepositRecord(id) {
+  return api.delete(`/api/akuntansi/delete-setoran/${id}`);
+}
+
+export function confirmDepositStage(payload) {
+  return api.post('/api/akuntansi/konfirmasi-setoran', payload);
+}
+
+export function confirmCashDepositFinalization(payload) {
+  return api.post('/api/akuntansi/konfirmasi-setoran-tunai', payload);
+}
+
+export function getNonCashDepositConfirmations(params) {
+  return api.get('/api/akuntansi/get-list-konfirmasi-setoran-nontunai', { params });
+}
+
+export function getNonCashDepositConfirmationDetail(idMutasi) {
+  return api.get(`/api/akuntansi/get-detail-setoran-nontunai/${idMutasi}`);
+}
+
+export function getSalesBillingLetters(params) {
+  return api.get('/api/akuntansi/get-tagihan-sales', { params });
+}
+
+export function getSalesBillingLetterDetail(params) {
+  return api.get('/api/akuntansi/detail-tagihan-sales', { params });
+}
+
+export function getGeneralLedger(params) {
+  return api.get('/api/akuntansi/get-bukubesar', { params });
+}
+
+export function getProfitLoss(params) {
+  return api.get('/api/akuntansi/get-laba-rugi', { params });
+}
+
+export function getValuedStockCard(params) {
+  return api.get('/api/akuntansi/inventory-ledger', { params });
+}
+
+export function backfillInventoryLedger(payload) {
+  return api.post('/api/akuntansi/inventory-ledger/backfill', payload);
+}
+
+export function getBalanceSheet(params) {
+  return api.get('/api/akuntansi/get-neraca', { params });
+}
+
+export function getJournalList(params) {
+  return api.get('/api/akuntansi/get-jurnal', { params });
+}
+
+export function getJournalDetail(id) {
+  return api.get(`/api/akuntansi/detail-jurnal/${id}`);
+}
+
+export function getCoaCatalog(params) {
+  return api.get('/api/akuntansi/get-list-coa', { params });
+}
+
+export function getAccountCoaList(params) {
+  return api.get('/api/akuntansi/get-list-coa-list', { params });
+}
+
+export function getCoaCategoryList() {
+  return api.get('/api/akuntansi/get-coa-category-list');
+}
+
+export function createCoa(payload) {
+  return api.post('/api/akuntansi/insert-coa', payload);
+}
+
+export function updateCoa(payload) {
+  return api.put('/api/akuntansi/update-coa', payload);
+}
+
+export function getOpeningBalances(params) {
+  return api.get('/api/akuntansi/opening-balance', { params });
+}
+
+export function createOpeningBalance(payload) {
+  return api.post('/api/akuntansi/opening-balance', payload);
+}
+
+export function updateOpeningBalance(id, payload) {
+  return api.put(`/api/akuntansi/opening-balance/${id}`, payload);
+}
+
+export function deleteOpeningBalance(id) {
+  return api.delete(`/api/akuntansi/opening-balance/${id}`);
+}
+
+export function postOpeningBalance(id) {
+  return api.post(`/api/akuntansi/opening-balance/${id}/post`);
+}
+
+export function getManualJournalList(params) {
+  return api.get('/api/akuntansi/get-jurnal-mal-list', { params });
+}
+
+export function getManualJournalDetail(id) {
+  return api.get(`/api/akuntansi/get-jurnal-mal-detail/${id}`);
+}
+
+export function getFiturMalList() {
+  return api.get('/api/akuntansi/get-fitur-mal-list');
+}
+
+export function getManualJournalSourceModules() {
+  return api.get('/api/akuntansi/get-source-modul-use-jurnal-setting');
+}
+
+export function getJournalTriggerHealth(params) {
+  return api.get('/api/akuntansi/get-jurnal-trigger-health', { params });
+}
+
+export function createManualJournal(payload) {
+  return api.post('/api/akuntansi/insert-jurnal-mal', payload);
+}
+
+export function updateManualJournal(payload) {
+  return api.put('/api/akuntansi/update-jurnal-mal', payload);
+}
+
+export function getCashierReports(params) {
+  return api.get('/api/akuntansi/list-laporan-kasir', { params });
+}
+
+export function getCashierReportDetail(params) {
+  return api.get('/api/akuntansi/get-detail-laporan-kasir', { params });
+}
+
+export function getCashierExpenses(params) {
+  return api.get('/api/akuntansi/get-list-pengeluaran-kasir', { params });
+}
+
+export function createCashierExpense(payload) {
+  return api.post('/api/akuntansi/add-pengeluaran-kasir', payload);
+}
+
+export function confirmCashierExpense(payload) {
+  return api.post('/api/akuntansi/konfirmasi-pengeluaran', payload);
+}
+
+export function getAccountingTransactions(params) {
+  return api.get('/api/akuntansi/get-list-transaksi', { params });
+}
+
+export function createAccountingTransaction(payload) {
+  return api.post('/api/akuntansi/insert-transaksi', payload);
+}
+
+export function updateAccountingTransaction(payload) {
+  return api.put('/api/akuntansi/update-transaksi', payload);
+}
+
+export function getCompanyBankAccounts(params) {
+  return api.get('/api/base/rekening_perusahaan/all', { params });
+}
+
+export function createCompanyBankAccount(payload) {
+  return api.post('/api/base/rekening_perusahaan', toFormPayload(payload), baseFormRequestConfig());
+}
+
+export function updateCompanyBankAccount(id, payload) {
+  return api.put(
+    '/api/base/rekening_perusahaan',
+    toFormPayload(payload),
+    baseFormRequestConfig({
+      where: JSON.stringify({
+        id_rekening_perusahaan: `=${Number(id)}`
+      })
+    })
+  );
+}
+
+export function deleteCompanyBankAccount(id) {
+  return api.delete('/api/base/rekening_perusahaan', {
+    params: {
+      where: JSON.stringify({
+        id_rekening_perusahaan: `=${Number(id)}`
+      })
+    }
+  });
+}
+
+export function getCreditNoteList(params) {
+  return api.get('/api/akuntansi/get-list-credit-note', { params });
+}
+
+export function getCreditNoteDetail(id) {
+  return api.get(`/api/akuntansi/get-detail-credit-note/${id}`);
+}
+
+export function refundCreditNote(id, payload) {
+  return api.post(`/api/akuntansi/refund-credit-note/${id}`, payload);
+}
+
+export function getBankMutations(params) {
+  return api.get('/api/akuntansi/get-list-mutasi-bank', { params });
+}
+
+export function getBankMutationDetail(id) {
+  return api.get(`/api/akuntansi/get-detail-mutasi-bank/${id}`);
+}
+
+export function importBankMutations(payload) {
+  return api.post('/api/akuntansi/insert-mutasi', payload);
+}
+
+export function createBankMutation(payload) {
+  return api.post('/api/akuntansi/create-mutasi-bank', payload);
+}
+
+export function updateBankMutation(id, payload) {
+  return api.put(`/api/akuntansi/update-mutasi-bank/${id}`, payload);
+}
+
+export function deleteBankMutation(id) {
+  return api.delete(`/api/akuntansi/delete-mutasi-bank/${id}`);
+}
+
+export function getLphList(params) {
+  return api.get('/api/akuntansi/get-lph', { params });
+}
+
+export function getLphDetail(params) {
+  return api.get('/api/akuntansi/get-detail-lph', { params });
+}
+
+export function getLphCreateCandidates(params) {
+  return api.get('/api/akuntansi/get-add-lph', { params });
+}
+
+export function createLph(payload) {
+  return api.post('/api/akuntansi/add-lph', payload);
+}
+
+export function updateLph(payload) {
+  return api.put('/api/akuntansi/update-lph', payload);
+}
+
+export function deleteLph(payload) {
+  return api.delete('/api/akuntansi/delete-lph', { data: payload });
+}
+
+export function reprintLph(payload) {
+  return api.post('/api/akuntansi/cetak-ulang-lph', payload);
+}

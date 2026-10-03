@@ -1,0 +1,36 @@
+{
+  "policy_id": "bdm_tmp_active_transaction_exact_or_skip_20260831",
+  "scope": "Sisa adopsi dan migrasi transaksi aktif BDM Solo + TMP Solo untuk Agustus 2026",
+  "default_action": "skip_and_audit",
+  "rule": "Hanya source identity dan target identity yang terbukti exact 1:1 serta memenuhi seluruh prasyarat modul yang boleh diproses.",
+  "exact_requirements": [
+    "source_system eksplisit (bdm_solo_dist atau tmp_solo_dist)",
+    "satu source row/dokumen hanya memiliki satu target yang cocok",
+    "mapping master, cabang, perusahaan, customer, principal, sales, produk, dan UOM yang diperlukan telah committed dan masih valid",
+    "nilai transaksi, detail, konversi UOM, dan lifecycle sesuai aturan modul",
+    "tidak ada konflik dengan dokumen target yang tidak memiliki provenance"
+  ],
+  "skip_and_audit_when": [
+    "lebih dari satu kandidat target atau sumber",
+    "tidak ada kandidat target untuk proses adopsi",
+    "mapping master/UOM tidak ada, ambigu, atau berubah",
+    "header dan detail berbeda",
+    "status, HPP, stok, retur, pajak, kas, atau lifecycle belum dapat dibuktikan",
+    "dokumen target lama belum memiliki manifest adopsi source-qualified"
+  ],
+  "module_rules": {
+    "sales": "Adopsi hanya setelah header, faktur, dan seluruh detail exact 1:1. Tidak ada replay stok/HPP atau perubahan status otomatis.",
+    "visits": "Adopsi hanya setelah source visit ID dipasangkan exact 1:1 ke header dan detail target. Tidak ada insert baru selama periode target lama belum direkonsiliasi.",
+    "payments": "Hanya alokasi HBayarSM + DBayarSM yang exact ke invoice source-aware dan memenuhi saldo/faktur tunggal. Selain itu skip.",
+    "returns": "Seluruh retur skip sampai UOM, Good/Bad, relasi detail penjualan, Credit Note, dan lifecycle disetujui.",
+    "purchases": "Seluruh pembelian skip sampai semantik UOM/qty, penerimaan, batch/rak, status, PPN, dan hutang dapat dibuktikan.",
+    "stock_opname": "Tetap arsip historis; tidak membuat mutasi stok berjalan tanpa kebijakan ledger terpisah."
+  },
+  "prohibited_shortcuts": [
+    "nearest-match atau fallback nama/kode",
+    "menggabungkan BDM dan TMP hanya karena nomor dokumen sama",
+    "menimpa data target yang berbeda",
+    "membuat stok, HPP, kas, jurnal, Credit Note, atau hutang dari data yang belum proven",
+    "menghapus atau mengganti dokumen target lama tanpa persetujuan eksplisit"
+  ]
+}

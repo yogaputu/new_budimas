@@ -1,0 +1,107 @@
+{
+  "status": "DEPLOYED_AND_VERIFIED",
+  "date": "2026-10-02",
+  "scope": "Shipment-draft picking, pre-loading invoice revision, mandatory checker, selected vehicle/driver/date loading on ERP, WMS Android and Driver Android",
+  "production_changed": true,
+  "production": {
+    "server": "58.147.185.142",
+    "ssh_port": 9999,
+    "published_at": "2026-10-02T03:54:48.905594+00:00",
+    "public_url": "https://erp.budimas.swakarya.my.id",
+    "api_origin": "https://erp.budimas.swakarya.my.id:9092",
+    "api_root": "/www/wwwroot/API",
+    "frontend_roots": ["/www/wwwroot/new_budimas", "/www/wwwroot/new_budimas/dist"],
+    "backup_directory": "/www/backup/budimas-shipment-20261002.CLXdl8",
+    "database_backup_bytes": 1672626704,
+    "database_backup_sha256": "e87306a74211b5c3ae26bf495dfe9cf68df229dca4b5e67d468c3b70d963cdec",
+    "database_backup_validation": "pg_dump custom archive completed; pg_restore --list and SHA-256 verified. Full restore drill not performed.",
+    "file_backup_sha256": "bb1f6163c8379606772297e3ffa590907d15335bde8926186c8c54eb557f58b2",
+    "bundle_sha256": "50699c387e409dc1020ece453c73546dd080f0a2662847eb0671be88105a7baa",
+    "runtime_install": "Five Python runtime files plus migration installed atomically per file. Verified production uWSGI master 2303 reloaded; UAT untouched.",
+    "deployment_artifacts": "/tmp/budimas-shipment-deploy-20261002.Yz1aeA",
+    "verification": {
+      "authenticated_and_anonymous_http_checks": 18,
+      "public_files_sha256_verified": 197,
+      "all_destination_hashes_verified": true,
+      "https_443_and_9092_healthy": true,
+      "api_origin_unchanged": true,
+      "driver_own_assignment_scope_and_helper_restriction": "PASSED using existing sessions; credentials kept on server",
+      "browser_production_assets": "PASSED: QR, variant/nota, partial picking, revision hold, checker and loading; all business APIs intercepted (8 mocked writes)",
+      "real_draft_initialization_avoided": true,
+      "business_test_mutations": 0,
+      "physical_device_qa": "Not performed",
+      "apk_certificates_match_previous_public_versions": true
+    },
+    "rollback_note": "Original changed files are in files-before.tar.gz; old hashed frontend assets and versioned APKs retained. Additive schema may remain on code rollback. Do not overwrite subsequent production transactions with a full DB restore."
+  },
+  "initial_source_backup": "/tmp/budimas-draft-picking-20261002.Zuty1L/before.tar.gz",
+  "verification_logs": "/tmp/budimas-draft-picking-20261002.Zuty1L",
+  "api_runtime_files": [
+    "/Users/macairm2/www/API/apps/lib/shipment_picking.py",
+    "/Users/macairm2/www/API/apps/lib/distribution_workflow.py",
+    "/Users/macairm2/www/API/apps/routes/wms_mock.py",
+    "/Users/macairm2/www/API/apps/routes/distribusi.py",
+    "/Users/macairm2/www/API/apps/services/Distribusi.py"
+  ],
+  "migration": {
+    "path": "/Users/macairm2/www/API/tools/migrations/20261002_shipment_picking.sql",
+    "sha256": "2c51b9e6292a7bb3767c030aad4e291d5bf25abc4bd5df10cb0beffee80e8c32",
+    "prerequisite": "20261001_distribution_workflow.sql and existing WMS schema",
+    "production_applied": true,
+    "applied_at": "2026-10-02T03:54:29.805638+00:00",
+    "production_seconds": 0.04,
+    "lock_timeout_ms": 5000,
+    "statement_timeout_ms": 120000,
+    "legacy_tasks_requeued": 0,
+    "production_schema_and_indexes_verified": true,
+    "notes": "Creates immutable draft membership snapshots, indexes and task references. Requeues unmanifested legacy carton bypasses for checker. Tested twice for idempotency in isolated PostgreSQL-compatible PGlite."
+  },
+  "frontend": {
+    "build": "/Users/macairm2/www/new_budimas/dist",
+    "index_sha256": "768a9e2fd8ca676cb0103df0e45f5aab57c35546715552a15ee9639b0a7c45ca",
+    "routes": ["/distribution/picking", "/distribution/invoice-revisions", "/distribution/schedules", "/wms"],
+    "warnings": "Existing outdated Browserslist and large chunk warning; build successful."
+  },
+  "android": [
+    {
+      "app": "WMS",
+      "version_name": "1.0.9",
+      "version_code": 10,
+      "apk": "/Users/macairm2/www/wms_android/app/build/outputs/apk/debug/app-debug.apk",
+      "sha256": "ecf7ff34fb6cecfc76445fdb9e99316f0f8ac3100fc63139fa36fcc85330b811",
+      "signing": "Existing debug build configuration; certificate matches previous public WMS APK",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasWMS-v1.0.9-debug.apk"
+    },
+    {
+      "app": "Driver Helper",
+      "version_name": "0.4.5",
+      "version_code": 9,
+      "apk": "/Users/macairm2/www/driver_helper_mobile/app/build/outputs/apk/debug/app-debug.apk",
+      "sha256": "b88d0a67afdefbc84817eb854a39ac50d204942b647e499705985f2e499e4d32",
+      "signing": "Existing debug build configuration; certificate matches previous public Driver APK",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasDriver-v0.4.5-debug.apk"
+    }
+  ],
+  "verification": {
+    "api_unittests": {"passed": 354, "failed": 0},
+    "frontend_node_tests": {"passed": 48, "failed": 0},
+    "wms_android_unittests": {"passed": 10, "failed": 0},
+    "driver_android_build": "PASSED; no unit-test sources in this app",
+    "sql_smoke": "PASSED: migration, checker, loading scope, stale/replayed rows and invoice revision quantity queries",
+    "browser_smoke": "PASSED with intercepted APIs: both grouping modes, QR print, stock error, partial pick, revision hold, finalize, carton checker, loading selection/start/complete and revision prefill/submit",
+    "physical_device_qa": "Not performed",
+    "whatsapp_visual_reference": "Not provided; layout follows written requirements"
+  },
+  "behavior_and_release_notes": [
+    "New QR contract: BUDIMAS-WMS|SHIPMENT|DRF-branch-anchor. Old invoice picking QR is rejected. Reprint shipment drafts after release.",
+    "Opening a draft snapshots its membership and locks schedule edits to keep QR, allocations and vehicle assignment consistent.",
+    "Partial picks remain per invoice detail. Shortage request moves the affected invoice/batch into Revisi Faktur, without stock adjustment or delivery completion.",
+    "Pre-loading revision quantities are bounded by physical picked and original ordered quantities. Keeping a quantity above picked reopens picking for replenishment. A wholly zero note remains held, with no automatic cancellation or delivery.",
+    "All positive picked lines, including cartons, require explicit checker counts and condition. NG and incomplete/revised quantities cannot load.",
+    "Loading read and start/complete require id_armada, id_driver and delivery_date. Server validates the exact assignment and uses persisted checked quantities.",
+    "Driver loading endpoints are limited to the authenticated assigned driver. Existing post-loading manifest verification/POD gates remain in place.",
+    "Legacy ERP direct picking mutations return 409. Legacy shipping cannot bypass revision/checker/loading for shipment-linked orders.",
+    "Database migration, API runtime, ERP assets and both updated APKs deployed together after explicit user authorization and validated backups; older APK loading/picking payloads are intentionally rejected. Update both apps and reprint shipment draft QR.",
+    "Deployment changes production schema and application artifacts. No live picking, revision, checker, inventory or loading transaction was created for testing; draft-detail initialization was deliberately avoided."
+  ]
+}

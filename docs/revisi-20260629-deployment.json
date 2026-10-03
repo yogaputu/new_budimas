@@ -1,0 +1,129 @@
+{
+  "release": "revisi-20260629-20260928-164444",
+  "status": "deployed",
+  "server": "erp.budimas.swakarya.my.id",
+  "backup": "/www/backup/budimas-revisi-20260629-20260928-164444",
+  "api_files": {
+    "apps/services/StockOpname.py": {
+      "sha256": "dce50d30b0bfbef1dae9e3153128ff6e8e094bf9df1bac0b26e9aee7fc561841",
+      "before_sha256": "44b20e2213eb90b772053f7ba85e6c3f659d37d95dfe476c88db569aa6c00e22"
+    },
+    "apps/services/StockTransfer.py": {
+      "sha256": "c7911ddc8b0eea69eea9d5128ea7739329cceca0a39ab3917759654c6ecf4238",
+      "before_sha256": "2717137e1f6e34e8d850033e227e8cb808b3ac1f879358befdcdf00f086f8467"
+    },
+    "apps/services/stock_transfer_scope.py": {
+      "sha256": "07fbf50e8168592d220f92b6e39c55f7ee8e5bf6531535a6b19d6b297bc32377",
+      "before_sha256": null
+    },
+    "apps/services/Akuntansi/PubSub.py": {
+      "sha256": "f5b4f80346ae5351484574adc9adc5ee40c8834a3042d2f72a06e58657ab5338",
+      "before_sha256": "922b15ffaf6d0d777de3e4c4f0c8ee4dbf4adf3460b0534af4855725d753f245"
+    },
+    "apps/routes/stock_transfer.py": {
+      "sha256": "86405938021aaf6eb076f2fb838dbaef8fd80b91f43007fc235f10167972d743",
+      "before_sha256": "1f22b1bae66044de28995b4bcf9896fd71a8f036c03f209f229037228f1dfd1b"
+    },
+    "apps/services/SalesKunjungan.py": {
+      "sha256": "bea68042d429e9296eaabbae98a31b32a574554c5f2f583a2b9efdbac76e58e7",
+      "before_sha256": "59309e28cb9468ae2ab9ca81912b236b941ae08708506838104987ae9333abe0"
+    },
+    "apps/services/SalesCanvas.py": {
+      "sha256": "8e0944a1d1134341cd959cf3881a3980fa039b0fd58cbc909c516f0be7ca5181",
+      "before_sha256": "726b920ad23de5a33ed7aa6f6719538382853041f8c3055f31918278fc72a159"
+    },
+    "apps/lib/pubsub.py": {
+      "sha256": "31a416ee61e2140a2c14baa756e8774eb0aef8e90c5f372df5dabc040b01f649",
+      "before_sha256": "0f3887f3891b2cbb65ffad36872fe399c2ed29a2a5cf4b16bcd0caaddae2a914"
+    },
+    "apps/routes/promo.py": {
+      "sha256": "851839611ffca5b6735a1cc619acec0475a7b59970c8f5862e4a6ae5bfbdf7a3",
+      "before_sha256": "738c20a68daba3338aa1bbeb871ab240ea92ac414b15e4f15dbaa5402b7d4fa8"
+    },
+    "apps/services/UnifiedPromo.py": {
+      "sha256": "a6c8deceed0bc8c8b280a80fa837d9eae0f0a8c0919d6b8339376c63602679d2",
+      "before_sha256": "0d33c5c9b2181a1379ccc7fd8b6c43661b533328962b6b0118059dd7308c81f8"
+    },
+    "apps/routes/wms_mock.py": {
+      "sha256": "b3e643053624d5ac4e0f430541af32feefa9bae20ff290116dca0a8225b58367",
+      "before_sha256": "494e24102c14b9303e611255e9155d203c412644bc710f0e971e8f47d13994ed"
+    }
+  },
+  "apk": {
+    "filename": "BudimasMobile-v1.0.4-debug.apk",
+    "version": "1.0.4",
+    "version_code": 5,
+    "sha256": "504a6a570e1c38acd351707817c833f818ae842599847f1a434efc9ad5835330",
+    "bytes": 30016902
+  },
+  "verification": [
+    {
+      "url": "https://erp.budimas.swakarya.my.id",
+      "status": 200,
+      "index_matches_release": true
+    },
+    {
+      "url": "https://erp.budimas.swakarya.my.id/api/health",
+      "status": 200,
+      "success": true
+    },
+    {
+      "url": "https://erp.budimas.swakarya.my.id:9092",
+      "status": 200,
+      "index_matches_release": true
+    },
+    {
+      "url": "https://erp.budimas.swakarya.my.id:9092/api/health",
+      "status": 200,
+      "success": true
+    },
+    {
+      "path": "/api/promo/unified/0/status",
+      "options_status": 200
+    },
+    {
+      "path": "/api/wms/mobile/return-inbound",
+      "options_status": 200
+    },
+    {
+      "path": "/api/stock-transfer/penerimaan-stock-transfer",
+      "options_status": 200
+    },
+    {
+      "asset": "assets/TransferProcessPage-CMDNmw6f.js",
+      "status": 200,
+      "sha256_matches": true
+    },
+    {
+      "asset": "assets/StockOpnameListPage-CzdNecCt.js",
+      "status": 200,
+      "sha256_matches": true
+    },
+    {
+      "asset": "assets/SupervisorDashboardPage-8qH5aO64.js",
+      "status": 200,
+      "sha256_matches": true
+    },
+    {
+      "asset": "assets/CanvasOrdersPage-VcIw5WUG.js",
+      "status": 200,
+      "sha256_matches": true
+    },
+    {
+      "download": "BudimasMobile-v1.0.4-debug.apk",
+      "status": 200,
+      "bytes": 30016902
+    },
+    {
+      "download": "BudimasMobile-debug.apk",
+      "status": 200,
+      "bytes": 30016902
+    }
+  ],
+  "tests": {
+    "api": 233,
+    "javascript": 20,
+    "canvas_scenario": "passed"
+  },
+  "database_changes": "Only nullable company columns added to stock_transfer; no COA/MAL or historical transaction changes"
+}

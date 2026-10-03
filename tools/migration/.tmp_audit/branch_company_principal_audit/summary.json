@@ -1,0 +1,10 @@
+{
+  "companies": 7,
+  "branches": 4,
+  "branches_without_company": 4,
+  "new_principals": 43,
+  "old_principals": 41,
+  "old_principals_code_matched_rows": 7,
+  "old_principals_missing": 35,
+  "output_dir": "D:\\laragon\\www\\budimas\\new_budimas\\.tmp_audit\\branch_company_principal_audit"
+}

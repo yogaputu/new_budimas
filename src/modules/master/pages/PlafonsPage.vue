@@ -1,0 +1,2105 @@
+<script setup>
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import {
+  createPlafon,
+  createPlafonSchedule,
+  deletePlafon,
+  deletePlafonSchedule,
+  getAllCustomers,
+  getBranches,
+  getCompanies,
+  getPlafonSchedules,
+  getPlafons,
+  getPrincipals,
+  getProductPriceTypes,
+  getSales,
+  getSalesPrincipalAssignments,
+  getUsers,
+  updatePlafon,
+  updatePlafonSchedule
+} from '@/api/master';
+import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import {
+  getLoginBranchId,
+  getRowBranchId,
+  getRowBranchIds,
+  getRowCompanyId,
+  isSuperUser,
+  scopeRowsByLoginBranch,
+  scopeSalesRowsByLogin
+} from '@/utils/accessScope';
+import { useAuthStore } from '@/stores/auth';
+import AppFormField from '@/shared/components/AppFormField.vue';
+import AppModal from '@/shared/components/AppModal.vue';
+import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
+import AppTable from '@/shared/components/AppTable.vue';
+import PageHeader from '@/shared/components/PageHeader.vue';
+
+const numberFormatter = new Intl.NumberFormat('id-ID');
+
+const authStore = useAuthStore();
+const filters = reactive({
+  search: '',
+  id_cabang: '',
+  id_perusahaan: '',
+  id_principal: ''
+});
+
+const pagination = reactive({
+  page: 1,
+  limit: 50,
+  total: 0
+});
+
+const items = ref([]);
+const loading = ref(false);
+const error = ref('');
+const searchTimer = ref(null);
+
+const customers = ref([]);
+const branches = ref([]);
+const companies = ref([]);
+const principals = ref([]);
+const salesRows = ref([]);
+const salesPrincipalAssignments = ref([]);
+const users = ref([]);
+const priceTypes = ref([]);
+const optionLoading = reactive({
+  branches: false,
+  companies: false,
+  customers: false,
+  principals: false,
+  sales: false,
+  users: false,
+  prices: false
+});
+
+const modalOpen = ref(false);
+const scheduleModalOpen = ref(false);
+const scheduleListModalOpen = ref(false);
+
+const mode = ref('create');
+const selectedRow = ref(null);
+const feedback = ref('');
+const actionError = ref('');
+const saving = ref(false);
+const deleting = ref(false);
+const createPrincipalIds = ref([]);
+const hydratingForm = ref(false);
+const priceTypeTouched = ref(false);
+const userManuallySelected = ref(false);
+
+const scheduleRows = ref([]);
+const scheduleLoading = ref(false);
+const scheduleFeedback = ref('');
+const scheduleError = ref('');
+const scheduleMode = ref('create');
+const selectedSchedule = ref(null);
+const scheduleSaving = ref(false);
+const scheduleDeleting = ref(false);
+
+const lastDeletedRow = ref(null);
+
+const form = reactive({
+  id_cabang: '',
+  id_perusahaan: '',
+  id_customer: '',
+  id_principal: '',
+  id_sales: '',
+  limit_bon: '',
+  kode: '',
+  id_user: '',
+  id_tipe_harga: '',
+  top: '',
+  lock_order: '0',
+  sisa_bon: '',
+  tempo: '',
+  tempo_label: '',
+  kategori_izin: '',
+  minimal_order: '',
+  sistem_pembayaran: 'cash'
+});
+
+const scheduleForm = reactive({
+  id_tipe_kunjungan: '1',
+  id_hari: '',
+  id_minggu: '',
+  id_status: '1'
+});
+
+const visitTypeOptions = [
+  { value: '1', label: 'Terjadwal' },
+  { value: '2', label: 'Tidak Terjadwal' },
+  { value: '3', label: 'Spesial / Pengganti' }
+];
+
+const dayOptions = [
+  { value: '1', label: 'Senin' },
+  { value: '2', label: 'Selasa' },
+  { value: '3', label: 'Rabu' },
+  { value: '4', label: 'Kamis' },
+  { value: '5', label: 'Jumat' },
+  { value: '6', label: 'Sabtu' },
+  { value: '7', label: 'Minggu' }
+];
+
+const weekOptions = [
+  { value: '1', label: 'Minggu 1' },
+  { value: '2', label: 'Minggu 2' },
+  { value: '3', label: 'Minggu 3' },
+  { value: '4', label: 'Minggu 4' },
+  { value: '5', label: 'Kombinasi 1-2' },
+  { value: '6', label: 'Kombinasi 1-3' },
+  { value: '7', label: 'Kombinasi 1-4' },
+  { value: '8', label: 'Kombinasi 2-3' },
+  { value: '9', label: 'Kombinasi 2-4' },
+  { value: '10', label: 'Kombinasi 3-4' },
+  { value: '11', label: 'Semua Minggu' }
+];
+
+const scheduleStatusOptions = [
+  { value: '1', label: 'Aktif' },
+  { value: '0', label: 'Tidak Aktif' }
+];
+
+const lockOrderOptions = [
+  { value: '0', label: 'Aktif - Order boleh dibuat' },
+  { value: '1', label: 'Lock - Order diblokir' }
+];
+
+const paymentSystemOptions = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'kredit', label: 'Kredit' }
+];
+
+const syntheticCustomerValue = '__selected_plafon_customer__';
+const syntheticSalesValue = '__selected_plafon_sales__';
+
+const loginBranchId = computed(() => getLoginBranchId(authStore.user));
+const selectedFormBranch = computed(() => branches.value.find((item) => String(item.id) === String(form.id_cabang || '')));
+const selectedFilterBranch = computed(() => branches.value.find((item) => String(item.id) === String(filters.id_cabang || '')));
+
+function companyIdsForBranch(branchId, selectedBranch = null) {
+  if (!branchId) return [];
+
+  const ids = new Set();
+  const branchCompanyId = getRowCompanyId(selectedBranch);
+  if (branchCompanyId) ids.add(String(branchCompanyId));
+
+  companies.value.forEach((item) => {
+    if (getRowBranchIds(item).includes(String(branchId))) {
+      ids.add(String(item.id));
+    }
+  });
+
+  return Array.from(ids);
+}
+
+const formBranchCompanyIds = computed(() =>
+  companyIdsForBranch(form.id_cabang, selectedFormBranch.value)
+);
+
+const filterBranchCompanyIds = computed(() =>
+  companyIdsForBranch(filters.id_cabang, selectedFilterBranch.value)
+);
+
+const branchOptions = computed(() =>
+  scopeRowsByLoginBranch(branches.value, authStore).map((item) => ({
+    value: String(item.id),
+    label: `${item.kode ? `${item.kode} - ` : ''}${item.nama || `Cabang ${item.id}`}`
+  }))
+);
+
+const filterCompanyOptions = computed(() =>
+  companies.value
+    .filter((item) => filters.id_cabang && filterBranchCompanyIds.value.includes(String(item.id)))
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || 'Perusahaan'}`
+    }))
+);
+
+const formCompanyOptions = computed(() =>
+  companies.value
+    .filter((item) => form.id_cabang && formBranchCompanyIds.value.includes(String(item.id)))
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || 'Perusahaan'}`
+    }))
+);
+
+function ensureOption(options, value, label) {
+  if (!value || options.some((item) => String(item.value) === String(value))) {
+    return options;
+  }
+
+  return [
+    {
+      value: String(value),
+      label
+    },
+    ...options
+  ];
+}
+
+function firstFilled(row, keys) {
+  for (const key of keys) {
+    const value = readRowValue(row, key);
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+
+  return '';
+}
+
+function normalizeRowKey(key) {
+  return String(key || '')
+    .toLowerCase()
+    .replace(/\s+as\s+.+$/i, '')
+    .split('.')
+    .pop()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function readRowValue(row, targetKey) {
+  if (!row) return undefined;
+  if (row[targetKey] !== undefined) return row[targetKey];
+
+  const normalizedTarget = normalizeRowKey(targetKey);
+  const aliasTarget = String(targetKey || '')
+    .toLowerCase()
+    .split(/\s+as\s+/i)
+    .pop()
+    .replace(/[^a-z0-9]/g, '');
+
+  for (const [key, value] of Object.entries(row)) {
+    const lowerKey = String(key || '').toLowerCase();
+    const normalizedKey = normalizeRowKey(key);
+    const aliasKey = lowerKey
+      .split(/\s+as\s+/i)
+      .pop()
+      .replace(/[^a-z0-9]/g, '');
+
+    if (normalizedKey === normalizedTarget || aliasKey === normalizedTarget || aliasKey === aliasTarget) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeLockOrder(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+
+  if (['1', 'x', 'lock', 'locked', 'true', 'ya', 'yes'].includes(normalized)) return '1';
+  if (['0', 'aktif', 'active', 'false', 'tidak', 'no', ''].includes(normalized)) return '0';
+
+  return '0';
+}
+
+const selectedCustomerRaw = computed(() =>
+  customers.value.find((item) => String(item.id) === String(form.id_customer)) ||
+  (
+    form.id_customer === syntheticCustomerValue
+      ? {
+          id: syntheticCustomerValue,
+          kode: firstFilled(selectedRow.value, ['kode_customer', 'customer_kode', 'customer.kode']),
+          nama: firstFilled(selectedRow.value, ['nama_customer', 'customer_nama', 'customer.nama']),
+          id_cabang: firstFilled(selectedRow.value, ['id_cabang', 'customer_id_cabang', 'cabang_id', 'plafon_id_cabang'])
+        }
+      : null
+  ) ||
+  (
+    form.id_customer && String(firstFilled(selectedRow.value, ['id_customer', 'customer_id', 'plafon_id_customer']) || '') === String(form.id_customer)
+      ? {
+          id: form.id_customer,
+          kode: firstFilled(selectedRow.value, ['kode_customer', 'customer_kode', 'customer.kode']),
+          nama: firstFilled(selectedRow.value, ['nama_customer', 'customer_nama', 'customer.nama']),
+          id_cabang: firstFilled(selectedRow.value, ['id_cabang', 'customer_id_cabang', 'cabang_id', 'plafon_id_cabang'])
+        }
+      : null
+  )
+);
+
+const selectedSalesRaw = computed(() =>
+  salesRows.value.find((item) =>
+    [item.id_sales, item.sales_id, item.id]
+      .map((value) => String(value || ''))
+      .includes(String(form.id_sales))
+  ) ||
+  (
+    form.id_sales === syntheticSalesValue
+      ? {
+          id_sales: syntheticSalesValue,
+          id: syntheticSalesValue,
+          id_user: firstFilled(selectedRow.value, ['id_user_sales', 'sales_id_user', 'id_user', 'user_id']),
+          id_cabang: firstFilled(selectedRow.value, ['id_cabang', 'customer_id_cabang', 'cabang_id', 'plafon_id_cabang']),
+          kode_sales: firstFilled(selectedRow.value, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales']),
+          nama: firstFilled(selectedRow.value, ['nama_sales', 'sales_nama', 'sales_user.nama', 'nama_user'])
+        }
+      : null
+  ) ||
+  (
+    form.id_sales && String(firstFilled(selectedRow.value, ['id_sales', 'sales_id', 'plafon_id_sales']) || '') === String(form.id_sales)
+      ? {
+          id_sales: form.id_sales,
+          id: form.id_sales,
+          id_user: firstFilled(selectedRow.value, ['id_user_sales', 'sales_id_user', 'id_user', 'user_id']),
+          id_cabang: firstFilled(selectedRow.value, ['id_cabang', 'customer_id_cabang', 'cabang_id', 'plafon_id_cabang']),
+          kode_sales: firstFilled(selectedRow.value, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales']),
+          nama: firstFilled(selectedRow.value, ['nama_sales', 'sales_nama', 'sales_user.nama', 'nama_user'])
+        }
+      : null
+  )
+);
+
+const selectedPrincipalRaw = computed(() =>
+  principals.value.find((item) => String(item.id) === String(form.id_principal)) ||
+  (
+    form.id_principal && String(firstFilled(selectedRow.value, ['id_principal', 'principal_id', 'plafon_id_principal']) || '') === String(form.id_principal)
+      ? {
+          id: form.id_principal,
+          kode: firstFilled(selectedRow.value, ['kode_principal', 'principal_kode', 'principal.kode']),
+          nama: firstFilled(selectedRow.value, ['nama_principal', 'principal_nama', 'principal.nama'])
+        }
+      : null
+  )
+);
+
+const customerOptions = computed(() => {
+  const options = scopeRowsByLoginBranch(customers.value, authStore)
+    .filter((item) => !form.id_cabang || String(getRowBranchId(item)) === String(form.id_cabang))
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || 'Customer'}`
+    }));
+
+  return ensureOption(
+    options,
+    form.id_customer,
+    `${selectedCustomerRaw.value?.kode || '-'} - ${selectedCustomerRaw.value?.nama || 'Customer terpilih'}`
+  );
+});
+
+const availablePrincipalIds = computed(() => {
+  const ids = salesPrincipalAssignments.value
+    .map((item) => Number(item.id_principal))
+    .filter(Boolean);
+
+  return [...new Set(ids)];
+});
+
+const filteredPrincipals = computed(() => {
+  const scoped = principals.value.filter((item) => !form.id_perusahaan || String(getRowCompanyId(item)) === String(form.id_perusahaan));
+
+  if (!form.id_sales || availablePrincipalIds.value.length === 0) {
+    return scoped;
+  }
+
+  return scoped.filter((item) =>
+    availablePrincipalIds.value.includes(Number(item.id)) ||
+    String(item.id) === String(form.id_principal || '')
+  );
+});
+
+const principalOptions = computed(() =>
+  ensureOption(
+    filteredPrincipals.value.map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || item.nama_principal || 'Principal'}`
+    })),
+    form.id_principal,
+    `${selectedPrincipalRaw.value?.kode || '-'} - ${selectedPrincipalRaw.value?.nama || selectedPrincipalRaw.value?.nama_principal || 'Principal terpilih'}`
+  )
+);
+
+const filterPrincipalOptions = computed(() =>
+  principals.value
+    .filter((item) => !filters.id_perusahaan || String(getRowCompanyId(item)) === String(filters.id_perusahaan))
+    .map((item) => ({
+      value: String(item.id),
+      label: `${item.kode || '-'} - ${item.nama || item.nama_principal || 'Principal'}`
+    }))
+);
+
+const selectedCustomer = selectedCustomerRaw;
+
+const selectedSales = selectedSalesRaw;
+
+const selectedPriceType = computed(() =>
+  priceTypes.value.find((item) => String(item.id) === String(form.id_tipe_harga)) ||
+  (
+    form.id_tipe_harga && String(selectedRow.value?.id_tipe_harga || '') === String(form.id_tipe_harga)
+      ? {
+          id: form.id_tipe_harga,
+          nama: selectedRow.value?.tipe_harga || `Tipe ${form.id_tipe_harga}`
+        }
+      : null
+  )
+);
+
+const selectedUser = computed(() =>
+  users.value.find((item) => String(item.id) === String(form.id_user)) ||
+  (
+    form.id_user && String(firstFilled(selectedRow.value, ['id_user', 'id_user_sales', 'sales_id_user', 'user_id']) || '') === String(form.id_user)
+      ? {
+          id: form.id_user,
+          nama: firstFilled(selectedRow.value, ['nama_user', 'nama_sales', 'sales_nama', 'sales_user.nama']),
+          username: firstFilled(selectedRow.value, ['username', 'user_username'])
+        }
+      : null
+  )
+);
+
+const salesOptions = computed(() => {
+  const selectedCustomerCabang = selectedCustomer.value?.id_cabang || form.id_cabang;
+  const scopedSalesRows = scopeSalesRowsByLogin(salesRows.value, authStore);
+
+  const sourceRows = selectedCustomerCabang
+    ? scopedSalesRows.filter((item) => String(item.id_cabang || '') === String(selectedCustomerCabang))
+    : scopedSalesRows;
+
+  const options = sourceRows.map((item) => ({
+    value: String(item.id_sales || item.sales_id || item.id),
+    label: `${item.kode_sales || '-'} - ${item.nama || 'Sales'}${item.nama_cabang ? ` - ${item.nama_cabang}` : ''}`
+  }));
+
+  return ensureOption(
+    options,
+    form.id_sales,
+    `${selectedSalesRaw.value?.kode_sales || '-'} - ${selectedSalesRaw.value?.nama || 'Sales terpilih'}${selectedSalesRaw.value?.nama_cabang ? ` - ${selectedSalesRaw.value.nama_cabang}` : ''}`
+  );
+});
+
+const userOptions = computed(() =>
+  ensureOption(scopeRowsByLoginBranch(users.value, authStore).map((item) => ({
+    value: String(item.id),
+    label: `${item.username || item.nama || 'User'}${item.nama_jabatan ? ` - ${item.nama_jabatan}` : ''}`
+  })),
+  form.id_user,
+  selectedUser.value?.username || selectedUser.value?.nama || `User ${form.id_user}`
+  )
+);
+
+const priceTypeOptions = computed(() =>
+  ensureOption(priceTypes.value.map((item) => ({
+    value: String(item.id),
+    label: item.nama || `Tipe ${item.id}`
+  })),
+  form.id_tipe_harga,
+  selectedPriceType.value?.nama || `Tipe ${form.id_tipe_harga}`
+  )
+);
+
+const tableRows = computed(() =>
+  scopeRowsByLoginBranch(items.value, authStore)
+    .filter((item) => !filters.id_cabang || String(getRowBranchId(item)) === String(filters.id_cabang))
+    .filter((item) => {
+      if (!filters.id_perusahaan) return true;
+      const principal = principals.value.find((principalItem) => String(principalItem.id) === String(item.id_principal));
+      return String(getRowCompanyId(principal)) === String(filters.id_perusahaan);
+    })
+    .filter((item) => !filters.id_principal || String(item.id_principal) === String(filters.id_principal))
+    .map((item, index) => ({
+      ...item,
+      no: ((pagination.page - 1) * pagination.limit) + index + 1,
+      row_key: String(item.id),
+      limit_bon_label: formatCurrency(item.limit_bon),
+      sisa_bon_label: formatCurrency(item.sisa_bon),
+      minimal_order_label: formatCurrency(item.minimal_order),
+      sistem_pembayaran_label: paymentSystemLabel(item.sistem_pembayaran),
+      tempo_display: item.tempo_label || (Number(item.tempo || 0) ? `${Number(item.tempo || 0)} hari` : '-'),
+      kategori_izin_label: normalizeCategoryLetters(item.kategori_izin) || 'Semua'
+    }))
+);
+
+function optionLabel(options, value, fallbackPrefix) {
+  const matched = options.find((item) => String(item.value) === String(value));
+  return matched?.label || (value ? `${fallbackPrefix} ${value}` : '-');
+}
+
+function visitTypeLabel(value) {
+  if (String(value) === '1') return 'Terjadwal';
+  if (String(value) === '2') return 'Tidak Terjadwal';
+  if (String(value) === '3') return 'Spesial / Pengganti';
+  return value ? `Tipe ${value}` : '-';
+}
+
+function scheduleStatusLabel(value) {
+  const matched = scheduleStatusOptions.find((item) => String(item.value) === String(value));
+  return matched?.label || (String(value) === '1' ? 'Aktif' : String(value) === '0' ? 'Tidak Aktif' : value ? `Status ${value}` : '-');
+}
+
+function normalizeCategoryLetters(value) {
+  const seen = new Set();
+  return String(value || '')
+    .toUpperCase()
+    .split('')
+    .filter((char) => {
+      if (!/[A-Z]/.test(char) || seen.has(char)) return false;
+      seen.add(char);
+      return true;
+    })
+    .join('');
+}
+
+const scheduleTableRows = computed(() =>
+  scheduleRows.value.map((item) => ({
+    ...item,
+    row_key: String(item.id || `${item.id_hari}-${item.id_minggu}-${item.id_tipe_kunjungan}`),
+    tipe_label: visitTypeLabel(item.id_tipe_kunjungan),
+    hari_label: optionLabel(dayOptions, item.id_hari, 'Hari'),
+    minggu_label: optionLabel(weekOptions, item.id_minggu, 'Minggu'),
+    status_label: scheduleStatusLabel(item.id_status)
+  }))
+);
+
+const summaryCards = computed(() => {
+  const totalLimit = items.value.reduce((sum, item) => sum + Number(item.limit_bon || 0), 0);
+  const totalSisa = items.value.reduce((sum, item) => sum + Number(item.sisa_bon || 0), 0);
+
+  return [
+    { label: 'Data Tampil', value: pagination.total || items.value.length },
+    { label: 'Halaman', value: `${pagination.page}` },
+    { label: 'Total Limit', value: formatCurrency(totalLimit) },
+    { label: 'Total Sisa', value: formatCurrency(totalSisa) }
+  ];
+});
+
+const selectedCreatePrincipalSummary = computed(() => {
+  if (!createPrincipalIds.value.length) return 'Belum ada principal dipilih.';
+
+  return filteredPrincipals.value
+    .filter((item) => createPrincipalIds.value.includes(String(item.id)))
+    .map((item) => item.nama || item.nama_principal || item.kode || `Principal ${item.id}`)
+    .join(', ');
+});
+
+const branchStatus = computed(() => {
+  if (!form.id_customer || !form.id_sales) return null;
+
+  if (!selectedCustomer.value || !selectedSales.value) {
+    return {
+      type: 'warning',
+      text: 'Data cabang belum lengkap.'
+    };
+  }
+
+  const valid = String(selectedCustomer.value.id_cabang || '') === String(selectedSales.value.id_cabang || '');
+
+  return valid
+    ? { type: 'success', text: 'Cabang customer dan sales cocok.' }
+    : { type: 'danger', text: 'Cabang customer dan sales berbeda.' };
+});
+
+const canGoPrev = computed(() => pagination.page > 1);
+const canGoNext = computed(() => {
+  if (!pagination.total) return items.value.length >= pagination.limit;
+  return pagination.page * pagination.limit < pagination.total;
+});
+
+function formatCurrency(value) {
+  const parsed = Number(value || 0);
+  return `Rp ${numberFormatter.format(Number.isFinite(parsed) ? parsed : 0)}`;
+}
+
+function normalizePaymentSystem(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['cash', 'tunai'].includes(normalized)) return 'cash';
+  return 'kredit';
+}
+
+function paymentSystemLabel(value) {
+  return normalizePaymentSystem(value) === 'cash' ? 'Cash' : 'Kredit';
+}
+
+function parseResponseList(response) {
+  const payload = unwrapResponse(response);
+
+  if (Array.isArray(payload)) {
+    return {
+      rows: payload,
+      total: payload.length
+    };
+  }
+
+  const rows = normalizeList(payload?.pages || payload?.data || payload?.items || payload?.rows || payload);
+  const total = Number(
+    payload?.total_data ||
+      payload?.total ||
+      payload?.recordsTotal ||
+      payload?.count ||
+      rows.length ||
+      0
+  );
+
+  return { rows, total };
+}
+
+async function load() {
+  loading.value = true;
+  error.value = '';
+
+  try {
+    const response = await getPlafons({
+      search: filters.search.trim(),
+      page: pagination.page,
+      limit: pagination.limit
+    });
+
+    const parsed = parseResponseList(response);
+    items.value = parsed.rows;
+    pagination.total = parsed.total;
+  } catch (err) {
+    error.value = normalizeError(err, 'Data plafon belum bisa dimuat.');
+    items.value = [];
+    pagination.total = 0;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function debouncedLoad() {
+  window.clearTimeout(searchTimer.value);
+  searchTimer.value = window.setTimeout(() => {
+    pagination.page = 1;
+    load();
+  }, 350);
+}
+
+function reset() {
+  filters.search = '';
+  filters.id_cabang = '';
+  filters.id_perusahaan = '';
+  filters.id_principal = '';
+  applyLoginBranchFilter();
+  pagination.page = 1;
+  load();
+}
+
+function goToPage(page) {
+  pagination.page = Math.max(1, page);
+  load();
+}
+
+async function loadCustomersIfNeeded() {
+  if (customers.value.length || optionLoading.customers) return;
+  optionLoading.customers = true;
+
+  try {
+    const response = await getAllCustomers();
+    customers.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.customers = false;
+  }
+}
+
+async function loadBranchesIfNeeded() {
+  if (branches.value.length || optionLoading.branches) return;
+  optionLoading.branches = true;
+
+  try {
+    const response = await getBranches();
+    branches.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.branches = false;
+  }
+}
+
+async function loadCompaniesIfNeeded() {
+  if (companies.value.length || optionLoading.companies) return;
+  optionLoading.companies = true;
+
+  try {
+    const response = await getCompanies();
+    companies.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.companies = false;
+  }
+}
+
+async function loadPrincipalsIfNeeded() {
+  if (principals.value.length || optionLoading.principals) return;
+  optionLoading.principals = true;
+
+  try {
+    const response = await getPrincipals();
+    principals.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.principals = false;
+  }
+}
+
+async function loadSalesIfNeeded() {
+  if (salesRows.value.length || optionLoading.sales) return;
+  optionLoading.sales = true;
+
+  try {
+    const response = await getSales();
+    salesRows.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.sales = false;
+  }
+}
+
+async function loadUsersIfNeeded() {
+  if (users.value.length || optionLoading.users) return;
+  optionLoading.users = true;
+
+  try {
+    const response = await getUsers();
+    users.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.users = false;
+  }
+}
+
+async function loadPriceTypesIfNeeded() {
+  if (priceTypes.value.length || optionLoading.prices) return;
+  optionLoading.prices = true;
+
+  try {
+    const response = await getProductPriceTypes();
+    priceTypes.value = normalizeList(unwrapResponse(response));
+  } finally {
+    optionLoading.prices = false;
+  }
+}
+
+async function loadMainFormOptions() {
+  await Promise.all([
+    loadBranchesIfNeeded(),
+    loadCompaniesIfNeeded(),
+    loadCustomersIfNeeded(),
+    loadPrincipalsIfNeeded(),
+    loadSalesIfNeeded(),
+    loadUsersIfNeeded(),
+    loadPriceTypesIfNeeded()
+  ]);
+}
+
+async function loadScheduleOptions() {
+  return Promise.resolve();
+}
+
+async function loadSalesPrincipalOptions(salesId) {
+  if (!salesId) {
+    salesPrincipalAssignments.value = [];
+    return;
+  }
+
+  const salesRow = selectedSales.value;
+
+  const candidateIds = [
+    salesId,
+    salesRow?.id,
+    salesRow?.id_sales,
+    salesRow?.id_user
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const uniqueIds = [...new Set(candidateIds)];
+
+  salesPrincipalAssignments.value = [];
+
+  for (const candidateId of uniqueIds) {
+    try {
+      const response = await getSalesPrincipalAssignments(candidateId);
+      const rows = normalizeList(unwrapResponse(response));
+      if (rows.length) {
+        salesPrincipalAssignments.value = rows;
+        return;
+      }
+    } catch (err) {
+      actionError.value = normalizeError(err, 'Principal sales belum bisa dimuat.');
+    }
+  }
+}
+
+function generatePlafonCodePrefix() {
+  const stamp = Date.now();
+  const random = Math.floor(Math.random() * 900) + 100;
+  return `PL${stamp}${random}`;
+}
+
+function generatePlafonCodeForPrincipal(principalId) {
+  const random = Math.floor(Math.random() * 90) + 10;
+  return `${form.kode || generatePlafonCodePrefix()}-${principalId}-${random}`;
+}
+
+function resetForm() {
+  Object.assign(form, {
+    id_cabang: '',
+    id_perusahaan: '',
+    id_customer: '',
+    id_principal: '',
+    id_sales: '',
+    limit_bon: '',
+    kode: '',
+    id_user: '',
+    id_tipe_harga: '',
+    top: '',
+    lock_order: '0',
+    sisa_bon: '',
+    tempo: '',
+    tempo_label: '',
+    kategori_izin: '',
+    minimal_order: '',
+    sistem_pembayaran: 'cash'
+  });
+
+  createPrincipalIds.value = [];
+  userManuallySelected.value = false;
+
+  if (!isSuperUser(authStore) && loginBranchId.value) {
+    form.id_cabang = String(loginBranchId.value);
+  }
+
+  syncFormCompanyFromBranch();
+}
+
+function normalizeId(value) {
+  return value === undefined || value === null || value === '' ? '' : String(value);
+}
+
+function sameText(left, right) {
+  const normalize = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return normalize(left) === normalize(right);
+}
+
+function findCustomerForRow(row) {
+  const customerId = normalizeId(firstFilled(row, ['id_customer', 'customer_id', 'plafon_id_customer']));
+  const customerCode = firstFilled(row, ['kode_customer', 'customer_kode', 'customer.kode']);
+  const customerName = firstFilled(row, ['nama_customer', 'customer_nama', 'customer.nama']);
+
+  return customers.value.find((item) => {
+    if (customerId && String(item.id) === String(customerId)) return true;
+    if (customerCode && sameText(item.kode, customerCode)) return true;
+    if (customerName && sameText(item.nama, customerName)) return true;
+    return false;
+  });
+}
+
+function isSameCustomerAsSelectedRow(customer) {
+  if (!customer || !selectedRow.value) return false;
+
+  const rowCustomerId = normalizeId(firstFilled(selectedRow.value, ['id_customer', 'customer_id', 'plafon_id_customer']));
+  const rowCustomerCode = firstFilled(selectedRow.value, ['kode_customer', 'customer_kode', 'customer.kode']);
+  const rowCustomerName = firstFilled(selectedRow.value, ['nama_customer', 'customer_nama', 'customer.nama']);
+
+  if (rowCustomerId && String(customer.id) === String(rowCustomerId)) return true;
+  if (rowCustomerCode && sameText(customer.kode, rowCustomerCode)) return true;
+  if (rowCustomerName && sameText(customer.nama, rowCustomerName)) return true;
+
+  return false;
+}
+
+function findSalesForRow(row) {
+  const salesId = normalizeId(firstFilled(row, ['id_sales', 'sales_id', 'plafon_id_sales']));
+  const salesCode = firstFilled(row, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales']);
+  const salesName = firstFilled(row, ['nama_sales', 'sales_nama', 'sales_user.nama', 'nama_user']);
+
+  return salesRows.value.find((item) => {
+    const itemId = String(item.id_sales || item.sales_id || item.id || '');
+    if (salesId && itemId === String(salesId)) return true;
+    if (salesCode && sameText(item.kode_sales, salesCode)) return true;
+    if (salesName && sameText(item.nama || item.nama_sales, salesName)) return true;
+    return false;
+  });
+}
+
+const selectedCustomerDisplay = computed(() => {
+  const customer = selectedCustomer.value || findCustomerForRow(selectedRow.value);
+  const code = customer?.kode || firstFilled(selectedRow.value, ['kode_customer', 'customer_kode', 'customer.kode']);
+  const name = customer?.nama || firstFilled(selectedRow.value, ['nama_customer', 'customer_nama', 'customer.nama']);
+
+  if (!code && !name) {
+    return '';
+  }
+
+  return `${code || '-'} - ${name || 'Customer terpilih'}`;
+});
+
+const selectedSalesDisplay = computed(() => {
+  const rowSalesCode = firstFilled(selectedRow.value, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales']);
+  const rowSalesName = firstFilled(selectedRow.value, ['nama_sales', 'sales_nama', 'sales_user.nama', 'nama_user']);
+  // `display-value` is used while editing to retain labels from legacy rows.
+  // It must, however, follow a new selection immediately. Previously the
+  // saved row label was preferred forever, so the User field changed but the
+  // Sales control continued to show the previous sales until Save.
+  const sales = selectedSales.value || findSalesForRow(selectedRow.value);
+  const code = sales?.kode_sales || rowSalesCode;
+  const name = sales?.nama || sales?.nama_sales || rowSalesName;
+
+  if (!code && !name) {
+    return '';
+  }
+
+  return `${code || '-'} - ${name || 'Sales terpilih'}${sales?.nama_cabang ? ` - ${sales.nama_cabang}` : ''}`;
+});
+
+const selectedPriceTypeDisplay = computed(() => {
+  const priceType = selectedPriceType.value;
+  const name = priceType?.nama || firstFilled(selectedRow.value, ['tipe_harga', 'nama_tipe_harga', 'produk_tipe_harga.nama']);
+
+  return name || '';
+});
+
+const selectedPrincipalDisplay = computed(() => {
+  const principal = selectedPrincipalRaw.value;
+  const code = principal?.kode || firstFilled(selectedRow.value, ['kode_principal', 'principal_kode', 'principal.kode']);
+  const name = principal?.nama || principal?.nama_principal || firstFilled(selectedRow.value, ['nama_principal', 'principal_nama', 'principal.nama']);
+
+  if (!code && !name) return '';
+
+  return `${code || '-'} - ${name || 'Principal terpilih'}`;
+});
+
+const selectedUserDisplay = computed(() => {
+  const user = selectedUser.value;
+  const name = user?.nama || user?.username || firstFilled(selectedRow.value, ['nama_user', 'nama_sales', 'sales_nama', 'sales_user.nama']);
+
+  return name || '';
+});
+
+function syncFormCompanyFromBranch(preserveCurrent = false) {
+  if (!form.id_cabang) {
+    form.id_perusahaan = '';
+    return;
+  }
+
+  const allowedCompanyIds = formBranchCompanyIds.value;
+  if (!preserveCurrent || !allowedCompanyIds.includes(String(form.id_perusahaan || ''))) {
+    form.id_perusahaan = '';
+  }
+}
+
+function syncFilterCompanyFromBranch(preserveCurrent = false) {
+  if (!filters.id_cabang) {
+    filters.id_perusahaan = '';
+    return;
+  }
+
+  const allowedCompanyIds = filterBranchCompanyIds.value;
+  if (!preserveCurrent || !allowedCompanyIds.includes(String(filters.id_perusahaan || ''))) {
+    filters.id_perusahaan = '';
+  }
+}
+
+function applyLoginBranchFilter() {
+  if (!isSuperUser(authStore) && loginBranchId.value) {
+    filters.id_cabang = String(loginBranchId.value);
+    syncFilterCompanyFromBranch();
+  }
+}
+
+function buildPlafonPayload(overrides = {}) {
+  const payload = {
+    ...form,
+    ...overrides,
+    kategori_izin: normalizeCategoryLetters(overrides.kategori_izin ?? form.kategori_izin)
+  };
+
+  if (payload.id_customer === syntheticCustomerValue) {
+    delete payload.id_customer;
+  }
+
+  if (payload.id_sales === syntheticSalesValue) {
+    delete payload.id_sales;
+  }
+
+  delete payload.id_cabang;
+  delete payload.id_perusahaan;
+
+  return payload;
+}
+
+function resetScheduleForm() {
+  Object.assign(scheduleForm, {
+    id_tipe_kunjungan: '1',
+    id_hari: '',
+    id_minggu: '',
+    id_status: '1'
+  });
+}
+
+function openCreate() {
+  mode.value = 'create';
+  selectedRow.value = null;
+  feedback.value = '';
+  actionError.value = '';
+  salesPrincipalAssignments.value = [];
+  priceTypeTouched.value = false;
+  userManuallySelected.value = false;
+
+  resetForm();
+  form.kode = generatePlafonCodePrefix();
+
+  modalOpen.value = true;
+  loadMainFormOptions().then(() => {
+    syncFormCompanyFromBranch(true);
+  });
+}
+
+function openEdit(row) {
+  mode.value = 'edit';
+  selectedRow.value = row;
+  feedback.value = '';
+  actionError.value = '';
+  salesPrincipalAssignments.value = [];
+  priceTypeTouched.value = false;
+  userManuallySelected.value = false;
+  hydratingForm.value = true;
+
+  Object.assign(form, {
+    id_cabang: normalizeId(firstFilled(row, ['id_cabang', 'customer_id_cabang', 'cabang_id', 'plafon_id_cabang'])),
+    id_perusahaan: normalizeId(firstFilled(row, ['id_perusahaan', 'principal_id_perusahaan', 'principal.id_perusahaan', 'perusahaan_id', 'company_id'])),
+    id_customer:
+      normalizeId(firstFilled(row, ['id_customer', 'customer_id', 'plafon_id_customer'])) ||
+      (firstFilled(row, ['kode_customer', 'customer_kode', 'customer.kode', 'nama_customer', 'customer_nama', 'customer.nama']) ? syntheticCustomerValue : ''),
+    id_principal: normalizeId(firstFilled(row, ['id_principal', 'principal_id', 'plafon_id_principal'])),
+    id_sales:
+      normalizeId(firstFilled(row, ['id_sales', 'sales_id', 'plafon_id_sales'])) ||
+      (firstFilled(row, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales', 'nama_sales', 'sales_nama', 'sales_user.nama']) ? syntheticSalesValue : ''),
+    limit_bon: row?.limit_bon || '',
+    kode: row?.kode || '',
+    id_user: normalizeId(firstFilled(row, ['id_user', 'id_user_sales', 'sales_id_user', 'user_id'])),
+    id_tipe_harga: normalizeId(firstFilled(row, ['id_tipe_harga', 'tipe_harga_id', 'id_produk_tipe_harga'])),
+    top: row?.top || '',
+    lock_order: normalizeLockOrder(row?.lock_order),
+    sisa_bon: row?.sisa_bon || '',
+    tempo: row?.tempo || '',
+    tempo_label: row?.tempo_label || '',
+    kategori_izin: normalizeCategoryLetters(row?.kategori_izin || ''),
+    minimal_order: row?.minimal_order || '',
+    sistem_pembayaran: normalizePaymentSystem(row?.sistem_pembayaran)
+  });
+
+  modalOpen.value = true;
+
+  loadMainFormOptions()
+    .then(async () => {
+      const rowCustomer = findCustomerForRow(row);
+      const rowSales = findSalesForRow(row);
+      const rowPrincipal = principals.value.find((item) => String(item.id) === String(form.id_principal));
+
+      if (rowCustomer?.id) {
+        form.id_customer = String(rowCustomer.id);
+      } else if (!form.id_customer && selectedCustomerDisplay.value) {
+        form.id_customer = syntheticCustomerValue;
+      }
+
+      if (rowSales) {
+        form.id_sales = String(rowSales.id_sales || rowSales.sales_id || rowSales.id);
+      } else if (!form.id_sales && firstFilled(row, ['kode_sales', 'sales_kode', 'sales_detail.kode_sales', 'nama_sales', 'sales_nama', 'sales_user.nama'])) {
+        form.id_sales = syntheticSalesValue;
+      }
+
+      if (!form.id_cabang || rowCustomer?.id_cabang) {
+        const customer = rowCustomer || customers.value.find((item) => String(item.id) === String(form.id_customer));
+        form.id_cabang = normalizeId(customer?.id_cabang);
+      }
+
+      // Older rows may not yet contain the joined company id. In that case,
+      // recover it from the selected principal before validating the branch scope.
+      if (!form.id_perusahaan) {
+        form.id_perusahaan = normalizeId(getRowCompanyId(rowPrincipal));
+      }
+
+      // The plafond owns id_user. Only fall back to the sales user for legacy
+      // records that have no saved user of their own.
+      if (!form.id_user && (rowSales?.id_user || selectedSales.value?.id_user)) {
+        form.id_user = String(rowSales?.id_user || selectedSales.value.id_user);
+      }
+
+      if (rowCustomer?.id_tipe_harga && !priceTypeTouched.value) {
+        form.id_tipe_harga = String(rowCustomer.id_tipe_harga);
+      }
+
+      syncFormCompanyFromBranch(true);
+      if (form.id_sales) loadSalesPrincipalOptions(form.id_sales);
+
+      // Keep hydration active until Vue has flushed the form watchers. Otherwise
+      // the sales watcher can overwrite the plafond's saved user after edit opens.
+      await nextTick();
+    })
+    .catch((err) => {
+      actionError.value = normalizeError(err, 'Data referensi plafon belum bisa dimuat.');
+    })
+    .finally(() => {
+      hydratingForm.value = false;
+    });
+}
+
+function markUserAsManuallySelected() {
+  if (!hydratingForm.value) {
+    userManuallySelected.value = true;
+  }
+}
+
+function closeModal() {
+  modalOpen.value = false;
+  salesPrincipalAssignments.value = [];
+}
+
+function toggleCreatePrincipal(principalId) {
+  const key = String(principalId);
+
+  if (createPrincipalIds.value.includes(key)) {
+    createPrincipalIds.value = createPrincipalIds.value.filter((id) => id !== key);
+    return;
+  }
+
+  createPrincipalIds.value = [...createPrincipalIds.value, key];
+}
+
+function buildLocalRow(base = {}) {
+  return {
+    ...base,
+    id: Number(base.id || 0),
+    kode: base.kode || form.kode || '-',
+    id_customer: Number(base.id_customer || form.id_customer || 0),
+    id_principal: Number(base.id_principal || form.id_principal || 0),
+    id_sales: Number(base.id_sales || form.id_sales || 0),
+    id_cabang: Number(base.id_cabang || form.id_cabang || selectedCustomer.value?.id_cabang || 0),
+    id_user: Number(base.id_user || form.id_user || 0),
+    id_tipe_harga: Number(base.id_tipe_harga || form.id_tipe_harga || 0),
+    nama_customer: base.nama_customer || selectedCustomer.value?.nama || '-',
+    nama_principal:
+      base.nama_principal ||
+      principals.value.find((item) => String(item.id) === String(base.id_principal || form.id_principal))?.nama ||
+      principals.value.find((item) => String(item.id) === String(base.id_principal || form.id_principal))?.nama_principal ||
+      '-',
+    nama_user:
+      base.nama_user ||
+      users.value.find((item) => String(item.id) === String(form.id_user))?.username ||
+      users.value.find((item) => String(item.id) === String(form.id_user))?.nama ||
+      '-',
+    tipe_harga: base.tipe_harga || selectedPriceType.value?.nama || '-',
+    limit_bon: Number(base.limit_bon ?? form.limit_bon ?? 0),
+    sisa_bon: Number(base.sisa_bon ?? form.sisa_bon ?? 0),
+    top: Number(base.top ?? form.top ?? 0),
+    lock_order: String(base.lock_order ?? form.lock_order ?? ''),
+    tempo: Number(base.tempo ?? form.tempo ?? 0),
+    tempo_label: base.tempo_label || form.tempo_label || '',
+    kategori_izin: normalizeCategoryLetters(base.kategori_izin ?? form.kategori_izin ?? ''),
+    minimal_order: Number(base.minimal_order ?? form.minimal_order ?? 0),
+    sistem_pembayaran: normalizePaymentSystem(base.sistem_pembayaran ?? form.sistem_pembayaran)
+  };
+}
+
+function upsertLocalRow(row) {
+  const normalizedId = Number(row?.id || 0);
+  if (!normalizedId) return;
+
+  const nextRow = { ...row, id: normalizedId };
+  const index = items.value.findIndex((item) => Number(item?.id || 0) === normalizedId);
+
+  if (index >= 0) {
+    items.value.splice(index, 1, {
+      ...items.value[index],
+      ...nextRow
+    });
+    return;
+  }
+
+  items.value = [nextRow, ...items.value];
+}
+
+function validateMainForm() {
+  actionError.value = '';
+
+  if (!form.id_cabang) {
+    actionError.value = 'Cabang wajib dipilih terlebih dahulu.';
+    return false;
+  }
+
+  if (!form.id_perusahaan) {
+    actionError.value = 'Perusahaan wajib dipilih setelah cabang.';
+    return false;
+  }
+
+  if (!form.id_customer) {
+    actionError.value = 'Customer wajib dipilih.';
+    return false;
+  }
+
+  if (!form.id_sales) {
+    actionError.value = 'Sales wajib dipilih.';
+    return false;
+  }
+
+  if (!form.id_tipe_harga) {
+    actionError.value = 'Tipe harga wajib dipilih.';
+    return false;
+  }
+
+  if (branchStatus.value?.type === 'danger') {
+    actionError.value = branchStatus.value.text;
+    return false;
+  }
+
+  return true;
+}
+
+async function save() {
+  saving.value = true;
+  feedback.value = '';
+  actionError.value = '';
+
+  try {
+    if (!validateMainForm()) return;
+
+    if (mode.value === 'create') {
+      if (!createPrincipalIds.value.length) {
+        actionError.value = 'Pilih minimal satu principal.';
+        return;
+      }
+
+      const createdRows = [];
+
+      for (const principalId of createPrincipalIds.value) {
+        const payload = {
+          ...buildPlafonPayload({
+            id_principal: principalId,
+            kode: generatePlafonCodeForPrincipal(principalId)
+          }),
+          lock_order: Number(form.lock_order || 0),
+          limit_bon: Number(form.limit_bon || 0),
+          sisa_bon: Number(form.limit_bon || 0),
+          top: Number(form.top || 0),
+          tempo: Number(form.tempo || 0),
+          tempo_label: form.tempo ? `${Number(form.tempo || 0)} hari` : '',
+          minimal_order: Number(form.minimal_order || 0),
+          sistem_pembayaran: normalizePaymentSystem(form.sistem_pembayaran)
+        };
+
+        const response = await createPlafon(payload);
+        const result = unwrapResponse(response);
+        const inserted = Array.isArray(result) ? result[0] : result;
+        const insertedId = Number(inserted?.id || inserted || 0);
+
+        createdRows.push(buildLocalRow({ ...payload, id: insertedId }));
+      }
+
+      createdRows.forEach(upsertLocalRow);
+      feedback.value = `${createdRows.length} plafon berhasil dibuat.`;
+      resetForm();
+      form.kode = generatePlafonCodePrefix();
+    } else {
+      const payload = {
+        ...buildPlafonPayload(),
+        lock_order: Number(form.lock_order || 0),
+        limit_bon: Number(form.limit_bon || 0),
+        sisa_bon: Number(form.sisa_bon || 0),
+        top: Number(form.top || 0),
+        tempo: Number(form.tempo || 0),
+        tempo_label: form.tempo ? `${Number(form.tempo || 0)} hari` : '',
+        minimal_order: Number(form.minimal_order || 0),
+        sistem_pembayaran: normalizePaymentSystem(form.sistem_pembayaran)
+      };
+
+      await updatePlafon(selectedRow.value?.id, payload);
+      upsertLocalRow(buildLocalRow({ ...selectedRow.value, ...payload, id: selectedRow.value?.id }));
+      feedback.value = 'Plafon berhasil diperbarui.';
+    }
+
+    await load();
+  } catch (err) {
+    actionError.value = normalizeError(err, 'Data plafon belum berhasil disimpan.');
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function remove() {
+  if (!selectedRow.value?.id) return;
+
+  deleting.value = true;
+  feedback.value = '';
+  actionError.value = '';
+
+  try {
+    lastDeletedRow.value = { ...selectedRow.value };
+    await deletePlafon(selectedRow.value.id);
+    items.value = items.value.filter((item) => Number(item.id) !== Number(selectedRow.value.id));
+    modalOpen.value = false;
+  } catch (err) {
+    actionError.value = normalizeError(err, 'Data plafon belum berhasil dihapus.');
+  } finally {
+    deleting.value = false;
+  }
+}
+
+async function openSchedules(row) {
+  selectedRow.value = row;
+  scheduleListModalOpen.value = true;
+  scheduleLoading.value = true;
+  scheduleError.value = '';
+  scheduleFeedback.value = '';
+
+  try {
+    const response = await getPlafonSchedules(row.id);
+    scheduleRows.value = normalizeList(unwrapResponse(response));
+  } catch (err) {
+    scheduleError.value = normalizeError(err, 'Jadwal plafon belum bisa dimuat.');
+    scheduleRows.value = [];
+  } finally {
+    scheduleLoading.value = false;
+  }
+}
+
+function openCreateSchedule() {
+  scheduleMode.value = 'create';
+  selectedSchedule.value = null;
+  resetScheduleForm();
+  scheduleFeedback.value = '';
+  scheduleError.value = '';
+  scheduleModalOpen.value = true;
+  loadScheduleOptions();
+}
+
+function openEditSchedule(row) {
+  scheduleMode.value = 'edit';
+  selectedSchedule.value = row;
+
+  Object.assign(scheduleForm, {
+    id_tipe_kunjungan: row?.id_tipe_kunjungan ? String(row.id_tipe_kunjungan) : '1',
+    id_hari: row?.id_hari ? String(row.id_hari) : '',
+    id_minggu: row?.id_minggu ? String(row.id_minggu) : '',
+    id_status: row?.id_status ? String(row.id_status) : '1'
+  });
+
+  scheduleFeedback.value = '';
+  scheduleError.value = '';
+  scheduleModalOpen.value = true;
+  loadScheduleOptions();
+}
+
+function closeScheduleModal() {
+  scheduleModalOpen.value = false;
+}
+
+async function reloadSchedules() {
+  if (selectedRow.value?.id) {
+    await openSchedules(selectedRow.value);
+  }
+}
+
+async function saveSchedule() {
+  if (!selectedRow.value?.id) return;
+
+  scheduleSaving.value = true;
+  scheduleFeedback.value = '';
+  scheduleError.value = '';
+
+  try {
+    const payload = {
+      id_plafon: selectedRow.value.id,
+      id_tipe_kunjungan: scheduleForm.id_tipe_kunjungan,
+      id_hari: scheduleForm.id_hari,
+      id_minggu: scheduleForm.id_minggu,
+      id_status: scheduleForm.id_status
+    };
+
+    if (scheduleMode.value === 'create') {
+      await createPlafonSchedule(payload);
+      scheduleFeedback.value = 'Jadwal berhasil ditambahkan.';
+      resetScheduleForm();
+    } else {
+      await updatePlafonSchedule(selectedSchedule.value?.id, payload);
+      scheduleFeedback.value = 'Jadwal berhasil diperbarui.';
+    }
+
+    await reloadSchedules();
+  } catch (err) {
+    scheduleError.value = normalizeError(err, 'Jadwal belum berhasil disimpan.');
+  } finally {
+    scheduleSaving.value = false;
+  }
+}
+
+async function removeSchedule() {
+  if (!selectedSchedule.value?.id) return;
+
+  scheduleDeleting.value = true;
+  scheduleFeedback.value = '';
+  scheduleError.value = '';
+
+  try {
+    await deletePlafonSchedule(selectedSchedule.value.id);
+    scheduleModalOpen.value = false;
+    await reloadSchedules();
+  } catch (err) {
+    scheduleError.value = normalizeError(err, 'Jadwal belum berhasil dihapus.');
+  } finally {
+    scheduleDeleting.value = false;
+  }
+}
+
+watch(
+  () => filters.id_cabang,
+  (value, previousValue) => {
+    if (value === previousValue) return;
+    filters.id_perusahaan = '';
+    filters.id_principal = '';
+    syncFilterCompanyFromBranch();
+  }
+);
+
+watch(
+  () => filters.id_perusahaan,
+  (value, previousValue) => {
+    if (value === previousValue) return;
+    filters.id_principal = '';
+  }
+);
+
+watch(
+  () => form.id_cabang,
+  (value, previousValue) => {
+    if (hydratingForm.value) return;
+    if (value === previousValue) return;
+    form.id_perusahaan = '';
+    form.id_customer = '';
+    form.id_sales = '';
+    form.id_user = '';
+    form.id_principal = '';
+    createPrincipalIds.value = [];
+    salesPrincipalAssignments.value = [];
+    syncFormCompanyFromBranch();
+  }
+);
+
+watch(
+  () => form.id_perusahaan,
+  (value, previousValue) => {
+    if (hydratingForm.value) return;
+    if (value === previousValue) return;
+    form.id_customer = '';
+    form.id_sales = '';
+    form.id_user = '';
+    form.id_principal = '';
+    createPrincipalIds.value = [];
+    salesPrincipalAssignments.value = [];
+  }
+);
+
+watch(
+  () => form.id_customer,
+  (value, previousValue) => {
+    if (hydratingForm.value) return;
+
+    if (!value) {
+      form.id_principal = '';
+      createPrincipalIds.value = [];
+      form.id_tipe_harga = '';
+      form.id_sales = '';
+      return;
+    }
+
+    if (value !== previousValue && selectedCustomer.value) {
+      if (selectedCustomer.value.id_principal) {
+        form.id_principal = String(selectedCustomer.value.id_principal);
+
+        if (mode.value === 'create') {
+          createPrincipalIds.value = [String(selectedCustomer.value.id_principal)];
+        }
+      }
+
+      if (selectedCustomer.value.id_tipe_harga && !priceTypeTouched.value) {
+        form.id_tipe_harga = String(selectedCustomer.value.id_tipe_harga);
+      }
+
+      const customerCabang = String(selectedCustomer.value.id_cabang || '');
+
+      if (customerCabang && selectedSales.value && String(selectedSales.value.id_cabang || '') !== customerCabang) {
+        form.id_sales = '';
+      }
+    }
+  }
+);
+
+watch(
+  () => form.id_tipe_harga,
+  (value, previousValue) => {
+    if (hydratingForm.value) return;
+    if (value === previousValue) return;
+    priceTypeTouched.value = true;
+  }
+);
+
+watch(
+  () => form.id_sales,
+  async (value) => {
+    if (hydratingForm.value) return;
+
+    if (!value || !selectedSales.value) {
+      if (!userManuallySelected.value) {
+        form.id_user = '';
+      }
+      salesPrincipalAssignments.value = [];
+      if (mode.value === 'create') createPrincipalIds.value = [];
+      return;
+    }
+
+    if (!userManuallySelected.value) {
+      form.id_user = String(selectedSales.value.id_user || '');
+    }
+    await loadSalesPrincipalOptions(value);
+
+    if (
+      form.id_principal &&
+      availablePrincipalIds.value.length > 0 &&
+      !availablePrincipalIds.value.includes(Number(form.id_principal))
+    ) {
+      form.id_principal = '';
+    }
+
+    if (mode.value === 'create') {
+      createPrincipalIds.value = createPrincipalIds.value.filter((id) =>
+        availablePrincipalIds.value.includes(Number(id))
+      );
+
+      if (!createPrincipalIds.value.length && availablePrincipalIds.value.length === 1) {
+        createPrincipalIds.value = [String(availablePrincipalIds.value[0])];
+      }
+    } else if (!form.id_principal && availablePrincipalIds.value.length === 1) {
+      form.id_principal = String(availablePrincipalIds.value[0]);
+    }
+  }
+);
+
+watch(
+  () => form.limit_bon,
+  (value) => {
+    if (mode.value === 'create') {
+      form.sisa_bon = value || '';
+    }
+  }
+);
+
+onMounted(async () => {
+  await Promise.all([
+    loadMainFormOptions(),
+    load()
+  ]);
+  applyLoginBranchFilter();
+  syncFilterCompanyFromBranch(true);
+});
+</script>
+
+
+<template>
+  <div class="space-y-6">
+    <PageHeader title="Master Plafon">
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+          @click="load"
+        >
+          Refresh
+        </button>
+
+        <button
+          class="rounded-2xl bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+          @click="openCreate"
+        >
+          + Plafon
+        </button>
+      </div>
+    </PageHeader>
+
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <article
+        v-for="card in summaryCards"
+        :key="card.label"
+        class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"
+      >
+        <p class="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
+          {{ card.label }}
+        </p>
+
+        <p class="mt-3 text-2xl font-bold text-slate-950 dark:text-white">
+          {{ card.value }}
+        </p>
+      </article>
+    </section>
+
+    <section class="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-bold text-slate-950 dark:text-white">
+            Data Plafon
+          </h3>
+        </div>
+
+        <span class="rounded-full bg-brand-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+          {{ pagination.total || items.length }} Data
+        </span>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_1fr_auto_auto]">
+        <input
+          v-model="filters.search"
+          type="text"
+          placeholder="Cari kode, customer, principal..."
+          class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          @input="debouncedLoad"
+          @keyup.enter="load"
+        />
+
+        <AppSearchSelect
+          v-model="filters.id_cabang"
+          label="Cabang"
+          placeholder="Pilih cabang"
+          :options="branchOptions"
+          :disabled="!isSuperUser(authStore) && !!loginBranchId"
+          :empty-text="optionLoading.branches ? 'Memuat cabang...' : 'Cabang belum tersedia.'"
+        />
+
+        <AppSearchSelect
+          v-model="filters.id_perusahaan"
+          label="Perusahaan"
+          placeholder="Pilih perusahaan"
+          :options="filterCompanyOptions"
+          :disabled="!filters.id_cabang"
+          :empty-text="filters.id_cabang ? (optionLoading.companies ? 'Memuat perusahaan...' : 'Perusahaan belum tersedia.') : 'Pilih cabang terlebih dahulu.'"
+        />
+
+        <AppSearchSelect
+          v-model="filters.id_principal"
+          label="Principal"
+          placeholder="Semua principal"
+          :options="filterPrincipalOptions"
+          :disabled="!filters.id_perusahaan"
+          :empty-text="filters.id_perusahaan ? (optionLoading.principals ? 'Memuat principal...' : 'Principal belum tersedia.') : 'Pilih perusahaan terlebih dahulu.'"
+        />
+
+        <select
+          v-model.number="pagination.limit"
+          class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          @change="goToPage(1)"
+        >
+          <option :value="25">25</option>
+          <option :value="50">50</option>
+          <option :value="100">100</option>
+        </select>
+
+        <button
+          class="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700"
+          @click="load"
+        >
+          Cari
+        </button>
+      </div>
+
+      <section
+        v-if="error"
+        class="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+      >
+        {{ error }}
+      </section>
+
+      <section
+        v-if="lastDeletedRow"
+        class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+      >
+        Data terakhir dihapus: {{ lastDeletedRow.kode || '-' }}
+      </section>
+
+      <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+        <AppTable
+          :rows="tableRows"
+          :columns="[
+            { key: 'no', label: 'No' },
+            { key: 'kode', label: 'Kode' },
+            { key: 'nama_customer', label: 'Customer' },
+            { key: 'nama_principal', label: 'Principal' },
+            { key: 'kategori_izin_label', label: 'Izin' },
+            { key: 'limit_bon_label', label: 'Limit' },
+            { key: 'sisa_bon_label', label: 'Sisa' },
+            { key: 'minimal_order_label', label: 'Minimal Order' },
+            { key: 'sistem_pembayaran_label', label: 'Pembayaran' },
+            { key: 'tempo_display', label: 'Tempo' }
+          ]"
+          :loading="loading"
+          :paginated="false"
+          :clickable-rows="true"
+          row-key="row_key"
+          :selected-key="selectedRow?.id ? String(selectedRow.id) : ''"
+          empty-message="Belum ada data plafon."
+          @row-click="openEdit"
+        />
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          Halaman {{ pagination.page }}
+        </p>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            :disabled="!canGoPrev"
+            @click="goToPage(pagination.page - 1)"
+          >
+            Prev
+          </button>
+
+          <button
+            class="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            :disabled="!canGoNext"
+            @click="goToPage(pagination.page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <AppModal
+      :open="modalOpen"
+      :title="mode === 'create' ? 'Tambah Plafon' : 'Edit Plafon'"
+      size="6xl"
+      @close="closeModal"
+    >
+      <div class="space-y-5">
+        <section
+          v-if="mode === 'edit'"
+          class="rounded-3xl border border-brand-500/30 bg-brand-500/10 p-4 text-sm dark:border-brand-400/30 dark:bg-brand-400/10"
+        >
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600 dark:text-brand-300">
+            Customer Plafon Terpilih
+          </p>
+          <p class="mt-1 text-base font-bold text-slate-900 dark:text-white">
+            {{ selectedCustomerDisplay || 'Customer belum terbaca dari data plafon.' }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Info ini mengikuti baris plafon yang diklik, agar user tidak kehilangan konteks saat edit.
+          </p>
+        </section>
+
+        <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <AppSearchSelect
+            v-model="form.id_cabang"
+            label="Cabang"
+            placeholder="Pilih cabang"
+            :options="branchOptions"
+            :disabled="!isSuperUser(authStore) && !!loginBranchId"
+            :empty-text="optionLoading.branches ? 'Memuat cabang...' : 'Cabang belum tersedia.'"
+          />
+
+          <AppSearchSelect
+            v-model="form.id_perusahaan"
+            label="Perusahaan"
+            placeholder="Pilih perusahaan"
+            :options="formCompanyOptions"
+            :disabled="!form.id_cabang"
+            :empty-text="form.id_cabang ? (optionLoading.companies ? 'Memuat perusahaan...' : 'Perusahaan belum tersedia.') : 'Pilih cabang terlebih dahulu.'"
+          />
+
+          <AppSearchSelect
+            v-model="form.id_customer"
+            label="Customer"
+            placeholder="Pilih customer"
+            :options="customerOptions"
+            :display-value="mode === 'edit' ? selectedCustomerDisplay : ''"
+            :disabled="!form.id_cabang || !form.id_perusahaan"
+            :empty-text="optionLoading.customers ? 'Memuat customer...' : 'Customer belum tersedia.'"
+          />
+
+          <AppSearchSelect
+            v-model="form.id_sales"
+            label="Sales"
+            placeholder="Pilih sales"
+            :options="salesOptions"
+            :display-value="mode === 'edit' ? selectedSalesDisplay : ''"
+            :disabled="!form.id_cabang || !form.id_perusahaan"
+            :empty-text="optionLoading.sales ? 'Memuat sales...' : 'Sales belum tersedia.'"
+          />
+
+          <AppSearchSelect
+            v-if="mode === 'edit'"
+            v-model="form.id_principal"
+            label="Principal"
+            placeholder="Pilih principal"
+            :options="principalOptions"
+            :display-value="mode === 'edit' ? selectedPrincipalDisplay : ''"
+            :empty-text="optionLoading.principals ? 'Memuat principal...' : 'Principal belum tersedia.'"
+          />
+
+          <AppSearchSelect
+            v-model="form.id_user"
+            label="User"
+            placeholder="Pilih user"
+            :options="userOptions"
+            :display-value="mode === 'edit' ? selectedUserDisplay : ''"
+            :empty-text="optionLoading.users ? 'Memuat user...' : 'User belum tersedia.'"
+            @update:model-value="markUserAsManuallySelected"
+          />
+
+          <AppSearchSelect
+            v-model="form.id_tipe_harga"
+            label="Tipe Harga"
+            placeholder="Pilih tipe harga"
+            :options="priceTypeOptions"
+            :display-value="mode === 'edit' ? selectedPriceTypeDisplay : ''"
+            :empty-text="optionLoading.prices ? 'Memuat tipe harga...' : 'Tipe harga belum tersedia.'"
+          />
+
+          <label class="block">
+            <span class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Kode
+            </span>
+            <input
+              :value="form.kode"
+              readonly
+              class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            />
+          </label>
+
+          <AppFormField v-model="form.limit_bon" label="Limit Bon" type="number" />
+          <AppFormField v-model="form.sisa_bon" label="Sisa Bon" type="number" :readonly="mode === 'create'" />
+          <AppFormField v-model="form.minimal_order" label="Minimal Order" type="number" />
+          <AppFormField v-model="form.tempo" label="Tempo Pembayaran (hari)" type="number" />
+          <AppSearchSelect
+            v-model="form.sistem_pembayaran"
+            label="Sistem Pembayaran"
+            placeholder="Pilih sistem pembayaran"
+            :options="paymentSystemOptions"
+            empty-text="Sistem pembayaran belum tersedia."
+          />
+          <AppSearchSelect
+            v-model="form.lock_order"
+            label="Lock Order"
+            placeholder="Pilih status lock order"
+            :options="lockOrderOptions"
+            empty-text="Status lock belum tersedia."
+          />
+          <label class="block">
+            <span class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Kategori Izin A-Z
+            </span>
+            <input
+              v-model="form.kategori_izin"
+              maxlength="26"
+              placeholder="Contoh: AB"
+              class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              @input="form.kategori_izin = normalizeCategoryLetters(form.kategori_izin)"
+            />
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Kosong berarti semua tipe customer diizinkan untuk principal ini.
+            </p>
+          </label>
+        </section>
+
+        <section
+          v-if="mode === 'create'"
+          class="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <p class="text-sm font-bold text-slate-900 dark:text-white">
+              Principal
+            </p>
+            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {{ createPrincipalIds.length }} dipilih
+            </span>
+          </div>
+
+          <div class="grid max-h-72 gap-2 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
+            <label
+              v-for="option in principalOptions"
+              :key="option.value"
+              class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 hover:border-brand-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            >
+              <input
+                :checked="createPrincipalIds.includes(String(option.value))"
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                @change="toggleCreatePrincipal(option.value)"
+              >
+              <span>{{ option.label }}</span>
+            </label>
+          </div>
+
+          <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            {{ selectedCreatePrincipalSummary }}
+          </p>
+        </section>
+
+        <section
+          v-if="branchStatus"
+          class="rounded-2xl px-4 py-3 text-sm"
+          :class="
+            branchStatus.type === 'danger'
+              ? 'border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
+              : 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+          "
+        >
+          {{ branchStatus.text }}
+        </section>
+
+        <div
+          v-if="feedback"
+          class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+        >
+          {{ feedback }}
+        </div>
+
+        <div
+          v-if="actionError"
+          class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          {{ actionError }}
+        </div>
+
+        <div class="sticky bottom-0 -mx-6 flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-950">
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="rounded-2xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              :disabled="saving"
+              @click="save"
+            >
+              {{ saving ? 'Menyimpan...' : mode === 'create' ? 'Simpan' : 'Update' }}
+            </button>
+
+            <button
+              v-if="mode === 'edit'"
+              class="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+              :disabled="saving"
+              @click="openSchedules(selectedRow)"
+            >
+              Jadwal
+            </button>
+          </div>
+
+          <button
+            v-if="mode === 'edit'"
+            class="rounded-2xl border border-rose-200 bg-white px-5 py-2.5 text-sm font-bold text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-slate-950 dark:text-rose-300"
+            :disabled="deleting"
+            @click="remove"
+          >
+            {{ deleting ? 'Menghapus...' : 'Hapus' }}
+          </button>
+        </div>
+      </div>
+    </AppModal>
+
+    <AppModal
+      :open="scheduleListModalOpen"
+      :title="selectedRow?.kode ? `Jadwal Plafon: ${selectedRow.kode}` : 'Jadwal Plafon'"
+      size="4xl"
+      @close="scheduleListModalOpen = false"
+    >
+      <div class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="font-bold text-slate-950 dark:text-white">
+              {{ selectedRow?.nama_customer || '-' }}
+            </p>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {{ selectedRow?.nama_principal || '-' }}
+            </p>
+          </div>
+
+          <button
+            class="rounded-2xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
+            @click="openCreateSchedule"
+          >
+            + Jadwal
+          </button>
+        </div>
+
+        <div
+          v-if="scheduleFeedback"
+          class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+        >
+          {{ scheduleFeedback }}
+        </div>
+
+        <div
+          v-if="scheduleError"
+          class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          {{ scheduleError }}
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+          <AppTable
+            :rows="scheduleTableRows"
+            :columns="[
+              { key: 'tipe_label', label: 'Tipe' },
+              { key: 'hari_label', label: 'Hari' },
+              { key: 'minggu_label', label: 'Minggu' },
+              { key: 'status_label', label: 'Status' }
+            ]"
+            :loading="scheduleLoading"
+            :clickable-rows="true"
+            empty-message="Belum ada jadwal."
+            @row-click="openEditSchedule"
+          />
+        </div>
+      </div>
+    </AppModal>
+
+    <AppModal
+      :open="scheduleModalOpen"
+      :title="scheduleMode === 'create' ? 'Tambah Jadwal' : 'Edit Jadwal'"
+      size="xl"
+      @close="closeScheduleModal"
+    >
+      <div class="space-y-4">
+        <div class="grid gap-4 md:grid-cols-2">
+          <AppSearchSelect
+            v-model="scheduleForm.id_tipe_kunjungan"
+            label="Tipe Kunjungan"
+            placeholder="Pilih tipe kunjungan"
+            :options="visitTypeOptions"
+          />
+
+          <AppSearchSelect
+            v-model="scheduleForm.id_hari"
+            label="Hari"
+            placeholder="Pilih hari"
+            :options="dayOptions"
+          />
+
+          <AppSearchSelect
+            v-model="scheduleForm.id_minggu"
+            label="Minggu"
+            placeholder="Pilih minggu"
+            :options="weekOptions"
+          />
+
+          <AppSearchSelect
+            v-model="scheduleForm.id_status"
+            label="Status"
+            placeholder="Pilih status"
+            :options="scheduleStatusOptions"
+            empty-text="Status belum tersedia."
+          />
+        </div>
+
+        <div class="flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <button
+            class="rounded-2xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            :disabled="scheduleSaving"
+            @click="saveSchedule"
+          >
+            {{ scheduleSaving ? 'Menyimpan...' : scheduleMode === 'create' ? 'Simpan' : 'Update' }}
+          </button>
+
+          <button
+            v-if="scheduleMode === 'edit'"
+            class="rounded-2xl border border-rose-200 bg-white px-5 py-2.5 text-sm font-bold text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-slate-950 dark:text-rose-300"
+            :disabled="scheduleDeleting"
+            @click="removeSchedule"
+          >
+            {{ scheduleDeleting ? 'Menghapus...' : 'Hapus' }}
+          </button>
+        </div>
+      </div>
+    </AppModal>
+  </div>
+</template>

@@ -1,0 +1,16 @@
+{
+  "scope_name": "solo_bmm_et_sales_017",
+  "branch": {
+    "id_cabang": 5,
+    "kode_cabang": "SLO",
+    "area_codes": ["SLS", "SLU", "KTS", "SKH", "KRA", "BYL", "SRG", "GML"]
+  },
+  "company": {
+    "id_perusahaan": 1,
+    "kode_perusahaan": "BMM",
+    "principal_codes": ["ET"]
+  },
+  "sales_codes": ["017"],
+  "include_inactive": false,
+  "notes": "Scope UAT kecil: cabang SOLO, perusahaan BMM, principal ET/ENERGIZER, sales lama kode 017."
+}

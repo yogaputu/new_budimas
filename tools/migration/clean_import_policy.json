@@ -1,0 +1,56 @@
+{
+  "policy_id": "clean_bdm_tmp_solo_bluegreen_20260902",
+  "purpose": "Source-qualified clean re-import from frozen BDM Solo and TMP Solo snapshots into a parallel PostgreSQL database.",
+  "default_action": "hold_on_any_ambiguity",
+  "target": {
+    "database_must_be_explicit_and_not_production": true,
+    "erp_schema": "public",
+    "registry_schema": "migration_clean_bdm_tmp_202609"
+  },
+  "sources": {
+    "bdm_solo_dist": {
+      "staging_schema": "legacy_bdm_solo_final_freeze_20260830",
+      "company_code": "BMM",
+      "branch_code": "SLO",
+      "document_prefix": "BDM-SLO/"
+    },
+    "tmp_solo_dist": {
+      "staging_schema": "legacy_tmp_solo_final_freeze_20260830",
+      "company_code": "TMP",
+      "branch_code": "SLO",
+      "document_prefix": "TMP-SLO/"
+    }
+  },
+  "context_resolution": {
+    "company_lookup": "public.perusahaan.kode",
+    "branch_lookup": "public.cabang.kode",
+    "company_branch_lookup": "public.perusahaan_cabang(id_perusahaan, id_cabang)",
+    "rule": "Resolve the company and branch codes independently, then require exactly one perusahaan_cabang pair. Never hard-code numeric IDs or infer ownership from cabang.id_perusahaan."
+  },
+  "master_rules": {
+    "principal": "Create source-owned rows per source_system and company; never globally merge by code or name.",
+    "customer": {
+      "load_order": ["tmp_solo_dist", "bdm_solo_dist"],
+      "bdm_share_tmp_only_when": "normalized source customer code and normalized store name both match exactly",
+      "otherwise": "create a BDM source-owned customer; if global code uniqueness requires it, use a deterministic source prefix in the target display code",
+      "prohibited": ["nearest-name matching", "MIN(id)", "fallback to similar customer"]
+    },
+    "sales": "Key by source_system + source principal code + source sales code.",
+    "product": "Key by source_system + source principal code + source SKU.",
+    "uom": "Any base source UOM whose code/name is verified in frozen BarangSatuan is level 1/factor 1. A distinct verified outer source UOM is level 2 only when PerUnit is greater than 1. No PCS/CT semantic conversion is assumed; level 3 is allowed only with a complete verified factor chain.",
+    "plafon": "Use the latest source TglAdd only when values at the latest timestamp are consistent; otherwise write an import hold."
+  },
+  "sales_phase_one": {
+    "canonical_header_table": "hjualsm",
+    "canonical_detail_table": "djualsm",
+    "hold_tables": ["hjualsmandroid", "djualsmandroid"],
+    "document_number": "{document_prefix}{source_nota}",
+    "atomic_targets": ["sales_order", "faktur", "faktur_detail", "sales_order_detail", "source-qualified document and line maps"],
+    "quantity_invariant": "jumlah_pcs = unit * per_unit + satuan",
+    "excluded_until_reconciled": ["inventory_ledger", "HPP", "picking", "shipping", "manifest", "payments", "returns", "cash/journal", "live AR balance"]
+  },
+  "verification": {
+    "required": ["source snapshot hash", "1:1 source/target map", "UOM composition and source-base quantity invariant", "header/detail counts", "money totals", "faktur_detail existence", "FK/trigger/index/sequence audit", "hold export"],
+    "cutover_preconditions": ["validated production backup", "successful blue-green UAT", "opening stock/HPP/AR strategy approved", "short application/API/worker freeze", "reversible connection switch"]
+  }
+}

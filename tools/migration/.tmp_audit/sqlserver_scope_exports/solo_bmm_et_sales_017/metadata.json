@@ -1,0 +1,27 @@
+﻿{
+    "scope_name":  "solo_bmm_et_sales_017",
+    "source_server":  "192.168.1.8,1433",
+    "source_database":  "DIST",
+    "id_cabang":  5,
+    "kode_cabang":  "SLO",
+    "area_codes":  [
+                       "SLS",
+                       "SLU",
+                       "KTS",
+                       "SKH",
+                       "KRA",
+                       "BYL",
+                       "SRG",
+                       "GML"
+                   ],
+    "id_perusahaan":  1,
+    "kode_perusahaan":  "BMM",
+    "principal_codes":  [
+                            "ET"
+                        ],
+    "sales_codes":  [
+                        "017"
+                    ],
+    "include_inactive":  false,
+    "exported_at":  "2026-05-15T11:02:06"
+}

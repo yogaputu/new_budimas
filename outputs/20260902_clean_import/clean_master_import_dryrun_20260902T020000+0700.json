@@ -1,0 +1,315 @@
+{
+  "actions": {
+    "customers": {
+      "bdm_created": 0,
+      "bdm_shared_exact": 0,
+      "tmp_created": 0,
+      "total": 0
+    },
+    "plafon_latest_candidates": 0,
+    "prices": 0,
+    "principals": 63,
+    "product_uoms": 0,
+    "products": 0,
+    "sales_users": 0
+  },
+  "holds": {
+    "by_reason": {
+      "customer_price_tax_policy_missing": 43262,
+      "plafon_customer_not_planned": 31471,
+      "plafon_source_key_blank": 5560,
+      "principal_phone_too_long": 3,
+      "product_principal_not_planned": 730,
+      "product_required_source_value_blank": 78,
+      "product_tax_policy_missing": 20723,
+      "sales_source_key_blank": 42,
+      "sales_user_policy_missing": 480
+    },
+    "examples": [
+      {
+        "details": {
+          "actual_length": 19,
+          "max_length": 13,
+          "target_column": "telepon"
+        },
+        "reason": "principal_phone_too_long",
+        "source_system": "bdm_solo_dist",
+        "source_table": "principle",
+        "staging_id": 3
+      },
+      {
+        "details": {
+          "actual_length": 18,
+          "max_length": 13,
+          "target_column": "telepon"
+        },
+        "reason": "principal_phone_too_long",
+        "source_system": "tmp_solo_dist",
+        "source_table": "principle",
+        "staging_id": 5
+      },
+      {
+        "details": {
+          "actual_length": 14,
+          "max_length": 13,
+          "target_column": "telepon"
+        },
+        "reason": "principal_phone_too_long",
+        "source_system": "tmp_solo_dist",
+        "source_table": "principle",
+        "staging_id": 14
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3875
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3876
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3877
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3878
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 988
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 989
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 990
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 991
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 992
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 993
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3879
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3880
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3881
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3882
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2269
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2270
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2271
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2272
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2273
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 2274
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3883
+      },
+      {
+        "details": {
+          "required": "--customer-pricing-tax-policy-json"
+        },
+        "reason": "customer_price_tax_policy_missing",
+        "source_system": "tmp_solo_dist",
+        "source_table": "customer",
+        "staging_id": 3884
+      }
+    ],
+    "total": 102349
+  },
+  "mode": "APPLY_ELIGIBLE",
+  "notes": [],
+  "pipeline_version": "clean-master-importer-20260902.1",
+  "policy_sha256": "d29f7b06fcf7397f16538a51099e0ee4fb641065bdfb0fde65dfb609c62a27f7",
+  "stages": {
+    "bdm_solo_dist": {
+      "consistency_mode": "maintenance_freeze_serializable",
+      "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+      "run_id": 1,
+      "schema": "legacy_bdm_solo_final_freeze_20260830",
+      "snapshot_label": "legacy_bdm_solo_final_freeze_20260830:run-1",
+      "snapshot_sha256": "3f532b527b180dfaf3551f14839aa6f7bafc16439173808cab432d73dc0e0453",
+      "table_counts": {
+        "barangsatuan": 28,
+        "customer": 25550,
+        "plafon": 17762,
+        "principle": 41,
+        "sales": 188,
+        "stok": 11812
+      }
+    },
+    "tmp_solo_dist": {
+      "consistency_mode": "maintenance_freeze_serializable",
+      "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+      "run_id": 1,
+      "schema": "legacy_tmp_solo_final_freeze_20260830",
+      "snapshot_label": "legacy_tmp_solo_final_freeze_20260830:run-1",
+      "snapshot_sha256": "1367fe665ee554b0310ca67199cc95f7e1ecac9a598b7e442142a8ab3d89347d",
+      "table_counts": {
+        "barangsatuan": 26,
+        "customer": 17712,
+        "plafon": 19269,
+        "principle": 25,
+        "sales": 334,
+        "stok": 9719
+      }
+    }
+  },
+  "structural_blockers": [],
+  "target_database": "budimas_clean_20260902",
+  "target_source_owned_master_counts": {
+    "customer": 0,
+    "plafon": 0,
+    "principal": 0,
+    "produk": 0,
+    "produk_harga_jual": 0,
+    "produk_uom": 0,
+    "sales": 0,
+    "sales_detail": 0,
+    "sales_principal_assignment": 0,
+    "users": 0
+  }
+}

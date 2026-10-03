@@ -1,0 +1,12 @@
+{
+  "policy_id": "approved_product_price_bdm_tmp_20260902",
+  "approval_status": "approved",
+  "approval_reference": "User approval in Codex task on 2026-09-02.",
+  "source_price_columns": {
+    "hargaa": "MT",
+    "hargab": "GT",
+    "hargac": "EU",
+    "hargad": "KA",
+    "hargae": "WS"
+  }
+}

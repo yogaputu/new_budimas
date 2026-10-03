@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026_smoke"."ZTagTO" ("Nota", "Tanggal", "TanggalTagih", "NotaJual", "Outlet", "Area", "TglNota", "TglKirim", "TglJatuhTempo", "Tagihan", "Urut", "KodeCustomer", "Nama", "NoRetur", "NilaiRetur", "Operator") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-215805/ZTagTO.csv' WITH (FORMAT csv, HEADER true, NULL '')

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang='id'>
+<head>
+<meta charset='utf-8'>
+<title>Panduan Penggunaan Budimas ERP</title>
+<style>
+@page { size: A4; margin: 14mm 13mm 16mm 13mm; }
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; color:#172033; background:#fff; font-size: 10.4pt; line-height:1.5; }
+h1,h2,h3 { color:#0f2b4d; margin:0 0 8px; line-height:1.2; }
+h1 { font-size:30pt; letter-spacing:-.8px; }
+h2 { font-size:18pt; margin-top:26px; padding-bottom:6px; border-bottom:2px solid #dbe7f4; page-break-after: avoid; }
+h3 { font-size:13pt; margin-top:16px; color:#17406f; page-break-after: avoid; }
+p { margin: 5px 0 9px; }
+ul,ol { margin:7px 0 10px 18px; padding:0; }
+li { margin:3px 0; }
+code { background:#edf3fb; color:#0f3764; padding:1px 5px; border-radius:5px; font-size:9pt; }
+table { width:100%; border-collapse:collapse; margin:10px 0 18px; page-break-inside:auto; }
+th { background:#163b63; color:#fff; text-align:left; font-size:8.6pt; padding:7px; }
+td { border:1px solid #d6e1ee; padding:6px 7px; vertical-align:top; font-size:8.6pt; }
+tr:nth-child(even) td { background:#f7faff; }
+.cover { min-height: 250mm; display:flex; flex-direction:column; justify-content:center; background:linear-gradient(135deg,#0b1b33,#145a9e); color:#fff; margin:-14mm -13mm 18mm; padding:35mm 24mm; }
+.cover h1,.cover h2,.cover p { color:#fff; border:0; }
+.cover .badge { display:inline-block; width:max-content; border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:6px 12px; margin-bottom:20px; color:#d7eeff; }
+.cover .meta { margin-top:24px; color:#c4dbef; }
+.pagebreak { page-break-before: always; }
+.grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:10px 0 16px; }
+.stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:12px 0 20px; }
+.stat { border:1px solid #d6e3f0; border-radius:12px; padding:10px; background:#f8fbff; min-height:58px; }
+.stat small { display:block; color:#65758a; text-transform:uppercase; letter-spacing:.08em; font-size:7.8pt; }
+.stat strong { display:block; font-size:17pt; color:#0b3768; margin-top:5px; }
+.callout { border-left:5px solid #2e7dd1; background:#f1f7ff; padding:10px 12px; border-radius:8px; margin:12px 0; }
+.warn { border-left-color:#e39a13; background:#fff8eb; }
+.ok { border-left-color:#2e9d61; background:#effaf4; }
+.flow { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 14px; }
+.step { border:1px solid #d8e4ef; border-radius:12px; padding:9px; background:#ffffff; min-height:72px; }
+.step b { color:#0f3d6c; display:block; margin-bottom:4px; }
+.module { page-break-inside:avoid; border:1px solid #d9e4ef; border-radius:12px; padding:12px; margin:10px 0; background:#fbfdff; }
+.module ul { columns:2; }
+.small { font-size:8.8pt; color:#66758a; }
+.footer-note { color:#66758a; font-size:8.8pt; }
+</style>
+</head>
+<body>
+<section class='cover'>
+  <span class='badge'>Budimas ERP ? Dokumentasi Operasional</span>
+  <h1>Panduan Penggunaan Aplikasi dari Awal sampai Akhir</h1>
+  <p>Dokumen ini dibuat dari struktur menu aplikasi dan data role/user yang ada di database lokal. Fokusnya adalah alur kerja user, urutan input yang benar, serta hubungan antar modul agar tim bisa menjalankan UAT dan training dengan rapi.</p>
+  <p class='meta'>Dibuat otomatis: 23 May 2026 21:03 WIB<br>Workspace: new_budimas + API Budimas</p>
+</section>
+
+<h2>1. Ringkasan Sistem</h2>
+<p>Budimas ERP menggabungkan master data, distribusi, sales order, sales canvas, finance/accounting, purchase, promo, stok, supervisor sales, import data, dan AI assistant dalam satu aplikasi web. Akses menu dikontrol oleh <b>jabatan/role</b>, <b>fitur permission</b>, dan scope data user seperti cabang/perusahaan.</p>
+<div class='stats'><div class='stat'><small>Users</small><strong>398</strong></div><div class='stat'><small>Jabatan/Role</small><strong>22</strong></div><div class='stat'><small>Fitur Permission</small><strong>816</strong></div><div class='stat'><small>Akses Jabatan</small><strong>968</strong></div><div class='stat'><small>Akses User Khusus</small><strong>845</strong></div><div class='stat'><small>Cabang</small><strong>4</strong></div><div class='stat'><small>Perusahaan</small><strong>7</strong></div><div class='stat'><small>Principal</small><strong>49</strong></div><div class='stat'><small>Customer</small><strong>22952</strong></div><div class='stat'><small>Produk</small><strong>6941</strong></div></div>
+<div class='callout ok'><b>Prinsip penting:</b> user biasa bekerja dalam scope cabang/perusahaan yang ditentukan pada master user. Super User atau Admin IT dapat melihat data lebih luas sesuai permission yang diberikan.</div>
+
+<h2>2. Login, Hak Akses, dan Scope Data</h2>
+<h3>2.1 Login</h3>
+<ol>
+<li>Buka aplikasi Budimas ERP melalui URL frontend yang dipakai tim.</li>
+<li>Masukkan username dan password user.</li>
+<li>Setelah login, sidebar hanya menampilkan menu yang boleh dilihat oleh role/user tersebut.</li>
+<li>Jika menu tidak muncul, cek permission di <b>Akses &gt; Fitur User</b> atau <b>Akses &gt; Fitur Jabatan</b>.</li>
+</ol>
+<h3>2.2 Role dari Database</h3>
+<table><thead><tr><th>ID</th><th>Kode</th><th>Jabatan</th><th>Departemen</th><th>Jumlah User</th><th>Jumlah Fitur</th></tr></thead><tbody><tr><td>2</td><td>A.IT</td><td>ADMIN IT</td><td>-</td><td>1207</td><td>1207</td></tr><tr><td>3</td><td>A.KOR</td><td>ADMIN KOORDINATOR</td><td>-</td><td>12</td><td>12</td></tr><tr><td>4</td><td>SLS</td><td>SALES</td><td>Sales</td><td>4356</td><td>4356</td></tr><tr><td>5</td><td>A.CAB</td><td>ADMIN CABANG</td><td>-</td><td>528</td><td>528</td></tr><tr><td>6</td><td>DRV</td><td>DRIVER</td><td>-</td><td>117</td><td>117</td></tr><tr><td>7</td><td>SPV</td><td>SPV</td><td>-</td><td>700</td><td>700</td></tr><tr><td>8</td><td>A.DELIV</td><td>ADMIN DELIVERY</td><td>-</td><td>1</td><td>0</td></tr><tr><td>9</td><td>A.GUD</td><td>ADMIN GUDANG</td><td>-</td><td>14</td><td>0</td></tr><tr><td>10</td><td>K.GUD</td><td>KEPALA GUDANG</td><td>-</td><td>50</td><td>50</td></tr><tr><td>11</td><td>S.U</td><td>SUPER USER</td><td>-</td><td>3700</td><td>3700</td></tr><tr><td>12</td><td>A. PIC</td><td>ADMIN PICKING</td><td>-</td><td>0</td><td>0</td></tr><tr><td>13</td><td>A. SHIP</td><td>ADMIN SHIPPING</td><td>-</td><td>0</td><td>0</td></tr><tr><td>14</td><td>A. DRIV</td><td>ADMIN DRIVER</td><td>-</td><td>0</td><td>0</td></tr><tr><td>15</td><td>A. PIU</td><td>ADMIN PIUTANG</td><td>-</td><td>3</td><td>3</td></tr><tr><td>16</td><td>KSR</td><td>KASIR</td><td>-</td><td>9</td><td>9</td></tr><tr><td>17</td><td>A. AKUN</td><td>ADMIN ACCOUNTING</td><td>-</td><td>16</td><td>16</td></tr><tr><td>18</td><td>A. HUT</td><td>ADMIN HUTANG</td><td>-</td><td>3</td><td>0</td></tr><tr><td>19</td><td>A. KLA</td><td>ADMIN KLAIM</td><td>-</td><td>3</td><td>0</td></tr><tr><td>20</td><td>K. FAK</td><td>KOORDINATOR FAKTURIS</td><td>-</td><td>8</td><td>8</td></tr><tr><td>21</td><td>A. FAK</td><td>ADMIN FAKTURIS</td><td>-</td><td>18</td><td>18</td></tr><tr><td>22</td><td>S.CVS</td><td>SALES CANVAS</td><td>-</td><td>10</td><td>10</td></tr><tr><td>23</td><td>HLP</td><td>Helper</td><td>Warehouse</td><td>1</td><td>0</td></tr></tbody></table>
+<h3>2.3 Contoh User dan Scope</h3>
+<p class='small'>Kolom password, token, dan data rahasia tidak ditampilkan dalam dokumen ini.</p>
+<table><thead><tr><th>ID</th><th>Nama</th><th>Username</th><th>Jabatan</th><th>Cabang</th><th>Perusahaan</th></tr></thead><tbody><tr><td>1</td><td>Admin IT 1</td><td>adminit1</td><td>SUPER USER</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>4</td><td>Test Admin Koor 1</td><td>adminkoor1</td><td>ADMIN KOORDINATOR</td><td>-</td><td>-</td></tr><tr><td>11</td><td>Test Kepala Cabang 1</td><td>kepalacabang1</td><td>-</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>15</td><td>Test Admin Cabang 1</td><td>admincabang1</td><td>ADMIN CABANG</td><td>-</td><td>-</td></tr><tr><td>16</td><td>Test Driver 1</td><td>Driver</td><td>DRIVER</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>18</td><td>TEST</td><td>test</td><td>ADMIN CABANG</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>54</td><td>SANDRA MEGA BUDIYANTO</td><td>sandra</td><td>SUPER USER</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>56</td><td>Fuds ma</td><td>Fudsma</td><td>ADMIN CABANG</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>57</td><td>E</td><td>E</td><td>ADMIN IT</td><td>WNG - WONOGIRI</td><td>-</td></tr><tr><td>60</td><td>MAHFUD</td><td>MAHFUD</td><td>ADMIN CABANG</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>62</td><td>ROHMADI</td><td>ROHMADI</td><td>-</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>63</td><td>ROHMADI</td><td>ROHMADI</td><td>ADMIN CABANG</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>64</td><td>ROHMADI</td><td>ROHMADI</td><td>-</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>65</td><td>Santi Anggraeni</td><td>SANTI</td><td>ADMIN CABANG</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>84</td><td>HORUS DEV 1</td><td>horusdev1</td><td>ADMIN IT</td><td>-</td><td>-</td></tr><tr><td>85</td><td>BoySolo2</td><td>boysolo2</td><td>ADMIN IT</td><td>KLT - KLATEN</td><td>-</td></tr><tr><td>87</td><td>Juliana Budiyanto</td><td>JB89</td><td>ADMIN IT</td><td>-</td><td>-</td></tr><tr><td>89</td><td>Test Sales</td><td>test_sales</td><td>SALES CANVAS</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>112</td><td>LINE 2 SHICK: NONO S</td><td>sales_23</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>119</td><td>HENDRO COLEKTOR</td><td>sales_30</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>127</td><td>BAMBANG BUDIONO</td><td>sales_38</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>140</td><td>KKINO PC2 SASHA:AGUS .S</td><td>sales_51</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>141</td><td>UDIN BLUE GAS</td><td>sales_52</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>142</td><td>WISMAN BLUE GAS</td><td>sales_53</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>146</td><td>LINE 01 MIX2 :SUGIYARTI</td><td>sales_57</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>147</td><td>CASTOMO PRINC KINO</td><td>sales_58</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>148</td><td>AGUS MURANTO SPV MIX</td><td>sales_59</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>179</td><td>SUGIYARTI</td><td>sales_90</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>216</td><td>LINE 1 ET : SEPTIYANI DU</td><td>septiyani sales</td><td>SALES</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>217</td><td>LINE 2 ET : YOHAN TRI YULIANTO</td><td>yohan sales</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>218</td><td>LINE 3 ET : RAHMAWATI</td><td>rahmawati sales</td><td>SALES</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>219</td><td>LINE 4 ET : AGUS RIYADI</td><td>agus sales</td><td>SALES</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>220</td><td>INDRA LESMANA PRINC ET</td><td>sales_131</td><td>SALES</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>228</td><td>HARNO SPV POKANA</td><td>sales_139</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>259</td><td>HARSONO PRINC GODREJ</td><td>sales_170</td><td>SALES</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>263</td><td>test spv</td><td>Test Spv</td><td>SPV</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>264</td><td>test admin delivery</td><td>Test Admin Delivery</td><td>ADMIN DELIVERY</td><td>SLO - SOLO</td><td>-</td></tr><tr><td>265</td><td>test kepala gudang</td><td>Test Kepala Gudang</td><td>KEPALA GUDANG</td><td>SLO - SOLO</td><td>BMM - PT Budimas Makmur Mulia</td></tr><tr><td>266</td><td>testspvwonogiri</td><td>spv wonogiri</td><td>SPV</td><td>WNG - WONOGIRI</td><td>-</td></tr><tr><td>267</td><td>testadmingudangwonogiri</td><td>admin gudang wonogiri</td><td>ADMIN GUDANG</td><td>WNG - WONOGIRI</td><td>-</td></tr></tbody></table>
+<h3>2.4 Aturan Filter Umum</h3>
+<div class='flow'>
+<div class='step'><b>1. Pilih Cabang</b>Cabang menjadi scope awal daftar perusahaan, sales, customer, stok, dan transaksi.</div>
+<div class='step'><b>2. Pilih Perusahaan</b>Perusahaan difilter berdasarkan cabang dan dipakai untuk principal, produk, COA, dan laporan.</div>
+<div class='step'><b>3. Pilih Principal/Sales</b>Principal atau sales muncul sesuai cabang dan perusahaan terpilih.</div>
+<div class='step'><b>4. Muat Data</b>Gunakan tombol Terapkan/Muat Data jika halaman membutuhkan refresh manual.</div>
+</div>
+<div class='callout warn'>Jika user non-superadmin tidak melihat pilihan cabang/perusahaan, cek master user: <code>id_cabang</code>, <code>id_perusahaan</code>, role, dan permission menu.</div>
+
+<h2>3. Persiapan Awal Master Data</h2>
+<p>Sebelum transaksi berjalan, master data harus disiapkan berurutan. Urutan ini menghindari error relasi seperti customer tidak ditemukan, produk tanpa UOM, atau plafon tanpa sales/principal.</p>
+<ol>
+<li><b>Cabang dan Perusahaan:</b> buat cabang operasional dan perusahaan yang menaungi transaksi.</li>
+<li><b>Principal:</b> hubungkan principal ke perusahaan, lalu gunakan principal sebagai filter produk, plafon, purchase, promo, dan laporan.</li>
+<li><b>Produk:</b> lengkapi kode/SKU, brand, subbrand, kategori, master PPN, UOM, harga per tipe harga, mapping kode eksternal jika dibutuhkan import.</li>
+<li><b>Customer:</b> isi kode customer, cabang, tipe customer, wilayah, route, NPWP bila dipakai pajak.</li>
+<li><b>Sales dan User:</b> sales mengambil referensi user dengan jabatan sales/canvas. Pastikan cabang dan perusahaan user sesuai.</li>
+<li><b>Plafon:</b> mengikat customer, sales, principal, tipe harga, limit bon, TOP, dan jadwal callplan.</li>
+<li><b>Armada/Driver/Helper:</b> dibutuhkan untuk picking, jadwal armada, shipping, dan tracking distribusi.</li>
+<li><b>COA dan Jurnal Setting:</b> wajib disiapkan sebelum transaksi otomatis masuk jurnal.</li>
+</ol>
+<h3>Cabang Aktif</h3>
+<table><thead><tr><th>ID</th><th>Kode</th><th>Nama Cabang</th></tr></thead><tbody><tr><td>5</td><td>SLO</td><td>SOLO</td></tr><tr><td>6</td><td>WNG</td><td>WONOGIRI</td></tr><tr><td>7</td><td>KLT</td><td>KLATEN</td></tr><tr><td>14</td><td>SLG</td><td>SALATIGA</td></tr></tbody></table>
+<h3>Perusahaan</h3>
+<table><thead><tr><th>ID</th><th>Kode</th><th>Nama Perusahaan</th></tr></thead><tbody><tr><td>1</td><td>BMM</td><td>PT Budimas Makmur Mulia</td></tr><tr><td>2</td><td>TMP</td><td>PT TIGA MUTIARA PRIMA</td></tr><tr><td>3</td><td>MPM</td><td>PT Merpati Putih Mulia</td></tr><tr><td>6</td><td>-</td><td>TEST HORUS PT</td></tr><tr><td>7</td><td>-</td><td>TEST HORUS PT 2</td></tr><tr><td>8</td><td>-</td><td>BUDIMAS TEST</td></tr><tr><td>9</td><td>-</td><td>TIGA MUTIARA TEST</td></tr></tbody></table>
+
+<h2>4. Alur Sales Order End-to-End</h2>
+<div class='flow'>
+<div class='step'><b>Input Order</b>Pilih cabang, perusahaan, sales, customer/plafon, principal, produk, UOM, promo/manual discount.</div>
+<div class='step'><b>Verifikasi</b>Admin memeriksa stok, harga, PPN, diskon, limit, dan meloloskan order ke distribusi.</div>
+<div class='step'><b>Picking & Jadwal</b>Gudang melakukan picking, armada/driver/helper dijadwalkan, lalu faktur shipping/realisasi dibuat.</div>
+<div class='step'><b>Invoice & Pembayaran</b>Invoice masuk finance, pembayaran dicatat, setoran direkap, jurnal terbentuk.</div>
+</div>
+<h3>4.1 Input Order</h3>
+<ul>
+<li>Masuk <b>Distribusi &gt; Input Order</b>.</li>
+<li>Ikuti filter Cabang ? Perusahaan ? Sales ? Customer/Plafon ? Principal.</li>
+<li>Pilih produk. UOM yang kosong/0 dinonaktifkan untuk mengurangi salah input.</li>
+<li>Produk boleh dipesan melebihi stok, tetapi aplikasi memberi notifikasi stok kurang. Pengurangan stok terjadi saat verifikasi/picking sesuai flow.</li>
+<li>PPN diambil dari master produk/master PPN. Jika produk belum punya PPN, user mendapat notifikasi agar data produk diperbaiki.</li>
+<li>Diskon manual dapat berupa persen atau nominal. Promo all-in baru dipakai saat order, bukan saat pembayaran.</li>
+</ul>
+<h3>4.2 Verifikasi dan Distribusi</h3>
+<ul>
+<li>Menu <b>Order Sales</b> dan <b>Order</b> dipakai memantau status order.</li>
+<li><b>Picking</b> memproses barang siap kirim.</li>
+<li><b>Jadwal Armada</b> memilih armada, driver, helper, tanggal kirim.</li>
+<li><b>Detail Faktur</b> dan <b>Invoice Sales</b> memantau faktur dan nilai tagihan.</li>
+</ul>
+<h3>4.3 Retur, Credit Note, dan Refund</h3>
+<ul>
+<li>Retur dimulai dari <b>Retur Sales</b> atau <b>Tracking Retur</b>.</li>
+<li>Retur yang disetujui menghasilkan Credit Note.</li>
+<li>Credit Note dapat dipakai untuk pelunasan piutang berikutnya atau diproses refund jika uang dikembalikan.</li>
+<li>Refund CN dicatat di Finance &gt; Credit Note dan perlu jurnal uang keluar sesuai setting COA.</li>
+</ul>
+
+<h2>5. Sales Canvas</h2>
+<p>Sales Canvas berbeda dari sales order reguler karena stok dibawa oleh motoris/canvas. Flow utamanya adalah request stok, approval, order canvas tunai, pembayaran/setoran, dan retur stok yang tidak laku.</p>
+<div class='flow'>
+<div class='step'><b>Canvas Request</b>Sales canvas meminta barang, bisa lebih dari satu produk.</div>
+<div class='step'><b>Approval & Stok</b>Request approved menjadi stok canvas sales.</div>
+<div class='step'><b>Canvas Order</b>Order hanya memakai barang dari request approved/stok canvas.</div>
+<div class='step'><b>Payment/Retur</b>Tagihan canvas dibayar tunai/non tunai; stok sisa diretur ke gudang.</div>
+</div>
+<ul>
+<li><b>Canvas Request:</b> filter Cabang ? Perusahaan ? Principal ? Sales Canvas, lalu tambah request produk.</li>
+<li><b>Canvas Order:</b> pilih request approved, gunakan search barang jika produk yang dibawa banyak, masukkan qty order per produk.</li>
+<li><b>Tagihan Canvas:</b> memproses pembayaran dan cetak bukti bayar jika tersedia.</li>
+<li><b>Rekap Pembayaran:</b> rekap setoran canvas per sales/periode.</li>
+<li><b>Retur Canvas:</b> pilih stok canvas yang dikembalikan ke gudang.</li>
+</ul>
+
+<h2>6. Promo dan Diskon All-In</h2>
+<p>Voucher/promo lama diganti konsep <b>Promo All-In</b>. Promo dipakai di saat input order, bukan saat pembayaran, sehingga invoice dan tagihan sudah menampilkan nilai yang terpotong.</p>
+<ul>
+<li>Promo dapat berbasis principal, customer tertentu atau banyak customer, produk/brand/subbrand, jumlah, budget, periode, serta strata diskon.</li>
+<li>Benefit bisa persen atau nominal/rupiah.</li>
+<li>Jika order memenuhi aturan, sistem menghitung potensi diskon. User masih bisa menambahkan potongan manual sesuai deal.</li>
+<li>Accounting sementara memperlakukan diskon sebagai <b>Diskon Penjualan Sales Order</b> dengan mapping COA di Jurnal Setting.</li>
+</ul>
+<h3>Alur Klaim Promo</h3>
+<ol>
+<li>Buat kategori klaim promo bila diperlukan.</li>
+<li>Ajukan klaim atau kasbon klaim.</li>
+<li>Approval promo memeriksa dokumen dan nominal.</li>
+<li>Monitoring promo membantu melihat outlet/sales yang memenuhi strata.</li>
+</ol>
+
+<h2>7. Finance dan Accounting</h2>
+<h3>7.1 Setup Wajib</h3>
+<ol>
+<li><b>COA:</b> siapkan akun kas/bank, piutang, hutang, penjualan, diskon penjualan, retur, PPN, persediaan, dan biaya.</li>
+<li><b>Jurnal Setting:</b> mapping fitur_mal ke COA. Contoh penting: Diskon Penjualan Sales Order.</li>
+<li><b>Jurnal:</b> melihat jurnal otomatis/manual beserta debit-kredit.</li>
+</ol>
+<h3>7.2 Piutang dan Pembayaran</h3>
+<ul>
+<li><b>Tagihan:</b> melihat faktur customer dan jatuh tempo.</li>
+<li><b>Pembayaran:</b> input pembayaran faktur, termasuk kondisi cicil.</li>
+<li><b>Rekap Pembayaran:</b> rekap setoran customer per sales, tunai dan non tunai.</li>
+<li><b>Setoran Tunai/Non Tunai:</b> detail setoran versi lama, tambah/edit/hapus sebelum final audit.</li>
+<li><b>Finalisasi Setoran:</b> validasi setoran finance.</li>
+<li><b>Laporan Kasir/Pengeluaran Kasir/Input Transaksi:</b> mencatat kas operasional dan transaksi accounting tambahan.</li>
+</ul>
+<h3>7.3 Pajak</h3>
+<ul>
+<li><b>Draft Pajak:</b> faktur yang belum dikirim ke pajak.</li>
+<li><b>Import/Kirim Pajak:</b> isi NSFP/status, lalu faktur berpindah ke Final Faktur bila status sudah final.</li>
+<li><b>Export XML:</b> digunakan untuk kebutuhan pelaporan pajak.</li>
+</ul>
+<h3>7.4 Laporan</h3>
+<ul>
+<li><b>Buku Besar:</b> pergerakan akun detail.</li>
+<li><b>Laba Rugi:</b> pendapatan dan biaya per periode.</li>
+<li><b>Neraca:</b> aset, kewajiban, dan ekuitas.</li>
+<li><b>LPH:</b> laporan penjualan harian dengan CRUD bila diperlukan.</li>
+</ul>
+
+<h2>8. Purchase End-to-End</h2>
+<div class='flow'>
+<div class='step'><b>PO</b>Buat purchase order berdasarkan cabang, perusahaan, principal, produk/UOM.</div>
+<div class='step'><b>Konfirmasi</b>Konfirmasi PO atau request cabang sesuai kebutuhan.</div>
+<div class='step'><b>Penerimaan</b>Input receipt, batch, expired, jumlah diterima.</div>
+<div class='step'><b>Tagihan</b>Konfirmasi purchase, buat tagihan, proses pembayaran, cetak nota/riwayat.</div>
+</div>
+<ul>
+<li><b>Purchase Order:</b> monitoring dan detail PO.</li>
+<li><b>Input Purchase Order:</b> buat PO baru dan revisi/edit PO jika masih boleh.</li>
+<li><b>Laporan PO Detail:</b> cek detail PO dan nilai per item.</li>
+<li><b>Konfirmasi Request Cabang:</b> approve/reject request cabang jika flow lama masih dipakai.</li>
+<li><b>Tagihan Purchase:</b> membuat tagihan dan melihat histori pembayaran.</li>
+</ul>
+
+<h2>9. Stock Transfer dan Stock Opname</h2>
+<h3>Stock Transfer</h3>
+<ul>
+<li>Buat transfer dari cabang/gudang sumber ke tujuan.</li>
+<li>Konfirmasi transfer, pengiriman, penerimaan, status pengiriman, dan eskalasi dilakukan dari menu Operasional.</li>
+<li>Gunakan export/cetak jika dibutuhkan untuk dokumen operasional.</li>
+</ul>
+<h3>Stock Opname</h3>
+<ul>
+<li>Buat opname, muat produk dan stok sistem, input stok fisik, bad stock, dan harga bila memang diperlukan.</li>
+<li>Approval/reject harus mengunci status agar tidak bisa berubah bolak-balik setelah final.</li>
+<li>Laporan Stock dan Eskalasi Opname dipakai untuk audit stok dan tindak lanjut selisih.</li>
+</ul>
+
+<h2>10. Supervisor Sales</h2>
+<ul>
+<li><b>Dashboard:</b> grafik performa kunjungan, KPI, dan ringkasan tim.</li>
+<li><b>Kunjungan Sales:</b> monitoring kunjungan harian.</li>
+<li><b>Kalender Callplan:</b> melihat callplan per bulan dengan highlight tanggal hari ini.</li>
+<li><b>Setting Target Sales:</b> target sales per periode.</li>
+<li><b>Monitor Target Omset:</b> capaian terhadap target.</li>
+<li><b>Approve Retur, Absensi Sales, Pengajuan Kasbon:</b> proses supervisi tim sales.</li>
+<li><b>Analisa DOI:</b> memakai aturan principal khusus bila ada; jika tidak ada, memakai default.</li>
+</ul>
+
+<h2>11. Data Tools, DMS Import, dan AI</h2>
+<h3>Import / Download Data</h3>
+<ul>
+<li>Dipakai sebagai gerbang validasi file header/detail order atau invoice.</li>
+<li>Data masuk staging dulu. Hanya data valid yang boleh diproses ke sales order.</li>
+<li>Jika kode customer/produk tidak ditemukan, lengkapi master atau mapping terlebih dahulu.</li>
+</ul>
+<h3>AI Assistant</h3>
+<ul>
+<li>AI Assistant membaca snapshot ERP dan database read-only yang sudah dibatasi.</li>
+<li>AI dapat membantu menjawab pertanyaan operasional seperti prioritas order, retur/CN, stok kosong, canvas belum setor, dan ringkasan finance.</li>
+<li>AI tidak boleh diberi akses ke password/token dan tidak menggantikan approval user.</li>
+</ul>
+
+<h2>12. Checklist UAT dari Awal sampai Akhir</h2>
+<ol>
+<li>Login sebagai Super User/Admin IT dan pastikan semua menu muncul.</li>
+<li>Login sebagai user role terbatas, pastikan sidebar hanya menampilkan menu sesuai permission.</li>
+<li>Cek filter Cabang ? Perusahaan ? Principal/Sales di semua halaman transaksi.</li>
+<li>Lengkapi master produk: brand, subbrand, UOM, harga, PPN.</li>
+<li>Buat plafon customer dan jadwal callplan.</li>
+<li>Buat sales order dengan beberapa produk, termasuk produk PPN dan diskon manual/promo.</li>
+<li>Verifikasi order, lakukan picking, jadwal armada, shipping, faktur, lalu pembayaran.</li>
+<li>Buat retur, cek tracking retur, credit note, penggunaan CN atau refund.</li>
+<li>Buat canvas request, approve, buat canvas order, bayar, rekap, dan retur canvas.</li>
+<li>Buat purchase order, receipt, konfirmasi purchase, tagihan, pembayaran.</li>
+<li>Buat stock opname dan stock transfer, termasuk approval/eskalasi.</li>
+<li>Cek jurnal otomatis dan laporan: buku besar, laba rugi, neraca, pajak.</li>
+</ol>
+
+<h2>13. Troubleshooting Cepat</h2>
+<table><thead><tr><th>Gejala</th><th>Penyebab Umum</th><th>Tindakan</th></tr></thead><tbody>
+<tr><td>Menu tidak muncul</td><td>Permission role/user belum ada atau menuPermission belum diberikan.</td><td>Cek Akses &gt; Fitur Jabatan/User, lalu logout-login ulang.</td></tr>
+<tr><td>Filter perusahaan kosong</td><td>Cabang belum dipilih, relasi perusahaan/principal belum lengkap, atau user scope terlalu sempit.</td><td>Pilih cabang dulu, cek master principal/perusahaan/user.</td></tr>
+<tr><td>Produk tidak bisa order</td><td>UOM/harga/PPN belum lengkap.</td><td>Lengkapi Master Produk, UOM, Harga, Master PPN.</td></tr>
+<tr><td>Import gagal validasi</td><td>Kode customer/produk eksternal belum ada di master atau mapping.</td><td>Lengkapi master/mapping, validasi ulang staging.</td></tr>
+<tr><td>Jurnal tidak terbentuk</td><td>Fitur_mal belum ada atau mapping COA belum lengkap.</td><td>Cek Finance &gt; Jurnal Setting dan COA.</td></tr>
+<tr><td>Data user tidak sesuai cabang</td><td>id_cabang/id_perusahaan user belum benar.</td><td>Edit Master User dan relasi Sales bila user adalah sales.</td></tr>
+</tbody></table>
+
+<h2 class='pagebreak'>Lampiran A. Daftar Menu Aplikasi</h2>
+<table><thead><tr><th>Grup Menu</th><th>Menu</th><th>URL</th><th>Permission dasar</th></tr></thead><tbody><tr><td>Overview</td><td>Dashboard</td><td>/</td><td>-</td></tr><tr><td>Overview</td><td>Profil</td><td>/profile</td><td>-</td></tr><tr><td>Master Data</td><td>User</td><td>/master/users</td><td>master.users.view</td></tr><tr><td>Master Data</td><td>Jabatan</td><td>/master/positions</td><td>master.users.view</td></tr><tr><td>Master Data</td><td>Departemen</td><td>/master/departments</td><td>master.users.view</td></tr><tr><td>Master Data</td><td>Customer Tipe</td><td>/master/customer-types</td><td>master.customers.view</td></tr><tr><td>Master Data</td><td>Sales Tipe</td><td>/master/sales-types</td><td>master.users.view</td></tr><tr><td>Master Data</td><td>Sales</td><td>/master/sales</td><td>master.users.view</td></tr><tr><td>Master Data</td><td>Customer</td><td>/master/customers</td><td>master.customers.view</td></tr><tr><td>Master Data</td><td>Principal</td><td>/master/principals</td><td>master.products.view</td></tr><tr><td>Master Data</td><td>Aturan Principal</td><td>/master/principal-rules</td><td>master.principal-rules.view</td></tr><tr><td>Master Data</td><td>Wilayah</td><td>/master/regions</td><td>master.branches.view</td></tr><tr><td>Master Data</td><td>Perusahaan</td><td>/master/companies</td><td>master.branches.view</td></tr><tr><td>Master Data</td><td>Rute</td><td>/master/routes</td><td>master.branches.view</td></tr><tr><td>Master Data</td><td>Produk</td><td>/master/products</td><td>master.products.view</td></tr><tr><td>Master Data</td><td>Subbrand</td><td>/master/subbrands</td><td>master.products.view</td></tr><tr><td>Master Data</td><td>Master PPN</td><td>/master/ppn</td><td>master.products.view</td></tr><tr><td>Master Data</td><td>Cabang</td><td>/master/branches</td><td>master.branches.view</td></tr><tr><td>Master Data</td><td>Armada</td><td>/master/fleets</td><td>master.fleets.view</td></tr><tr><td>Master Data</td><td>Driver</td><td>/master/drivers</td><td>master.drivers.view</td></tr><tr><td>Master Data</td><td>Helper</td><td>/master/helpers</td><td>master.drivers.view</td></tr><tr><td>Master Data</td><td>Periode Close</td><td>/master/closed-periods</td><td>master.branches.view</td></tr><tr><td>Master Data</td><td>Budget</td><td>/master/budgets</td><td>master.products.view</td></tr><tr><td>Master Data</td><td>Plafon</td><td>/master/plafons</td><td>master.plafons.view</td></tr><tr><td>Akses</td><td>Master Role</td><td>/access/roles</td><td>master.users.view</td></tr><tr><td>Akses</td><td>Fitur User</td><td>/access/user-features</td><td>master.user-features.view</td></tr><tr><td>Akses</td><td>Fitur Jabatan</td><td>/access/position-features</td><td>master.position-features.view</td></tr><tr><td>Data Tools</td><td>Import / Download Data</td><td>/data-tools/import-download</td><td>distribution.orders.view</td></tr><tr><td>Data Tools</td><td>DMS Import</td><td>/data-tools/dms-import</td><td>distribution.orders.view</td></tr><tr><td>AI</td><td>AI Assistant</td><td>/ai/assistant</td><td>dashboard.view</td></tr><tr><td>Distribusi</td><td>Order Sales</td><td>/sales-order</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Input Order</td><td>/sales-order/create</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Retur Sales</td><td>/sales-order/retur</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Tracking Retur</td><td>/sales-order/retur-tracking</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Invoice Sales</td><td>/sales-order/invoices</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Order</td><td>/distribution/orders</td><td>distribution.orders.view</td></tr><tr><td>Distribusi</td><td>Picking</td><td>/distribution/picking</td><td>distribution.picking.view</td></tr><tr><td>Distribusi</td><td>Jadwal Armada</td><td>/distribution/schedules</td><td>distribution.schedules.view</td></tr><tr><td>Distribusi</td><td>Helper Driver</td><td>/distribution/helper-driver</td><td>distribution.schedules.view</td></tr><tr><td>Distribusi</td><td>History Distribusi</td><td>/distribution/history</td><td>distribution.invoices.view</td></tr><tr><td>Distribusi</td><td>Pengeluaran Driver</td><td>/distribution/driver-expenses</td><td>distribution.schedules.view</td></tr><tr><td>Distribusi</td><td>Detail Faktur</td><td>/distribution/invoices</td><td>distribution.invoices.view</td></tr><tr><td>Distribusi</td><td>Revisi Faktur</td><td>/distribution/invoice-revisions</td><td>distribution.invoices.view</td></tr><tr><td>Sales Canvas</td><td>Canvas Request</td><td>/sales-canvas/requests</td><td>distribution.orders.view</td></tr><tr><td>Sales Canvas</td><td>Canvas Order</td><td>/sales-canvas/orders</td><td>distribution.orders.view</td></tr><tr><td>Sales Canvas</td><td>Retur Canvas</td><td>/sales-canvas/returns</td><td>distribution.orders.view</td></tr><tr><td>Sales Canvas</td><td>Voucher Canvas</td><td>/sales-canvas/vouchers</td><td>distribution.orders.view</td></tr><tr><td>Sales Canvas</td><td>Tagihan Canvas</td><td>/sales-canvas/payments</td><td>distribution.orders.view</td></tr><tr><td>Sales Canvas</td><td>Rekap Pembayaran</td><td>/sales-canvas/payment-recap</td><td>distribution.orders.view</td></tr><tr><td>Finance</td><td>COA</td><td>/finance/coa</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Jurnal Setting</td><td>/finance/journal-settings</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Jurnal</td><td>/finance/journal</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Credit Note</td><td>/finance/credit-note</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Mutasi Bank</td><td>/finance/bank-mutations</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Laba Rugi</td><td>/finance/profit-loss</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Neraca</td><td>/finance/balance-sheet</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Tagihan</td><td>/finance/receivables</td><td>finance.receivables.view</td></tr><tr><td>Finance</td><td>Pembayaran</td><td>/finance/payments</td><td>finance.payments.view</td></tr><tr><td>Finance</td><td>Rekap Pembayaran</td><td>/finance/recap</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Setoran Tunai</td><td>/finance/cash-deposits</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Setoran Non Tunai</td><td>/finance/noncash-deposits</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Laporan Kasir</td><td>/finance/cashier-reports</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Pengeluaran Kasir</td><td>/finance/cashier-expenses</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Input Transaksi</td><td>/finance/accounting-transactions</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Surat Tagihan Sales</td><td>/finance/sales-billing-letters</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>LPH</td><td>/finance/lph</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Buku Besar</td><td>/finance/general-ledger</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Pajak</td><td>/finance/tax</td><td>finance.recap.view</td></tr><tr><td>Finance</td><td>Finalisasi Setoran</td><td>/finance/deposit-finalization</td><td>finance.recap.view</td></tr><tr><td>Purchase</td><td>Purchase Order</td><td>/purchase/orders</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Input Purchase Order</td><td>/purchase/orders/create</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Laporan PO Detail</td><td>/purchase/order-reports</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Konfirmasi Request Cabang</td><td>/purchase/branch-requests</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Konfirmasi PO</td><td>/purchase/order-confirmations</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Penerimaan Barang</td><td>/purchase/receipts</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Input Penerimaan</td><td>/purchase/receipts/create</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Konfirmasi Purchase</td><td>/purchase/confirmations</td><td>distribution.orders.view</td></tr><tr><td>Purchase</td><td>Tagihan Purchase</td><td>/purchase/bills</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Promo All-In</td><td>/promo/all-in</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Kategori Klaim Promo</td><td>/promo/claim-categories</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Monitoring Promo</td><td>/promo/trade-cashback</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Daftar Klaim Promo</td><td>/promo/claims</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Approval Promo</td><td>/promo/claims/approval</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Ajukan Klaim</td><td>/promo/claims/create</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Kasbon Klaim</td><td>/promo/kasbon</td><td>distribution.orders.view</td></tr><tr><td>Promo</td><td>Ajukan Kasbon</td><td>/promo/kasbon/create</td><td>distribution.orders.view</td></tr><tr><td>Operasional</td><td>Stock Transfer</td><td>/stock-transfer</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Buat Transfer</td><td>/stock-transfer/create</td><td>stock-transfer.create</td></tr><tr><td>Operasional</td><td>Konfirmasi Transfer</td><td>/stock-transfer/confirmations</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Pengiriman Transfer</td><td>/stock-transfer/shipments</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Penerimaan Barang</td><td>/stock-transfer/receipts</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Status Pengiriman</td><td>/stock-transfer/shipment-status</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Eskalasi Transfer</td><td>/stock-transfer/escalations</td><td>stock-transfer.view</td></tr><tr><td>Operasional</td><td>Stock Opname</td><td>/stock-opname</td><td>stock-opname.view</td></tr><tr><td>Operasional</td><td>Buat Opname</td><td>/stock-opname/create</td><td>stock-opname.create</td></tr><tr><td>Operasional</td><td>Laporan Stock</td><td>/stock-opname/report</td><td>stock-opname.view</td></tr><tr><td>Operasional</td><td>Eskalasi Opname</td><td>/stock-opname/escalations</td><td>stock-opname.view</td></tr><tr><td>Supervisor Sales</td><td>Dashboard</td><td>/supervisor-sales/dashboard</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Kunjungan Sales</td><td>/supervisor-sales/visits</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Kalender Callplan</td><td>/supervisor-sales/callplan-calendar</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Monitor Stok Opname</td><td>/supervisor-sales/stock-opname-monitor</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Setting Target Sales</td><td>/supervisor-sales/sales-target-settings</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Monitor Target Omset</td><td>/supervisor-sales/omset-target-monitor</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Approve Retur</td><td>/supervisor-sales/retur-approval</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Absensi Sales</td><td>/supervisor-sales/attendance</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Pengajuan Kasbon</td><td>/supervisor-sales/kasbon</td><td>distribution.orders.view</td></tr><tr><td>Supervisor Sales</td><td>Analisa DOI</td><td>/supervisor-sales/doi-analysis</td><td>distribution.orders.view</td></tr></tbody></table>
+
+<h2 class='pagebreak'>Lampiran B. Modul per Sidebar</h2>
+<section class='module'><h3>Overview</h3><ul><li><b>Dashboard</b> <code>/</code></li><li><b>Profil</b> <code>/profile</code></li></ul></section><section class='module'><h3>Master Data</h3><ul><li><b>User</b> <code>/master/users</code></li><li><b>Jabatan</b> <code>/master/positions</code></li><li><b>Departemen</b> <code>/master/departments</code></li><li><b>Customer Tipe</b> <code>/master/customer-types</code></li><li><b>Sales Tipe</b> <code>/master/sales-types</code></li><li><b>Sales</b> <code>/master/sales</code></li><li><b>Customer</b> <code>/master/customers</code></li><li><b>Principal</b> <code>/master/principals</code></li><li><b>Aturan Principal</b> <code>/master/principal-rules</code></li><li><b>Wilayah</b> <code>/master/regions</code></li><li><b>Perusahaan</b> <code>/master/companies</code></li><li><b>Rute</b> <code>/master/routes</code></li><li><b>Produk</b> <code>/master/products</code></li><li><b>Subbrand</b> <code>/master/subbrands</code></li><li><b>Master PPN</b> <code>/master/ppn</code></li><li><b>Cabang</b> <code>/master/branches</code></li><li><b>Armada</b> <code>/master/fleets</code></li><li><b>Driver</b> <code>/master/drivers</code></li><li><b>Helper</b> <code>/master/helpers</code></li><li><b>Periode Close</b> <code>/master/closed-periods</code></li><li><b>Budget</b> <code>/master/budgets</code></li><li><b>Plafon</b> <code>/master/plafons</code></li></ul></section><section class='module'><h3>Akses</h3><ul><li><b>Master Role</b> <code>/access/roles</code></li><li><b>Fitur User</b> <code>/access/user-features</code></li><li><b>Fitur Jabatan</b> <code>/access/position-features</code></li></ul></section><section class='module'><h3>Data Tools</h3><ul><li><b>Import / Download Data</b> <code>/data-tools/import-download</code></li><li><b>DMS Import</b> <code>/data-tools/dms-import</code></li></ul></section><section class='module'><h3>AI</h3><ul><li><b>AI Assistant</b> <code>/ai/assistant</code></li></ul></section><section class='module'><h3>Distribusi</h3><ul><li><b>Order Sales</b> <code>/sales-order</code></li><li><b>Input Order</b> <code>/sales-order/create</code></li><li><b>Retur Sales</b> <code>/sales-order/retur</code></li><li><b>Tracking Retur</b> <code>/sales-order/retur-tracking</code></li><li><b>Invoice Sales</b> <code>/sales-order/invoices</code></li><li><b>Order</b> <code>/distribution/orders</code></li><li><b>Picking</b> <code>/distribution/picking</code></li><li><b>Jadwal Armada</b> <code>/distribution/schedules</code></li><li><b>Helper Driver</b> <code>/distribution/helper-driver</code></li><li><b>History Distribusi</b> <code>/distribution/history</code></li><li><b>Pengeluaran Driver</b> <code>/distribution/driver-expenses</code></li><li><b>Detail Faktur</b> <code>/distribution/invoices</code></li><li><b>Revisi Faktur</b> <code>/distribution/invoice-revisions</code></li></ul></section><section class='module'><h3>Sales Canvas</h3><ul><li><b>Canvas Request</b> <code>/sales-canvas/requests</code></li><li><b>Canvas Order</b> <code>/sales-canvas/orders</code></li><li><b>Retur Canvas</b> <code>/sales-canvas/returns</code></li><li><b>Voucher Canvas</b> <code>/sales-canvas/vouchers</code></li><li><b>Tagihan Canvas</b> <code>/sales-canvas/payments</code></li><li><b>Rekap Pembayaran</b> <code>/sales-canvas/payment-recap</code></li></ul></section><section class='module'><h3>Finance</h3><ul><li><b>COA</b> <code>/finance/coa</code></li><li><b>Jurnal Setting</b> <code>/finance/journal-settings</code></li><li><b>Jurnal</b> <code>/finance/journal</code></li><li><b>Credit Note</b> <code>/finance/credit-note</code></li><li><b>Mutasi Bank</b> <code>/finance/bank-mutations</code></li><li><b>Laba Rugi</b> <code>/finance/profit-loss</code></li><li><b>Neraca</b> <code>/finance/balance-sheet</code></li><li><b>Tagihan</b> <code>/finance/receivables</code></li><li><b>Pembayaran</b> <code>/finance/payments</code></li><li><b>Rekap Pembayaran</b> <code>/finance/recap</code></li><li><b>Setoran Tunai</b> <code>/finance/cash-deposits</code></li><li><b>Setoran Non Tunai</b> <code>/finance/noncash-deposits</code></li><li><b>Laporan Kasir</b> <code>/finance/cashier-reports</code></li><li><b>Pengeluaran Kasir</b> <code>/finance/cashier-expenses</code></li><li><b>Input Transaksi</b> <code>/finance/accounting-transactions</code></li><li><b>Surat Tagihan Sales</b> <code>/finance/sales-billing-letters</code></li><li><b>LPH</b> <code>/finance/lph</code></li><li><b>Buku Besar</b> <code>/finance/general-ledger</code></li><li><b>Pajak</b> <code>/finance/tax</code></li><li><b>Finalisasi Setoran</b> <code>/finance/deposit-finalization</code></li></ul></section><section class='module'><h3>Purchase</h3><ul><li><b>Purchase Order</b> <code>/purchase/orders</code></li><li><b>Input Purchase Order</b> <code>/purchase/orders/create</code></li><li><b>Laporan PO Detail</b> <code>/purchase/order-reports</code></li><li><b>Konfirmasi Request Cabang</b> <code>/purchase/branch-requests</code></li><li><b>Konfirmasi PO</b> <code>/purchase/order-confirmations</code></li><li><b>Penerimaan Barang</b> <code>/purchase/receipts</code></li><li><b>Input Penerimaan</b> <code>/purchase/receipts/create</code></li><li><b>Konfirmasi Purchase</b> <code>/purchase/confirmations</code></li><li><b>Tagihan Purchase</b> <code>/purchase/bills</code></li></ul></section><section class='module'><h3>Promo</h3><ul><li><b>Promo All-In</b> <code>/promo/all-in</code></li><li><b>Kategori Klaim Promo</b> <code>/promo/claim-categories</code></li><li><b>Monitoring Promo</b> <code>/promo/trade-cashback</code></li><li><b>Daftar Klaim Promo</b> <code>/promo/claims</code></li><li><b>Approval Promo</b> <code>/promo/claims/approval</code></li><li><b>Ajukan Klaim</b> <code>/promo/claims/create</code></li><li><b>Kasbon Klaim</b> <code>/promo/kasbon</code></li><li><b>Ajukan Kasbon</b> <code>/promo/kasbon/create</code></li></ul></section><section class='module'><h3>Operasional</h3><ul><li><b>Stock Transfer</b> <code>/stock-transfer</code></li><li><b>Buat Transfer</b> <code>/stock-transfer/create</code></li><li><b>Konfirmasi Transfer</b> <code>/stock-transfer/confirmations</code></li><li><b>Pengiriman Transfer</b> <code>/stock-transfer/shipments</code></li><li><b>Penerimaan Barang</b> <code>/stock-transfer/receipts</code></li><li><b>Status Pengiriman</b> <code>/stock-transfer/shipment-status</code></li><li><b>Eskalasi Transfer</b> <code>/stock-transfer/escalations</code></li><li><b>Stock Opname</b> <code>/stock-opname</code></li><li><b>Buat Opname</b> <code>/stock-opname/create</code></li><li><b>Laporan Stock</b> <code>/stock-opname/report</code></li><li><b>Eskalasi Opname</b> <code>/stock-opname/escalations</code></li></ul></section><section class='module'><h3>Supervisor Sales</h3><ul><li><b>Dashboard</b> <code>/supervisor-sales/dashboard</code></li><li><b>Kunjungan Sales</b> <code>/supervisor-sales/visits</code></li><li><b>Kalender Callplan</b> <code>/supervisor-sales/callplan-calendar</code></li><li><b>Monitor Stok Opname</b> <code>/supervisor-sales/stock-opname-monitor</code></li><li><b>Setting Target Sales</b> <code>/supervisor-sales/sales-target-settings</code></li><li><b>Monitor Target Omset</b> <code>/supervisor-sales/omset-target-monitor</code></li><li><b>Approve Retur</b> <code>/supervisor-sales/retur-approval</code></li><li><b>Absensi Sales</b> <code>/supervisor-sales/attendance</code></li><li><b>Pengajuan Kasbon</b> <code>/supervisor-sales/kasbon</code></li><li><b>Analisa DOI</b> <code>/supervisor-sales/doi-analysis</code></li></ul></section>
+
+<p class='footer-note'>Catatan: dokumentasi ini adalah snapshot berdasarkan kode dan database saat dibuat. Jika menu/permission berubah, regenerate dokumen agar tetap sinkron.</p>
+</body>
+</html>

@@ -1,0 +1,106 @@
+{
+  "scope": "Workflow Distribusi End-To-End, bagian 1: pengiriman barang",
+  "status": "DEPLOYED_AND_VERIFIED",
+  "server": "58.147.185.142",
+  "ssh_port": 9999,
+  "blocker": null,
+  "deployed_at": "2026-10-01T07:44:34.624004+00:00",
+  "frontend_api_url_followup": "api-base-url-20261001.json: the original build embedded localhost; corrected to the user-specified HTTPS :9092 origin and verified from a real browser at 2026-10-01T08:34:47.817Z. Backend/migrations unchanged.",
+  "production": {
+    "api_root": "/www/wwwroot/API",
+    "frontend_root": "/www/wwwroot/new_budimas",
+    "frontend_delivery": "Built dist plus root serving copies; old hashed assets retained. Source remains in local workspace.",
+    "public_url": "https://erp.budimas.swakarya.my.id",
+    "mobile_sales_https_port": 9092,
+    "database": "budimas_dev",
+    "backup_directory": "/www/backup/budimas-release-20261001.NBreom",
+    "database_backup_bytes": 1672526751,
+    "database_backup_sha256": "04e7d645b84a94aee8a3e87389fa8a711ce2f89db7d93ca57ec4a9040937862a",
+    "backup_validation": "pg_dump completed; pg_restore --list and SHA-256 verified. Full restore drill not performed.",
+    "file_backup": "files-before.tar.gz; restore individual original files if needed. Do not drop additive database columns or delete business history.",
+    "api_reload": "Verified master PID 2303 and production uwsgi.ini; graceful HUP. UAT untouched.",
+    "migrations_applied": [
+      "20261001_lph_payment_handover.sql",
+      "20261001_cashier_expense_details.sql",
+      "20261001_employee_cash_advance.sql",
+      "20261001_coa_cash_accounts.sql",
+      "20261001_distribution_workflow.sql"
+    ],
+    "coordinated_pending_revisions": ["LPH Mobile Sales", "itemized cashier expenses", "COA activity and cash mapping", "journal display", "employee advance request/approval"],
+    "verification": {
+      "api_regression_tests": 224,
+      "production_http_checks": 14,
+      "public_files_sha256_verified": 194,
+      "all_installed_destination_hashes_verified": true,
+      "business_test_mutations": 0,
+      "https_443_and_9092_healthy": true,
+      "device_installation_tested": false
+    },
+    "artifacts": "/tmp/budimas-production-deploy.5i9oT5",
+    "access_note": "Kasbon capabilities registered without auto-granting existing roles. Configure view/create/approve for intended non-superuser accounts."
+  },
+  "api_root": "/Users/macairm2/www/API",
+  "changed_api_files": [
+    "apps/lib/distribution_workflow.py",
+    "apps/routes/wms_mock.py",
+    "apps/services/Distribusi.py",
+    "apps/services/SalesOrder.py",
+    "apps/test/test_distribution_workflow.py",
+    "tools/migrations/20261001_distribution_workflow.sql"
+  ],
+  "api_dependency_to_verify_on_server": "VERIFIED: finance_access.py and paired Finance/LPH/cashier services deployed; schema_guard.py and Permission.py match the production baseline.",
+  "changed_erp_files": [
+    "src/api/wms.js",
+    "src/modules/wms/pages/WmsDashboardPage.vue",
+    "src/modules/distribution/pages/ScheduleFleetPage.vue",
+    "src/modules/sales-order/pages/SalesOrderListPage.vue"
+  ],
+  "android": [
+    {
+      "root": "/Users/macairm2/www/wms_android",
+      "files": ["app/src/main/java/com/budimas/wms/MainActivity.java", "app/build.gradle"],
+      "version": "1.0.8 (9)",
+      "verification": "assembleDebug passed; certificate matches previously published server APK; public download hash verified. No device install test.",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasWMS-v1.0.8-debug.apk"
+    },
+    {
+      "root": "/Users/macairm2/www/driver_helper_mobile",
+      "files": ["app/src/main/java/com/budimas/driverhelper/MainActivity.java", "app/build.gradle"],
+      "version": "0.4.4 (8)",
+      "verification": "assembleDebug passed; certificate matches previously published server APK; public download hash verified. No device install test.",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasDriver-v0.4.4-debug.apk"
+    },
+    {
+      "root": "/Users/macairm2/www/budimas-mobile",
+      "files": ["src/views/LphPage.vue", "src/services/SyncService.js", "android/app/build.gradle"],
+      "version": "1.0.5 (6)",
+      "verification": "Vite build, Capacitor sync, assembleDebug passed; certificate matches previously published server APK; public download hash verified. No device install test.",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasMobile-v1.0.5-debug.apk"
+    }
+  ],
+  "predeploy_checks": [
+    "Bandingkan file server dengan lokal; workspace tidak memiliki Git. Jangan menimpa perubahan server yang tidak terkait.",
+    "Backup file dan database sebelum migrasi. Migration distribution bersifat aditif, idempoten, dan tidak mengubah saldo stok atau nomor status order lama.",
+    "Verifikasi migrasi revisi sebelumnya: 20261001_lph_payment_handover.sql, 20261001_cashier_expense_details.sql, 20261001_employee_cash_advance.sql, 20261001_coa_cash_accounts.sql. Build ERP lokal juga memuat revisi tersebut; API pasangannya harus diselaraskan.",
+    "Pastikan skema WMS dan fleet_trip_stop sudah tersedia sebelum migrasi distribution. Jalankan migrasi sebelum aktivasi API baru.",
+    "Pastikan operator memiliki hak ubah WMS/picking dan scope perusahaan/cabang. Hak view tidak memberikan hak konfirmasi checker/loading.",
+    "Koordinasikan pembaruan APK: klien WMS lama tanpa input kondisi dan aksi mulai loading akan ditolak dengan pesan validasi. Build debug tidak boleh dipromosikan sebagai APK release tanpa memeriksa sertifikat aplikasi yang terpasang.",
+    "Jadwal lama belum memiliki satuan estimasi volume: utilisasi sengaja kosong sampai CM3/M3 dipilih sesuai sumber data produk. Kapasitas armada dalam m3.",
+    "Path frontend dari deployment terakhir adalah /www/wwwroot/new_budimas, root dan dist; verifikasi konfigurasi aktif. Pertahankan aset hash lama dan ganti index secara atomik.",
+    "Verifikasi path API dan PID uWSGI di server sebelum reload. Lakukan health check read-only; jangan membuat transaksi produksi untuk tes.",
+    "Jika rollback kode diperlukan, jangan drop kolom/tabel baru atau menghapus riwayat NG/FD/incident. Tugas CHECKER_HOLD harus tetap tertahan."
+  ],
+  "test_artifacts": "/tmp/budimas-distribution-update.kE3IUK",
+  "backup_before_this_change": [
+    "/tmp/budimas-distribution-update.kE3IUK/before-api.tar.gz",
+    "/tmp/budimas-distribution-update.kE3IUK/before-clients.tar.gz"
+  ],
+  "verification": [
+    "Unit/regression tests API menggunakan mock, tanpa koneksi database bisnis",
+    "SQL produksi dan migrasi dua kali diuji dengan PGlite terisolasi",
+    "UI Playwright: checker NG, mulai loading, kendala picking, metadata jadwal, status order; semua API di-mock dan host luar diblokir",
+    "UI regresi Finance sebelumnya lulus",
+    "Vite build dan ketiga Android assembleDebug lulus",
+    "Production: 5 migrations committed with bounded lock/statement timeout; 14 read-only HTTP checks passed; all 194 public artifact SHA-256 hashes match the release bundle"
+  ]
+}

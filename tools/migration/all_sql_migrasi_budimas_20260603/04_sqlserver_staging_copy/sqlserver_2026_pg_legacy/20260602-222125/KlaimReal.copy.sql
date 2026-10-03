@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."klaimreal" ("kode", "tanggal", "noklaim", "keterangan", "jumlah", "jenis", "useradd", "tgladd", "useredit", "tgledit", "nofakturpajak", "nobuktipotong") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/KlaimReal.csv' WITH (FORMAT csv, HEADER true, NULL '')

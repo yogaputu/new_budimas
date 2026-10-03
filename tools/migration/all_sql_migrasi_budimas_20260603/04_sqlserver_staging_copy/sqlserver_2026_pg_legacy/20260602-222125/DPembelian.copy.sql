@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."dpembelian" ("tanggal", "nota", "kodestok", "namabarang", "unit", "perunit", "satuan", "jumlah", "harga", "jumlahharga", "baris", "kodeprinciple", "namaprinciple", "stnota", "hpp") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/DPembelian.csv' WITH (FORMAT csv, HEADER true, NULL '')

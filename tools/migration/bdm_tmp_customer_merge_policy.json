@@ -1,0 +1,39 @@
+{
+  "policy_version": "2026-08-27",
+  "entity_type": "customer",
+  "target_behavior": "upsert_existing_customer",
+  "source_identity": "A mapping registry entry (source_system + source customer key) resolves to exactly one PostgreSQL customer.",
+  "same_customer_rule": "If BDM and TMP resolve to the same PostgreSQL customer, do not create a duplicate customer.",
+  "master_data_precedence": {
+    "primary_source": "tmp_solo_dist",
+    "fallback_source": null,
+    "rule": "For the same resolved customer, use only customer-master values from TMP. TMP overwrites BDM; BDM is retained only as a source mapping and transaction reference, not as a master-data fallback."
+  },
+  "verified_existing_postgres_match": {
+    "bdm_solo_dist": {
+      "when": "The BDM customer is already resolved to one verified existing PostgreSQL customer.",
+      "action": "overwrite_existing_customer_from_bdm",
+      "create_customer": false
+    },
+    "write_order": [
+      "Apply verified BDM-to-existing-PostgreSQL customer updates.",
+      "Apply TMP customer updates last when both sources resolve to the same customer."
+    ]
+  },
+  "manual_customer_queue": {
+    "active_source": "tmp_solo_dist",
+    "rule": "Only TMP manual customer rows may create or update PostgreSQL customer master data.",
+    "bdm_solo_dist": "Reference only for manual rows. Do not create or update a customer master record from a BDM manual row. This does not block an already verified BDM-to-existing-PostgreSQL match from being overwritten."
+  },
+  "bdm_candidate_name_resolution": {
+    "match_rule": "Match normalized source store name to normalized PostgreSQL candidate store name.",
+    "multiple_equal_names": "choose_lowest_target_customer_id",
+    "no_equal_store_name": "skip_not_migrated_to_postgresql",
+    "no_candidate": "skip_not_migrated_to_postgresql"
+  },
+  "safety": {
+    "unverified_identity": "hold_for_manual_review",
+    "sql_server_writes": "forbidden",
+    "transaction_history": "kept_source_aware_and_not_merged_by_this_customer_policy"
+  }
+}

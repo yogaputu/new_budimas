@@ -1,0 +1,72 @@
+// Shared by the template page and workbook builder. These are preparation fields,
+// not a new upload contract for the existing principal-specific import endpoints.
+export const salesOrderTemplate = {
+  version: '1.0',
+  fileName: 'template_order_sales_v1.xlsx',
+  assetPath: 'templates/template_order_sales_v1.xlsx',
+  sheetName: 'Data_Order',
+  status: 'Template ini untuk persiapan data. Impor Excel format umum ini belum tersedia; jangan unggah ke menu impor khusus principal.'
+};
+
+export const orderTemplateColumns = [
+  { key: 'no_order', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Nomor order dari sumber. Satu nomor boleh berulang untuk beberapa produk dalam order yang sama.' },
+  { key: 'tanggal_order', required: 'Wajib', type: 'Tanggal', scope: 'Order', description: 'Tanggal transaksi, tampilkan YYYY-MM-DD. Gunakan tanggal asli order, bukan tanggal ekspor.' },
+  { key: 'kode_perusahaan', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Kode perusahaan ERP. Petakan kode SQL Server ke master perusahaan terlebih dahulu.' },
+  { key: 'kode_cabang', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Kode cabang ERP yang sesuai dengan perusahaan order.' },
+  { key: 'kode_principal', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Kode principal ERP. Pisahkan order per principal agar customer, sales dan plafonnya dapat dicocokkan.' },
+  { key: 'kode_customer', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Kode customer ERP hasil mapping. Jangan gunakan nama toko sebagai kunci dan jangan hilangkan nol di depan.' },
+  { key: 'nama_customer', required: 'Opsional', type: 'Teks', scope: 'Order', description: 'Nama customer untuk pemeriksaan manual. Identitas tetap ditentukan kode_customer.' },
+  { key: 'kode_sales', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Kode sales pemilik order sesuai relasi customer, principal dan cabang. Tetap isi sales meskipun admin yang menginput.' },
+  { key: 'nama_sales', required: 'Opsional', type: 'Teks', scope: 'Order', description: 'Nama sales untuk pemeriksaan manual. Harus sesuai kode_sales.' },
+  { key: 'sumber_order', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Isi SALES atau ADMIN, sesuai pihak yang membuat order pada sistem asal.' },
+  { key: 'kode_penginput', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Username/kode user pembuat order pada sistem asal. Jika ADMIN, isi user admin, bukan kode sales pemilik order.' },
+  { key: 'no_po_customer', required: 'Opsional', type: 'Teks', scope: 'Order', description: 'Nomor PO milik customer jika tersedia. Kosongkan jika tidak ada.' },
+  { key: 'nomor_baris', required: 'Wajib', type: 'Bilangan bulat', scope: 'Item', description: 'Nomor detail mulai 1 dan unik dalam setiap order. Jangan gabungkan dua detail dengan nomor baris yang sama.' },
+  { key: 'kode_produk', required: 'Wajib', type: 'Teks', scope: 'Item', description: 'Kode SKU produk ERP hasil mapping. Produk harus sesuai dengan principal order.' },
+  { key: 'nama_produk', required: 'Opsional', type: 'Teks', scope: 'Item', description: 'Nama produk untuk pemeriksaan manual. Identitas tetap ditentukan kode_produk.' },
+  { key: 'qty_pcs', required: 'Wajib', type: 'Bilangan bulat', scope: 'Item', description: 'Jumlah satuan dasar (UOM 1). Isi 0 jika tidak dipakai. Minimal satu dari tiga kolom qty harus lebih dari 0.' },
+  { key: 'qty_box', required: 'Wajib', type: 'Bilangan bulat', scope: 'Item', description: 'Jumlah box (UOM 2). Isi 0 jika tidak dipakai. Konversi mengikuti master produk ERP.' },
+  { key: 'qty_karton', required: 'Wajib', type: 'Bilangan bulat', scope: 'Item', description: 'Jumlah karton (UOM 3). Isi 0 jika tidak dipakai. Jangan isi ulang ekuivalen PCS dari karton yang sama.' },
+  { key: 'harga_per_pcs', required: 'Wajib', type: 'Angka', scope: 'Item', description: 'Harga rupiah per satuan dasar sebelum diskon dan PPN. Harga per box/karton dari SQL Server harus dikonversi dulu. Tanpa Rp atau pemisah ribuan.' },
+  { key: 'diskon_baris_nominal', required: 'Wajib', type: 'Angka', scope: 'Item', description: 'Total potongan rupiah untuk seluruh baris sebelum PPN, bukan per PCS dan bukan persen. Isi 0 jika tidak ada. Jangan masukkan lagi ke diskon order.' },
+  { key: 'ppn_persen', required: 'Wajib', type: 'Angka', scope: 'Item', description: 'Persentase angka, misalnya 11 berarti 11%, bukan 0.11. Sesuaikan pajak transaksi dan master produk. Angka contoh bukan penetapan tarif.' },
+  { key: 'diskon_order_nominal', required: 'Wajib', type: 'Angka', scope: 'Order', description: 'Total potongan tambahan satu order dalam rupiah sebelum PPN. Ulangi nilai yang sama pada semua baris order; dihitung sekali per order. Isi 0 jika tidak ada.' },
+  { key: 'catatan_order', required: 'Opsional', type: 'Teks', scope: 'Order', description: 'Catatan order. Gunakan catatan yang sama pada semua baris dalam satu order.' },
+  { key: 'source_system', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'Identitas database/sistem asal, misalnya SQLSERVER_BMM. Bedakan sumber yang dapat memiliki nomor order sama.' },
+  { key: 'source_order_id', required: 'Wajib', type: 'Teks', scope: 'Order', description: 'ID header stabil dari SQL Server untuk penelusuran dan rancangan pencegahan duplikasi. Bukan ID numerik PostgreSQL ERP.' },
+  { key: 'source_detail_id', required: 'Wajib', type: 'Teks', scope: 'Item', description: 'ID detail stabil dari SQL Server. Harus unik dalam source_order_id. Jangan ganti ketika mengekspor ulang detail yang sama.' }
+];
+
+const sampleOrder = {
+  no_order: 'CONTOH-SO-001', tanggal_order: '2026-09-29',
+  kode_perusahaan: 'CONTOH-BMM', kode_cabang: 'CONTOH-SLO', kode_principal: 'CONTOH-PR01',
+  kode_customer: '000001', nama_customer: 'Contoh Toko Mawar',
+  kode_sales: 'CONTOH-SLS01', nama_sales: 'Contoh Sales Andi',
+  sumber_order: 'SALES', kode_penginput: 'sales.contoh01', no_po_customer: 'CONTOH-PO-001',
+  nomor_baris: 1, kode_produk: '000101', nama_produk: 'Contoh Produk A',
+  qty_pcs: 12, qty_box: 0, qty_karton: 0, harga_per_pcs: 5000,
+  diskon_baris_nominal: 0, ppn_persen: 11, diskon_order_nominal: 2000,
+  catatan_order: 'CONTOH SAJA - ganti sebelum digunakan', source_system: 'SQLSERVER_CONTOH',
+  source_order_id: '0001001', source_detail_id: '0001001-01'
+};
+
+export const orderTemplateExamples = [
+  { ...sampleOrder },
+  { ...sampleOrder, nomor_baris: 2, kode_produk: '000102', nama_produk: 'Contoh Produk B', qty_pcs: 0, qty_box: 2, harga_per_pcs: 7500, diskon_baris_nominal: 1000, source_detail_id: '0001001-02' },
+  { ...sampleOrder, no_order: 'CONTOH-SO-002', kode_customer: '000002', nama_customer: 'Contoh Toko Melati', no_po_customer: '', qty_pcs: 0, qty_karton: 1, diskon_order_nominal: 0, source_order_id: '0001002', source_detail_id: '0001002-01' },
+  { ...sampleOrder, no_order: 'CONTOH-SO-003', kode_customer: '000003', nama_customer: 'Contoh Toko Kenanga', kode_sales: 'CONTOH-SLS02', nama_sales: 'Contoh Sales Budi', sumber_order: 'ADMIN', kode_penginput: 'admin.contoh01', no_po_customer: 'CONTOH-PO-003', qty_pcs: 6, diskon_order_nominal: 0, source_order_id: '0001003', source_detail_id: '0001003-01' }
+];
+
+export const orderTemplateRules = [
+  ['Isi file', 'Sheet Data_Order berisi 4 baris contoh untuk 3 order dan 3 customer. Semua kode dan nama adalah fiktif. Ganti seluruh contoh dengan data hasil pilahan SQL Server.'],
+  ['Struktur', 'Satu baris = satu item order. Pertahankan nama kolom pada baris 1 dan nama sheet Data_Order. Jangan menambah judul, menggabungkan sel, atau menyisipkan baris subtotal.'],
+  ['Kelompok order', 'Satu order ditentukan oleh source_system + kode_perusahaan + kode_cabang + kode_principal + no_order. Seluruh kolom berlingkup Order harus sama untuk semua item dalam kelompok itu.'],
+  ['Sales dan admin', 'kode_sales selalu sales pemilik order. sumber_order dan kode_penginput menyimpan asal pembuatnya. Order yang diinput admin tetap memakai customer dan sales pemilik yang sebenarnya.'],
+  ['Mapping master', 'Ganti kode perusahaan, cabang, principal, customer, sales dan produk dengan kode master ERP yang cocok. Jangan menyalin ID numerik SQL Server menjadi ID ERP. Relasi customer-sales-principal-cabang harus sesuai plafon ERP.'],
+  ['Satuan', 'Isi jumlah di satuan asal yang tepat. Contoh: 1 karton di qty_karton, tidak sekaligus dimasukkan lagi sebagai PCS. Konversi box/karton ke PCS mengikuti master produk. Qty tidak boleh negatif.'],
+  ['Harga dan diskon', 'Harga per PCS adalah sebelum diskon dan PPN. Diskon baris untuk seluruh baris. Diskon order diulang dengan nilai sama tetapi hanya dihitung sekali per order. Jangan menggandakan promo/diskon yang sudah masuk harga.'],
+  ['Tanggal dan angka', 'Tanggal ditampilkan YYYY-MM-DD. Harga, qty dan diskon berupa angka tanpa Rp atau pemisah ribuan pada data asal. Kolom kode/nomor/ID berupa teks supaya nol di depan tetap ada.'],
+  ['Penelusuran', 'Pertahankan source_order_id dan source_detail_id saat ekspor ulang. Periksa duplikasi dengan identitas sumber, kelompok order dan nomor_baris, bukan nama customer atau nama produk.'],
+  ['Siapkan dari SQL Server', 'Pilih order yang diperlukan, gabungkan header-detail dan mapping master, lalu susun alias hasil query sesuai kolom Data_Order. Tempel sebagai nilai. Cocokkan jumlah order, detail, qty dan nilai dengan sumber.'],
+  ['Batas penggunaan', salesOrderTemplate.status]
+];

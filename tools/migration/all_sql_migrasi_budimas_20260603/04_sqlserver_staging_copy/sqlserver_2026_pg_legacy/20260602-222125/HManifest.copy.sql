@@ -1,0 +1,1 @@
+\copy "legacy_dist_2026"."hmanifest" ("nomanifest", "tanggalkirim", "kodedriver", "kodehelper", "nopolisi", "kmawal", "signaturebase64", "statusmanifest", "userupdate") FROM 'D:/laragon/www/budimas/new_budimas/.tmp_audit/sqlserver_2026_pg_legacy/20260602-222125/HManifest.csv' WITH (FORMAT csv, HEADER true, NULL '')

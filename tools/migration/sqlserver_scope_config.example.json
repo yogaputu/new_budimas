@@ -1,0 +1,16 @@
+{
+  "scope_name": "solo_bmm_sales_sample",
+  "branch": {
+    "id_cabang": 5,
+    "kode_cabang": "SLO",
+    "area_codes": ["SLS", "SLU", "KTS", "SKH", "KRA", "BYL", "SRG", "GML"]
+  },
+  "company": {
+    "id_perusahaan": 1,
+    "kode_perusahaan": "BMM",
+    "principal_codes": ["60", "63", "ET", "M3", "MFB", "M6"]
+  },
+  "sales_codes": [],
+  "include_inactive": false,
+  "notes": "Edit area_codes/principal_codes/sales_codes sebelum export. Kosongkan sales_codes untuk ambil semua sales dalam principal scope."
+}

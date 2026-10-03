@@ -1,0 +1,1542 @@
+{
+  "blockers": [],
+  "connections": {
+    "source_staging": {
+      "database": "budimas_dev",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "postgres"
+    },
+    "target_baseline": {
+      "database": "budimas_clean_20260902",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "user": "postgres"
+    }
+  },
+  "cross_database_snapshot_atomic": false,
+  "customer_source_plan": {
+    "available": true,
+    "bdm_source": {
+      "held_rows": 0,
+      "normalized_code_groups": 25550,
+      "source_rows": 25550,
+      "valid_unique_customer_rows": 25550
+    },
+    "normalization": {
+      "customer_code": "lower(btrim(kode))",
+      "fuzzy_matching": false,
+      "nearest_name_matching": false,
+      "store_name": "lower(btrim(nama))"
+    },
+    "plan": {
+      "bdm_create_source_owned_name_mismatch": 6472,
+      "bdm_create_source_owned_no_exact_tmp_pair": 16813,
+      "bdm_hold_rows": 0,
+      "bdm_shared_exact_with_tmp": 2265,
+      "tmp_create_source_owned": 17712,
+      "tmp_hold_rows": 0
+    },
+    "policy_outcome": {
+      "create": "Every other valid BDM identity creates a source-owned BDM customer",
+      "hold": "Blank code/name and duplicate source code rows are not auto-created",
+      "load_order": "TMP first",
+      "share": "BDM shares only an exact TMP normalized code plus store-name pair"
+    },
+    "target_global_customer_code_unique": false,
+    "tmp_source": {
+      "held_rows": 0,
+      "normalized_code_groups": 17712,
+      "source_rows": 17712,
+      "valid_unique_customer_rows": 17712
+    }
+  },
+  "generated_at": "2026-09-01T18:48:10.043535+00:00",
+  "next_write_authorization": "none: this report does not authorize database creation, registry DDL, or import writes.",
+  "policy": {
+    "normalization": "lower(btrim(...))",
+    "path": "/www/backups/budimas_migration_20260902/clean_import_policy.json",
+    "sha256": "d29f7b06fcf7397f16538a51099e0ee4fb641065bdfb0fde65dfb609c62a27f7",
+    "source_qualified": true
+  },
+  "read_only": true,
+  "ready_for_clean_master_import": true,
+  "report_kind": "clean_bdm_tmp_master_readiness",
+  "report_version": "clean_master_readiness_v1",
+  "source_pair_final_freeze": {
+    "consistency_mode": "maintenance_freeze_serializable",
+    "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+    "ready": true,
+    "reason": "both_sources_same_attested_maintenance_freeze"
+  },
+  "source_staging": {
+    "bdm_solo_dist": {
+      "duplicate_normalized_identities": {
+        "barangsatuan": {
+          "available": false,
+          "expected": [],
+          "reason": "missing_identity_column_or_optional_identity"
+        },
+        "customer": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 25550,
+          "distinct_complete_identities": 25550,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 25550
+        },
+        "plafon": {
+          "available": true,
+          "blank_identity_rows": 3983,
+          "complete_identity_rows": 13779,
+          "distinct_complete_identities": 13723,
+          "duplicate_extra_rows": 56,
+          "duplicate_identity_groups": 56,
+          "identity_columns": [
+            "kodecustomer",
+            "kodeprinciple",
+            "kodesales"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 17762
+        },
+        "principle": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 41,
+          "distinct_complete_identities": 41,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 41
+        },
+        "sales": {
+          "available": true,
+          "blank_identity_rows": 22,
+          "complete_identity_rows": 166,
+          "distinct_complete_identities": 166,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kodeprinciple",
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 188
+        },
+        "stok": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 11812,
+          "distinct_complete_identities": 11812,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "principle",
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 11812
+        }
+      },
+      "manifest": {
+        "duplicate_manifest_rows": [],
+        "missing_required_columns": [],
+        "ready": true
+      },
+      "master_stage_ready": true,
+      "run": {
+        "latest_run": {
+          "consistency_mode": "maintenance_freeze_serializable",
+          "id": 1,
+          "is_preview": false,
+          "maintenance_freeze_attested": true,
+          "maintenance_freeze_confirmed_at": "2026-08-30T10:56:33.046515+07:00",
+          "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+          "source_lock_timeout_ms": 30000,
+          "source_system": "bdm_solo_dist",
+          "source_transaction_isolation": "SERIALIZABLE",
+          "stage_branch_code": "SLO",
+          "stage_branch_id_audit_only": 5,
+          "stage_company_code": "BMM",
+          "stage_company_id_audit_only": 1,
+          "status": "completed"
+        },
+        "missing_required_columns": [],
+        "policy_code_match": {
+          "branch_code": true,
+          "company_code": true,
+          "source_system": true
+        },
+        "ready": true
+      },
+      "schema": "legacy_bdm_solo_final_freeze_20260830",
+      "source_system": "bdm_solo_dist",
+      "tables": {
+        "barangsatuan": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit"
+            ],
+            "source_row_count": 28,
+            "staged_row_count": 28,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 28,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 28,
+            "manifest_staged_row_count": 28,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": false,
+          "table_exists": true
+        },
+        "customer": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "fax",
+              "contactperson",
+              "email",
+              "fp",
+              "npwp",
+              "namawp",
+              "alamatwp",
+              "termofpayment",
+              "opsharga",
+              "opshargakek",
+              "kodearea",
+              "namaarea",
+              "kodejenis",
+              "namajenis",
+              "tanggalcatat",
+              "promo",
+              "outletitr",
+              "kodegroup",
+              "namagroup",
+              "kodess",
+              "plafon",
+              "tunai",
+              "piutang",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "opshargateh",
+              "qrcode",
+              "longitude",
+              "latitude",
+              "lockposisi",
+              "propinsiid",
+              "kabupatenid",
+              "kecamatanid",
+              "kelurahanid",
+              "kodeosky",
+              "kodepos"
+            ],
+            "source_row_count": 25550,
+            "staged_row_count": 25550,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 25550,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 25550,
+            "manifest_staged_row_count": 25550,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "plafon": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kodecustomer",
+              "kodeprinciple",
+              "plafon",
+              "useradd",
+              "tgladd",
+              "term",
+              "lock1",
+              "disc1",
+              "lockplan",
+              "kodesales",
+              "hari",
+              "week",
+              "kategori",
+              "keterangan",
+              "autolockplan",
+              "autolockjt",
+              "timelockplan",
+              "timelockjt"
+            ],
+            "source_row_count": 17762,
+            "staged_row_count": 17762,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 17762,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 17762,
+            "manifest_staged_row_count": 17762,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "principle": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "fax",
+              "contactperson",
+              "email",
+              "npwp",
+              "bank",
+              "account",
+              "disc",
+              "active",
+              "hutang",
+              "fp",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "computername",
+              "tglclose"
+            ],
+            "source_row_count": 41,
+            "staged_row_count": 41,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 41,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 41,
+            "manifest_staged_row_count": 41,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "sales": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "kodeprinciple",
+              "namaprinciple",
+              "type",
+              "jenisitr",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "qrcode",
+              "allowupdatecustomer",
+              "kodenasional"
+            ],
+            "source_row_count": 188,
+            "staged_row_count": 188,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 188,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 188,
+            "manifest_staged_row_count": 188,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "stok": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "active",
+              "principle",
+              "jenis",
+              "food",
+              "stokakhir",
+              "stokpending",
+              "stokkanvas",
+              "satuan",
+              "perunit",
+              "namaunit",
+              "hargaasli",
+              "hargaa",
+              "hargab",
+              "hargac",
+              "hargad",
+              "hargae",
+              "fakturpajak",
+              "stokminim",
+              "ton",
+              "kodegroup",
+              "namagroup",
+              "merk",
+              "namamerk",
+              "brand",
+              "namabrand",
+              "subbrand",
+              "namasubbrand",
+              "lokasi",
+              "namalokasi",
+              "class",
+              "namaclass",
+              "masterkode",
+              "nasionalkode",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "kategori",
+              "kodedms",
+              "isipalet",
+              "volume",
+              "koderak"
+            ],
+            "source_row_count": 11812,
+            "staged_row_count": 11812,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 11812,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 11812,
+            "manifest_staged_row_count": 11812,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        }
+      }
+    },
+    "tmp_solo_dist": {
+      "duplicate_normalized_identities": {
+        "barangsatuan": {
+          "available": false,
+          "expected": [],
+          "reason": "missing_identity_column_or_optional_identity"
+        },
+        "customer": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 17712,
+          "distinct_complete_identities": 17712,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 17712
+        },
+        "plafon": {
+          "available": true,
+          "blank_identity_rows": 1577,
+          "complete_identity_rows": 17692,
+          "distinct_complete_identities": 17579,
+          "duplicate_extra_rows": 113,
+          "duplicate_identity_groups": 107,
+          "identity_columns": [
+            "kodecustomer",
+            "kodeprinciple",
+            "kodesales"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 19269
+        },
+        "principle": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 25,
+          "distinct_complete_identities": 25,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 25
+        },
+        "sales": {
+          "available": true,
+          "blank_identity_rows": 20,
+          "complete_identity_rows": 314,
+          "distinct_complete_identities": 314,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "kodeprinciple",
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 334
+        },
+        "stok": {
+          "available": true,
+          "blank_identity_rows": 0,
+          "complete_identity_rows": 9719,
+          "distinct_complete_identities": 9719,
+          "duplicate_extra_rows": 0,
+          "duplicate_identity_groups": 0,
+          "identity_columns": [
+            "principle",
+            "kode"
+          ],
+          "normalization": "lower(btrim(...))",
+          "source_rows": 9719
+        }
+      },
+      "manifest": {
+        "duplicate_manifest_rows": [],
+        "missing_required_columns": [],
+        "ready": true
+      },
+      "master_stage_ready": true,
+      "run": {
+        "latest_run": {
+          "consistency_mode": "maintenance_freeze_serializable",
+          "id": 1,
+          "is_preview": false,
+          "maintenance_freeze_attested": true,
+          "maintenance_freeze_confirmed_at": "2026-08-30T10:59:05.125387+07:00",
+          "maintenance_window_id": "aug2026-bdm-tmp-20260830-01",
+          "source_lock_timeout_ms": 30000,
+          "source_system": "tmp_solo_dist",
+          "source_transaction_isolation": "SERIALIZABLE",
+          "stage_branch_code": "SLO",
+          "stage_branch_id_audit_only": 5,
+          "stage_company_code": "TMP",
+          "stage_company_id_audit_only": 2,
+          "status": "completed"
+        },
+        "missing_required_columns": [],
+        "policy_code_match": {
+          "branch_code": true,
+          "company_code": true,
+          "source_system": true
+        },
+        "ready": true
+      },
+      "schema": "legacy_tmp_solo_final_freeze_20260830",
+      "source_system": "tmp_solo_dist",
+      "tables": {
+        "barangsatuan": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit"
+            ],
+            "source_row_count": 26,
+            "staged_row_count": 26,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 26,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 26,
+            "manifest_staged_row_count": 26,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": false,
+          "table_exists": true
+        },
+        "customer": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "fax",
+              "contactperson",
+              "email",
+              "fp",
+              "npwp",
+              "namawp",
+              "alamatwp",
+              "termofpayment",
+              "opsharga",
+              "opshargakek",
+              "kodearea",
+              "namaarea",
+              "kodejenis",
+              "namajenis",
+              "tanggalcatat",
+              "promo",
+              "outletitr",
+              "kodegroup",
+              "namagroup",
+              "kodess",
+              "plafon",
+              "tunai",
+              "piutang",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "text",
+              "qrcode",
+              "longitude",
+              "latitude",
+              "opshargateh",
+              "kodeoutletscylla",
+              "lockposisi",
+              "propinsiid",
+              "kabupatenid",
+              "kecamatanid",
+              "kelurahanid"
+            ],
+            "source_row_count": 17712,
+            "staged_row_count": 17712,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 17712,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 17712,
+            "manifest_staged_row_count": 17712,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "plafon": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kodecustomer",
+              "kodeprinciple",
+              "plafon",
+              "useradd",
+              "tgladd",
+              "term",
+              "lock1",
+              "disc1",
+              "lockplan",
+              "kodesales",
+              "hari",
+              "week",
+              "kategori",
+              "keterangan",
+              "autolockplan",
+              "autolockjt",
+              "timelockplan",
+              "timelockjt",
+              "channel",
+              "cluster",
+              "autoupdateweek"
+            ],
+            "source_row_count": 19269,
+            "staged_row_count": 19269,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 19269,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 19269,
+            "manifest_staged_row_count": 19269,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "principle": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "fax",
+              "contactperson",
+              "email",
+              "npwp",
+              "bank",
+              "account",
+              "disc",
+              "active",
+              "hutang",
+              "fp",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "warningretur",
+              "tglclose"
+            ],
+            "source_row_count": 25,
+            "staged_row_count": 25,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 25,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 25,
+            "manifest_staged_row_count": 25,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "sales": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "alamat",
+              "kota",
+              "telpon",
+              "kodeprinciple",
+              "namaprinciple",
+              "type",
+              "jenisitr",
+              "active",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "qrcode",
+              "allowupdatecustomer"
+            ],
+            "source_row_count": 334,
+            "staged_row_count": 334,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 334,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 334,
+            "manifest_staged_row_count": 334,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        },
+        "stok": {
+          "manifest": {
+            "module": "masters",
+            "source_columns": [
+              "kode",
+              "nama",
+              "active",
+              "principle",
+              "jenis",
+              "food",
+              "stokakhir",
+              "stokpending",
+              "stokkanvas",
+              "satuan",
+              "perunit",
+              "namaunit",
+              "hargaasli",
+              "hargaa",
+              "hargab",
+              "hargac",
+              "hargad",
+              "hargae",
+              "fakturpajak",
+              "stokminim",
+              "ton",
+              "kodegroup",
+              "namagroup",
+              "merk",
+              "namamerk",
+              "brand",
+              "namabrand",
+              "subbrand",
+              "namasubbrand",
+              "lokasi",
+              "namalokasi",
+              "class",
+              "namaclass",
+              "masterkode",
+              "nasionalkode",
+              "useradd",
+              "tgladd",
+              "useredit",
+              "tgledit",
+              "kategori",
+              "stokawal",
+              "tglurut",
+              "isipalet",
+              "volume",
+              "koderak"
+            ],
+            "source_row_count": 9719,
+            "staged_row_count": 9719,
+            "status": "done"
+          },
+          "manifest_columns_missing_from_stage": [],
+          "manifest_source_columns_valid": true,
+          "missing_fixed_columns": [],
+          "missing_required_source_columns": [],
+          "provenance": {
+            "actual_rows": 9719,
+            "blank_source_row_hash_rows": 0,
+            "manifest_module": "masters",
+            "manifest_source_row_count": 9719,
+            "manifest_staged_row_count": 9719,
+            "manifest_status": "done",
+            "wrong_legacy_table_rows": 0,
+            "wrong_source_system_rows": 0,
+            "wrong_stage_scope_rows": 0
+          },
+          "ready": true,
+          "required": true,
+          "table_exists": true
+        }
+      }
+    }
+  },
+  "target_baseline": {
+    "clean_registry": {
+      "note": "A missing registry is a blocker for import, but not for a baseline preflight report.",
+      "registry_ddl_installed": true,
+      "schema": "migration_clean_bdm_tmp_202609",
+      "tables": {
+        "customer_source_map": true,
+        "import_hold": true,
+        "import_run": true,
+        "principal_source_map": true,
+        "product_source_map": true,
+        "product_uom_source_map": true,
+        "reconciliation_result": true,
+        "sales_document_line_map": true,
+        "sales_document_map": true,
+        "sales_source_map": true,
+        "source_context": true
+      }
+    },
+    "context_resolver": {
+      "bdm_solo_dist": {
+        "branch_code": "SLO",
+        "branch_match_count": 1,
+        "company_code": "BMM",
+        "company_match_count": 1,
+        "perusahaan_cabang_pair_match_count": 1,
+        "ready": true,
+        "resolved_ids_audit_only": {
+          "branch_id": 5,
+          "company_id": 1,
+          "perusahaan_cabang_id": 508
+        },
+        "rule": "resolve company and branch code independently, then require one perusahaan_cabang pair"
+      },
+      "tmp_solo_dist": {
+        "branch_code": "SLO",
+        "branch_match_count": 1,
+        "company_code": "TMP",
+        "company_match_count": 1,
+        "perusahaan_cabang_pair_match_count": 1,
+        "ready": true,
+        "resolved_ids_audit_only": {
+          "branch_id": 5,
+          "company_id": 2,
+          "perusahaan_cabang_id": 328
+        },
+        "rule": "resolve company and branch code independently, then require one perusahaan_cabang pair"
+      }
+    },
+    "customer_code_global_unique": false,
+    "reference_baseline_row_counts": {
+      "armada_tipe": 12,
+      "cabang": 5,
+      "customer_tipe": 13,
+      "departemen": 5,
+      "fitur": 1026,
+      "fitur_mal": 34,
+      "jabatan": 22,
+      "jabatan_akses": 1215,
+      "master_ppn": 2,
+      "modul": 8,
+      "perusahaan": 3,
+      "perusahaan_cabang": 9,
+      "produk_kategori": 7,
+      "produk_satuan": 32,
+      "produk_tipe_harga": 6,
+      "rute": 152,
+      "rute_cabang": 146,
+      "sales_tipe": 3,
+      "source_modul": 34,
+      "status": 4,
+      "tipe_toko_customer": 3,
+      "tipe_transaksi": 12,
+      "wilayah1": 34,
+      "wilayah2": 514,
+      "wilayah3": 7215,
+      "wilayah4": 80534
+    },
+    "source_owned_master_expected_empty": {
+      "counts": {
+        "customer": 0,
+        "plafon": 0,
+        "principal": 0,
+        "produk": 0,
+        "produk_harga_jual": 0,
+        "produk_uom": 0,
+        "sales": 0,
+        "sales_detail": 0,
+        "sales_principal_assignment": 0
+      },
+      "nonempty": {},
+      "ready": true
+    },
+    "target_columns_ready": true,
+    "target_context_ready": true,
+    "target_master_table_compatibility": {
+      "cabang": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "kode": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "customer": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_cabang": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "kode": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 30,
+            "nullable": true
+          },
+          "nama": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 50,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "perusahaan": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "kode": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "perusahaan_cabang": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_cabang": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_perusahaan": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "plafon": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_customer": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_principal": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_sales": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_user": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "limit_bon": {
+            "data_type": "double precision",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "sisa_bon": {
+            "data_type": "double precision",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "top": {
+            "data_type": "smallint",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "principal": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_perusahaan": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "kode": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 100,
+            "nullable": true
+          },
+          "nama": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 50,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "produk": {
+        "columns": {
+          "id": {
+            "data_type": "bigint",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_principal": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "kode_sku": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 25,
+            "nullable": true
+          },
+          "nama": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 50,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "produk_harga_jual": {
+        "columns": {
+          "harga": {
+            "data_type": "double precision",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_produk": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_tipe_harga": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "produk_uom": {
+        "columns": {
+          "faktor_konversi": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_produk": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "kode": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 25,
+            "nullable": true
+          },
+          "level": {
+            "data_type": "smallint",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "nama": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 50,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "sales": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_principal": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_tipe": {
+            "data_type": "smallint",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_user": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "sales_detail": {
+        "columns": {
+          "id_sales": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "kode_sales": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 90,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "sales_principal_assignment": {
+        "columns": {
+          "id_principal": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_sales": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      },
+      "users": {
+        "columns": {
+          "id": {
+            "data_type": "integer",
+            "has_default": true,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": false
+          },
+          "id_cabang": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_jabatan": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "id_perusahaan": {
+            "data_type": "integer",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": null,
+            "nullable": true
+          },
+          "nama": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 40,
+            "nullable": true
+          },
+          "username": {
+            "data_type": "character varying",
+            "has_default": false,
+            "is_generated": "NEVER",
+            "is_identity": false,
+            "max_length": 25,
+            "nullable": true
+          }
+        },
+        "missing_required_columns": [],
+        "ready": true,
+        "table_exists": true
+      }
+    },
+    "transaction_expected_empty": {
+      "counts": {
+        "faktur": 0,
+        "faktur_detail": 0,
+        "sales_order": 0,
+        "sales_order_detail": 0
+      },
+      "nonempty": {},
+      "ready": true
+    }
+  },
+  "writes_to_postgresql": false,
+  "writes_to_sql_server": false
+}

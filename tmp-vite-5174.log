@@ -1,0 +1,69 @@
+
+> budimas-internal-frontend@0.1.0 dev
+> vite --host 127.0.0.1 --port 5174
+
+
+  [32m[1mVITE[22m v6.4.2[39m  [2mready in [0m[1m792[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5174[22m/[39m
+[2m00.41.36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorReturApprovalPage.vue[22m
+[2m00.56.50[22m [36m[1m[vite][22m[39m [32m.env changed, restarting server...[39m
+[2m00.56.50[22m [36m[1m[vite][22m[39m server restarted.
+[2m01.35.21[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/layouts/MainLayout.vue, /src/assets/styles.css[22m
+[2m01.35.37[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/app/router/index.js[22m
+[2m01.42.09[22m [36m[1m[vite][22m[39m [32m.env changed, restarting server...[39m
+[2m01.42.09[22m [36m[1m[vite][22m[39m server restarted.
+[2m02.04.45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorDoiAnalysisPage.vue[22m
+[2m02.05.12[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/modules/purchase/pages/PurchaseOrderCreatePage.vue, /src/assets/styles.css[22m
+[2m02.24.16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorDoiAnalysisPage.vue[22m
+[2m02.24.40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorDoiAnalysisPage.vue[22m
+[2m02.35.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorCustomerMapPage.vue[22m
+[2m02.36.24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorCustomerMapPage.vue[22m
+[2m02.37.15[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/supervisor-sales/pages/SupervisorCustomerMapPage.vue[22m
+[2m10.36.00[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/finance/pages/CreditNotePage.vue[22m
+[2m11.05.25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.js[22m
+[2m11.18.59[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/PickingPage.vue[22m
+[2m11.19.17[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.48.21[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/sales-order/pages/SalesOrderListPage.vue[22m
+[2m11.48.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/sales-order/pages/SalesOrderListPage.vue[22m
+[2m11.48.54[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/sales-order/pages/SalesOrderListPage.vue[22m
+[2m11.49.08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/sales-order/pages/SalesOrderListPage.vue[22m
+[2m11.49.24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.49.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.49.56[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.50.09[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.50.24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/ScheduleFleetPage.vue[22m
+[2m11.50.39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/PickingPage.vue[22m
+[2m11.50.57[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/distribution/pages/InvoiceDetailPage.vue[22m
+[2m20.18.47[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.19.11[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.20.45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.21.34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.22.23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.31.38[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.32.01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.32.22[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.32.57[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.33.32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/wms/pages/WmsDashboardPage.vue[22m
+[2m20.42.24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/modules/purchase/pages/PurchaseOrderCreatePage.vue, /src/assets/styles.css[22m
+[2m20.42.45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/modules/purchase/pages/PurchaseOrderCreatePage.vue, /src/assets/styles.css[22m
+[2m21.15.05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBillsPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseOrderConfirmationPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBranchRequestConfirmationPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseOrderReportPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBillsPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseConfirmationPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseReceiptsPage.vue[22m
+[2m21.35.10[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseOrdersPage.vue[22m
+[2m21.42.01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/assets/styles.css, /src/modules/purchase/pages/PurchaseOrderCreatePage.vue[22m
+[2m21.42.40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseReceiptsPage.vue[22m
+[2m21.42.40[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseReceiptCreatePage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseOrderReportPage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseOrderConfirmationPage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseConfirmationPage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBillsPage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBranchRequestConfirmationPage.vue[22m
+[2m21.42.41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/modules/purchase/pages/PurchaseOrderCreatePage.vue, /src/assets/styles.css[22m
+[2m21.43.08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBillsPage.vue[22m
+[2m21.43.27[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/modules/purchase/pages/PurchaseBillsPage.vue[22m
+[2m21.43.44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/assets/styles.css, /src/modules/purchase/pages/PurchaseOrderCreatePage.vue[22m

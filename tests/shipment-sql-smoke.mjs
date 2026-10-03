@@ -1,0 +1,70 @@
+// Explicitly invoked offline integration test. Does not connect to any business DB.
+import { PGlite } from '/tmp/budimas-lph-kasir-tests.gq65Vo/node_modules/@electric-sql/pglite/dist/index.js';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const api='/Users/macairm2/www/API';
+const queries=JSON.parse(execFileSync(`${api}/venv/bin/python`,[`${api}/tools/test_shipment_sql.py`],{encoding:'utf8'}));
+const db=new PGlite();
+const query=(fn,part)=>{ const matches=queries[fn].filter(sql=>sql.includes(part)); assert.equal(matches.length,1,`${fn}/${part}`); return matches[0]; };
+async function run(sql,params={}) { const keys=[], values=[]; return db.query(sql.replace(/(?<!:):([a-zA-Z_]\w*)/g,(_,key)=>{if(!keys.includes(key)){keys.push(key);values.push(params[key]);}return `$${keys.indexOf(key)+1}`;}),values); }
+try {
+await db.exec(`
+CREATE TABLE cabang(id int PRIMARY KEY,id_perusahaan int);
+CREATE TABLE principal(id int PRIMARY KEY,id_perusahaan int);
+CREATE TABLE customer(id int PRIMARY KEY,id_cabang int,id_rute int);
+CREATE TABLE plafon(id int PRIMARY KEY,id_customer int,id_principal int);
+CREATE TABLE sales_order(id int PRIMARY KEY,id_plafon int,id_cabang int,status_order int,id_order_batch int,tanggal_terkirim date);
+CREATE TABLE sales_order_detail(id int PRIMARY KEY,id_sales_order int,id_produk int,pieces_order int,box_order int,karton_order int,pieces_shipped int,box_shipped int,karton_shipped int,pieces_delivered int,box_delivered int,karton_delivered int,subtotaldelivered numeric);
+CREATE TABLE produk(id int PRIMARY KEY,isiperbox int,isiperkarton int);
+CREATE TABLE produk_uom(id_produk int,level int,faktor_konversi numeric);
+CREATE TABLE proses_picking(id int PRIMARY KEY,id_order_detail int,id_driver int,id_armada int,delivering_date date,id_helper int,dock_code text,cargo_zone text,delivery_notes text);
+CREATE TABLE driver(id int PRIMARY KEY,id_user int);
+CREATE TABLE helper(id int PRIMARY KEY,id_user int);
+CREATE TABLE users(id int PRIMARY KEY,nama text,email text,username text);
+CREATE TABLE armada(id int PRIMARY KEY,nama text,no_pelat text);
+CREATE TABLE proses_picking_helper(id_proses_picking int,id_helper int);
+CREATE TABLE wms_picking_task(id int PRIMARY KEY,id_sales_order int,id_cabang int,status text,no_order text,no_faktur text,dock_code text,updated_at timestamptz,finalized_at timestamptz,checker_name text,checked_by int,checked_at timestamptz);
+CREATE TABLE wms_picking_task_detail(id int PRIMARY KEY,task_id int,id_sales_order_detail int,id_produk int,kode_barang text,nama_barang text,required_quantity int,picked_quantity int,checked_quantity int,checker_status text,status_draft text,batch_number text,expired_date date,kode_rak text,updated_at timestamptz,handling_class text,checker_condition text,checker_note text);
+CREATE TABLE wms_loading_manifest_detail(id int PRIMARY KEY,picking_task_detail_id int);
+INSERT INTO cabang VALUES(2,3); INSERT INTO principal VALUES(1,3); INSERT INTO customer VALUES(1,2,4); INSERT INTO plafon VALUES(1,1,1);
+INSERT INTO sales_order VALUES(11,1,2,3,NULL,NULL),(12,1,2,3,NULL,NULL),(13,1,2,3,NULL,NULL);
+INSERT INTO produk VALUES(1,12,24); INSERT INTO produk_uom VALUES(1,1,1),(1,2,12),(1,3,24);
+INSERT INTO sales_order_detail(id,id_sales_order,id_produk,pieces_order,box_order,karton_order) VALUES(20,11,1,24,0,0),(21,12,1,5,0,0),(22,13,1,6,0,0);
+INSERT INTO driver VALUES(1,1),(2,2); INSERT INTO helper VALUES(1,3); INSERT INTO users VALUES(1,'Driver A','',''),(2,'Driver B','',''),(3,'Helper','','');
+INSERT INTO armada VALUES(2,'Truk A','B123'),(3,'Truk B','B456');
+INSERT INTO proses_picking VALUES(100,20,1,2,'2026-10-02',1,'A','FOOD',''),(101,21,1,2,'2026-10-02',1,'A','FOOD',''),(102,22,2,3,'2026-10-03',1,'B','FOOD','');
+INSERT INTO wms_picking_task(id,id_sales_order,id_cabang,status,no_order,no_faktur) VALUES(31,11,2,'READY_DOCK','SO-A','INV-A'),(32,12,2,'READY_DOCK','SO-B','INV-B'),(33,13,2,'READY_DOCK','SO-C','INV-C');
+INSERT INTO wms_picking_task_detail(id,task_id,id_sales_order_detail,id_produk,kode_barang,nama_barang,required_quantity,picked_quantity,checked_quantity,checker_status,status_draft,handling_class)
+VALUES(41,31,20,1,'SKU','Barang',24,24,24,'BYPASS','CHECKED','CARTON'),(42,32,21,1,'SKU','Barang',5,5,5,'OK','CHECKED','SMALL'),(43,33,22,1,'SKU','Barang',6,6,6,'OK','CHECKED','SMALL');
+`);
+const migration=await fs.readFile(`${api}/tools/migrations/20261002_shipment_picking.sql`,'utf8');
+await db.exec(migration); await db.exec(migration);
+assert.equal((await db.query('SELECT status FROM wms_picking_task WHERE id=31')).rows[0].status,'CHECKER_PENDING');
+assert.equal((await db.query('SELECT checker_status FROM wms_picking_task_detail WHERE id=41')).rows[0].checker_status,'PENDING');
+const params={id_armada:2,id_driver:1,delivery_date:'2026-10-02',all_branches:true,branches:[0],all_companies:true,companies:[0]};
+const ready=query('ready_to_load','CalonNoManifest');
+assert.deepEqual((await run(ready,params)).rows.map(r=>r.wms_task_detail_id),[42]);
+assert.equal((await run(ready,{...params,delivery_date:'2026-10-03'})).rows.length,0);
+assert.equal((await run(ready,{...params,all_branches:false,branches:[9]})).rows.length,0);
+await run(query('checker_confirm','UPDATE wms_picking_task_detail'),{detail_id:41,qty:24,condition:'GOOD',note:'',status:'OK'});
+await run(query('checker_confirm','UPDATE wms_picking_task\n'),{task_id:31,next_status:'READY_DOCK',checker_name:'Uji',checker_id:9,dock_code:'A'});
+assert.equal((await run(ready,params)).rows.length,2);
+await db.exec("UPDATE sales_order SET status_order=5 WHERE id=12");
+assert.equal((await run(ready,params)).rows.length,1);
+const check=query('checked_tasks','SELECT d.id');
+assert.equal((await run(check,{ids:[32]})).rows.length,1);
+await db.exec("UPDATE sales_order SET status_order=3 WHERE id=12; UPDATE wms_picking_task_detail SET checker_status='NG' WHERE id=42");
+assert.equal((await run(check,{ids:[32]})).rows.length,1);
+await db.exec("UPDATE wms_picking_task_detail SET checker_status='OK' WHERE id=42; INSERT INTO wms_loading_manifest_detail VALUES(1,42)");
+assert.equal((await run(check,{ids:[32]})).rows.length,1);
+assert.equal((await run(ready,params)).rows.length,1);
+const resolve=query('resolve','AND pr.id_perusahaan');
+assert.deepEqual((await run(resolve,{id_cabang:2,id_perusahaan:3,id_rute:4,id_driver:1,id_armada:2,delivering_date:'2026-10-02'})).rows.map(r=>r.order_id),[11,12]);
+const revisions=query('finish_revision','SELECT d.id');
+assert.equal((await run(revisions,{ids:[31,32]})).rows.length,2);
+await db.exec('UPDATE sales_order_detail SET pieces_order=6 WHERE id=21');
+const revised=(await run(revisions,{ids:[32]})).rows[0];
+assert.equal(Number(revised.revised_quantity),6); assert.equal(revised.required_quantity,5);
+console.log('PASS: idempotent migration, carton checker, selected loading/scope, NG/revision/replay, draft membership, persisted revision quantities.');
+} finally { await db.close(); }

@@ -1,0 +1,13 @@
+{
+  "policy_id": "draft_customer_pricing_tax_bdm_tmp_20260902",
+  "approval_status": "rejected_pending_business_rule",
+  "review_note": "Do not approve this draft as-is. Read-only invoice evidence on 2026-09-02 shows both legacy FP=T and FP=Y commonly produce 11% tax; FP is not a customer PPN toggle. A finance-approved source for customer.is_ppn is required before customer import.",
+  "source_opsharga_to_price_type_code": {
+    "A": "MT",
+    "B": "GT",
+    "C": "EU",
+    "D": "KA",
+    "E": "WS"
+  },
+  "source_fp_to_is_ppn": {}
+}

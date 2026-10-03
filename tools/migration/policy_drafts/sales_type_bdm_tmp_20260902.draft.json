@@ -1,0 +1,14 @@
+{
+  "policy_id": "draft_sales_type_bdm_tmp_20260902",
+  "approval_status": "draft",
+  "review_note": "Direct legacy Type is used first. Only an unmapped/blank Type may fall back to JenisITR; there is no universal default.",
+  "source_type_to_sales_tipe_name": {
+    "KV": "Canvasser",
+    "TO": "Taking Order"
+  },
+  "source_jenisitr_to_sales_tipe_name": {
+    "motoris": "Canvasser",
+    "retail": "Taking Order",
+    "supermarket": "Taking Order"
+  }
+}

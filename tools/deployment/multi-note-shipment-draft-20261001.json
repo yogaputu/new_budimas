@@ -1,0 +1,84 @@
+{
+  "scope": "Select multiple Sales Order notes, filter by note/order date range, and create one shipment draft",
+  "status": "DEPLOYED_AND_VERIFIED",
+  "verified_date": "2026-10-01",
+  "deployed_at": "2026-10-01T10:15:36.289971+00:00",
+  "api_origin_unchanged": "https://erp.budimas.swakarya.my.id:9092",
+  "local_built_entrypoint": "/assets/index-Cau5bsFt.js",
+  "frontend_root": "/Users/macairm2/www/new_budimas",
+  "frontend_files": [
+    "src/modules/sales-order/pages/SalesOrderListPage.vue",
+    "src/modules/sales-order/components/ShipmentDraftModal.vue",
+    "src/utils/shipmentDraft.js",
+    "src/shared/components/AppTable.vue",
+    "src/shared/components/AppFilterBar.vue",
+    "tests/shipment-draft.test.mjs"
+  ],
+  "backend_root": "/Users/macairm2/www/API",
+  "backend_files": [
+    "apps/lib/shipment_draft.py",
+    "apps/services/Distribusi.py",
+    "apps/services/SalesOrder.py",
+    "apps/test/test_shipment_draft.py"
+  ],
+  "rules": {
+    "date_field": "sales_order.tanggal_order; inclusive date_from/date_to; optional bounds",
+    "eligible_status": "1 / RL / Booked; no existing schedule",
+    "max_notes": 100,
+    "group_scope": "same company, branch and customer route; customers and note identities may differ",
+    "selection": "preserved across pages, cleared when filters change; select-all affects eligible notes on current page",
+    "atomicity": "validate and lock selected orders, lock route/fleet/date, one commit or rollback the entire request",
+    "legacy_reschedule": "single-note status 9 to 10 retained",
+    "existing_schedule": "reject same route/fleet/date rather than silently append notes"
+  },
+  "verification": {
+    "api_unit_regression_tests_passed": 241,
+    "frontend_unit_tests_passed": 25,
+    "production_build": "PASS; pre-existing chunk-size warning",
+    "browser_mock_test": "PASS: dates, select-all, cross-page selection, different-route rejection, three-note submission, retry, success, and 100-note limit",
+    "sql_smoke": "PASS: actual lock/duplicate SQL executed in isolated PGlite",
+    "production_database_tested": "Authenticated read-only Sales Order requests; no business test writes",
+    "production_writes": 0,
+    "predeploy_api_subset_tests_passed": 64,
+    "production_api_read_only_checks_passed": 6,
+    "public_files_sha256_verified": 191,
+    "deployed_frontend_browser_mock_test": "PASS: dates, select-all, cross-page selection, three-note payload, validation, retry and 100-note limit; all business API requests intercepted",
+    "live_browser_api_health": 200,
+    "live_browser_sales_without_token": 401,
+    "entrypoints_443_and_9092_match": true
+  },
+  "production": {
+    "server": "58.147.185.142",
+    "ssh_port": 9999,
+    "api_root": "/www/wwwroot/API",
+    "frontend_root": "/www/wwwroot/new_budimas",
+    "public_url": "https://erp.budimas.swakarya.my.id",
+    "api_files_installed": [
+      "apps/lib/shipment_draft.py",
+      "apps/services/Distribusi.py",
+      "apps/services/SalesOrder.py"
+    ],
+    "frontend_delivery": "191 built files to dist and root serving copies; old hashed assets and existing .htaccess preserved; HTML entrypoints replaced last",
+    "backup_directory": "/www/backup/budimas-multinote-20261001.iMBCBe",
+    "backup_archive": "files-before.tar.gz",
+    "backup_sha256": "09e8498f07686ec9382c045117a41dd869ef4f9b18e388b53a90713452c242f6",
+    "release_bundle_sha256": "315d4662814a45451d61137371842edf9543e76fb31e0e0918ed0980cdd0df93",
+    "api_reload": "Verified production uWSGI master PID 2303, graceful HUP; UAT untouched",
+    "all_destination_hashes_verified": true,
+    "database_migrations_applied": [],
+    "business_mutations_for_testing": 0,
+    "apk_changed": false,
+    "rollback": "Restore the two original API services and both previous index.html files from backup, then reload the verified production API master. Retain new/old hashed assets and the unused helper; no business data rollback is needed.",
+    "artifacts": "/tmp/budimas-multinote-deploy.VPchk6"
+  },
+  "database_migration_required": false,
+  "new_dependencies_required": false,
+  "deployment_order_when_authorized": [
+    "Back up current server files",
+    "Upload API helper plus both modified services together; restart API safely and verify",
+    "Publish newly built ERP assets then index.html; retain older hashed assets for rollback",
+    "Verify authenticated Sales Order date filtering and draft form without creating unintended business records"
+  ],
+  "local_artifacts": "/tmp/budimas-multi-note-draft.HFJlL6",
+  "local_prechange_backups": ["erp-before.tar.gz", "api-before.tar.gz"]
+}

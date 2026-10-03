@@ -1,0 +1,1417 @@
+<script setup>
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import {
+  bulkUpdateProductPrices,
+  createProductBrand,
+  createProductCategory,
+  createProductDetail,
+  createProductSubbrand,
+  getBranches,
+  getProductBrands,
+  getProductCategories,
+  getProductCompletenessSummary,
+  getProductSubbrands,
+  getProductPriceTypes,
+  getProductPpnOptions,
+  getProductStatuses,
+  getPrincipalPriceRows,
+  getPrincipals,
+  getProductDetail,
+  getProducts,
+  deleteProductDetail,
+  updateProductDetail,
+  createProductUom,
+  deleteProductUom,
+  updateProductPrice,
+  updateProductUom
+} from '@/api/master';
+import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import { getLoginBranchId, getRowCompanyId, isSuperUser } from '@/utils/accessScope';
+import { useAuthStore } from '@/stores/auth';
+import AppDrawer from '@/shared/components/AppDrawer.vue';
+import AppEmptyState from '@/shared/components/AppEmptyState.vue';
+import AppFormField from '@/shared/components/AppFormField.vue';
+import AppModal from '@/shared/components/AppModal.vue';
+import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
+import AppTable from '@/shared/components/AppTable.vue';
+import PageHeader from '@/shared/components/PageHeader.vue';
+
+const auth = useAuthStore();
+
+const filters = reactive({
+  search: '',
+  principalId: ''
+});
+
+const products = ref([]);
+const principals = ref([]);
+const branches = ref([]);
+const loginBranchId = computed(() => getLoginBranchId(auth.user));
+const loginBranch = computed(() => branches.value.find((item) => String(item.id) === String(loginBranchId.value || '')));
+const loading = ref(false);
+const loadingPrincipals = ref(false);
+const error = ref('');
+const hasSubmitted = ref(false);
+const drawerOpen = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+const selectedProduct = ref(null);
+const editProductDraft = ref(null);
+const productDrawerMode = ref('detail');
+const productEditMode = ref(false);
+const productSaveLoading = ref(false);
+const productSaveMessage = ref('');
+const productUoms = ref([]);
+const uomDraft = reactive({
+  id: '',
+  kode: '',
+  nama: '',
+  level: 1,
+  faktor_konversi: 1,
+  packing_satuan: '',
+  set_default_sales: 0,
+  set_default_storage: 0
+});
+const uomSaving = ref(false);
+const uomDeletingId = ref(null);
+const uomMessage = ref('');
+const productPrices = ref([]);
+const priceDrafts = ref([]);
+const priceSavingId = ref(null);
+const priceSaveMessage = ref('');
+const productDeleteLoading = ref(false);
+const bulkModalOpen = ref(false);
+const bulkLoading = ref(false);
+const bulkError = ref('');
+const bulkSaveLoading = ref(false);
+const bulkSaveMessage = ref('');
+const bulkPriceRows = ref([]);
+const bulkPriceDrafts = ref([]);
+const bulkPage = ref(1);
+const bulkPageSize = ref(15);
+const productBrands = ref([]);
+const productCategories = ref([]);
+const productSubbrands = ref([]);
+const productStatuses = ref([]);
+const productPriceTypes = ref([]);
+const productPpnOptions = ref([]);
+const completenessSummary = ref(null);
+
+const brandOptions = computed(() =>
+  productBrands.value.map((item) => ({
+    value: String(item.id),
+    label: item.nama || item.text || `Brand ${item.id}`
+  }))
+);
+
+const categoryOptions = computed(() =>
+  productCategories.value.map((item) => ({
+    value: String(item.id),
+    label: item.nama || item.text || `Kategori ${item.id}`
+  }))
+);
+
+const subbrandOptions = computed(() =>
+  productSubbrands.value
+    .filter((item) => {
+      const selectedBrandId = editProductDraft.value?.id_brand;
+      if (!selectedBrandId || !item.id_brand) return true;
+      return String(item.id_brand) === String(selectedBrandId);
+    })
+    .map((item) => ({
+      value: String(item.id),
+      label: item.text || item.nama || `Sub-brand ${item.id}`
+    }))
+);
+
+const statusOptions = computed(() =>
+  productStatuses.value.map((item) => ({
+    value: String(item.id),
+    label: item.nama || item.text || `Status ${item.id}`
+  }))
+);
+
+const ppnOptions = computed(() =>
+  productPpnOptions.value.map((item) => ({
+    value: String(item.id),
+    label: item.text || `${item.nama || `Status PPN ${item.id}`} (${Number(item.persentase || 0)}%)`,
+    rate: Number(item.persentase || 0)
+  }))
+);
+
+const principalOptions = computed(() =>
+  principals.value
+    .filter((item) => {
+      if (isSuperUser(auth) || !loginBranch.value) return true;
+      return String(item.id_perusahaan || item.company_id || '') === String(getRowCompanyId(loginBranch.value));
+    })
+    .map((item) => ({
+      value: String(item.id),
+      label: item.nama_principal || item.nama || `Principal ${item.id}`
+    }))
+);
+
+const selectedPrincipalLabel = computed(() => {
+  const found = principalOptions.value.find((item) => item.value === String(filters.principalId));
+  return found?.label || 'Principal terpilih';
+});
+
+const bulkChangedCount = computed(() =>
+  bulkPriceDrafts.value.filter((item) => String(item.harga ?? '') !== String(item.originalHarga ?? '')).length
+);
+
+const bulkTotalPages = computed(() => Math.max(1, Math.ceil(bulkPriceDrafts.value.length / bulkPageSize.value)));
+const bulkPageStart = computed(() => (bulkPage.value - 1) * bulkPageSize.value);
+const paginatedBulkPriceDrafts = computed(() =>
+  bulkPriceDrafts.value.slice(bulkPageStart.value, bulkPageStart.value + bulkPageSize.value).map((item, index) => ({
+    ...item,
+    __index: bulkPageStart.value + index
+  }))
+);
+
+const summaryCards = computed(() => {
+  const activeRows = products.value;
+  const principalCount = new Set(activeRows.map((item) => item.id_principal).filter(Boolean)).size;
+  const completeness = completenessSummary.value || {};
+
+  return [
+    {
+      label: 'Produk Tampil',
+      value: activeRows.length,
+      note: 'Jumlah produk hasil query terakhir.'
+    },
+    {
+      label: 'Principal Aktif',
+      value: principalCount,
+      note: 'Principal yang ikut muncul pada hasil saat ini.'
+    },
+    {
+      label: 'Siap Order',
+      value: completeness.ready_for_order || 0,
+      note: 'Produk dengan brand, sub-brand, UOM, dan harga.'
+    },
+    {
+      label: 'Belum Sub-brand',
+      value: completeness.missing_subbrand || 0,
+      note: 'Perlu dilengkapi agar promo cashback bisa terbaca.'
+    }
+  ];
+});
+
+const readinessWarnings = computed(() => {
+  const data = completenessSummary.value;
+  if (!data) return [];
+  return [
+    { label: 'Brand kosong', value: data.missing_brand },
+    { label: 'Sub-brand kosong', value: data.missing_subbrand },
+    { label: 'UOM kosong', value: data.missing_uom },
+    { label: 'Harga tipe kosong', value: data.missing_price_type },
+    { label: 'Belum mapping promo', value: data.without_promo_mapping }
+  ].filter((item) => Number(item.value || 0) > 0);
+});
+
+const queryHint = computed(() => {
+  if (!hasSubmitted.value) {
+    return 'Gunakan filter principal atau cari nama/SKU produk untuk mulai memuat data.';
+  }
+
+  if (!products.value.length && !loading.value) {
+    return 'Belum ada produk yang cocok dengan filter saat ini.';
+  }
+
+  return 'Menampilkan hasil terbatas agar halaman tetap ringan saat data produk besar.';
+});
+
+const productNumberFields = new Set([
+  'harga_beli',
+  'harga_jual',
+  'kubikasiperbox',
+  'kubikasiperkarton',
+  'kubikasiperpieces',
+  'isiperbox',
+  'isiperkarton'
+]);
+
+const integerProductFields = new Set(['isiperbox', 'isiperkarton']);
+
+function normalizeNonNegativeNumber(value, options = {}) {
+  const { fallback = 0, min = 0, integer = false } = options;
+
+  if (value === '' || value === null || value === undefined) {
+    return fallback;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  const clampedValue = Math.max(min, numericValue);
+  return integer ? Math.trunc(clampedValue) : clampedValue;
+}
+
+function normalizeProductFieldValue(field, value) {
+  if (!productNumberFields.has(field)) {
+    return value;
+  }
+
+  return normalizeNonNegativeNumber(value, {
+    fallback: 0,
+    integer: integerProductFields.has(field)
+  });
+}
+
+const productColumns = [
+  {
+    key: 'identity',
+    label: 'Produk',
+    render: (row) => `${row.nama || '-'}${row.kode_sku ? ` (${row.kode_sku})` : ''}`
+  },
+  {
+    key: 'nama_principal',
+    label: 'Principal'
+  },
+  {
+    key: 'brand',
+    label: 'Brand'
+  },
+  {
+    key: 'subbrand',
+    label: 'Sub-brand',
+    render: (row) => row.subbrand || row.subbrand_nama || '-'
+  },
+  {
+    key: 'kategori',
+    label: 'Kategori'
+  },
+  {
+    key: 'harga_beli',
+    label: 'Harga Beli',
+    render: (row) =>
+      row.harga_beli !== null && row.harga_beli !== undefined
+        ? `Rp ${Number(row.harga_beli).toLocaleString('id-ID')}`
+        : '-'
+  },
+  {
+    key: 'harga_jual',
+    label: 'Harga Jual',
+    render: (row) =>
+      row.harga_jual !== null && row.harga_jual !== undefined
+        ? `Rp ${Number(row.harga_jual).toLocaleString('id-ID')}`
+        : '-'
+  },
+  {
+    key: 'ppn',
+    label: 'Status PPN',
+    render: (row) => row.ppn_nama ? `${row.ppn_nama} (${Number(row.ppn || 0)}%)` : `${Number(row.ppn || 0)}%`
+  }
+];
+
+const uomColumns = [
+  {
+    key: 'nama',
+    label: 'UOM',
+    render: (row) => `${row.nama || '-'}${row.kode ? ` (${row.kode})` : ''}`
+  },
+  {
+    key: 'level',
+    label: 'Level'
+  },
+  {
+    key: 'faktor_konversi',
+    label: 'Faktor Konversi'
+  },
+  {
+    key: 'set_default_sales',
+    label: 'Default Sales',
+    render: (row) => (Number(row.set_default_sales) === 1 ? 'Ya' : 'Tidak')
+  },
+  {
+    key: 'set_default_storage',
+    label: 'Default Storage',
+    render: (row) => (Number(row.set_default_storage) === 1 ? 'Ya' : 'Tidak')
+  }
+];
+
+function resetUomDraft() {
+  Object.assign(uomDraft, {
+    id: '',
+    kode: '',
+    nama: '',
+    level: 1,
+    faktor_konversi: 1,
+    packing_satuan: '',
+    set_default_sales: 0,
+    set_default_storage: 0
+  });
+}
+
+function editUom(row) {
+  Object.assign(uomDraft, {
+    id: row?.id || '',
+    kode: row?.kode || '',
+    nama: row?.nama || '',
+    level: row?.level ?? 1,
+    faktor_konversi: row?.faktor_konversi ?? 1,
+    packing_satuan: row?.packing_satuan || '',
+    set_default_sales: Number(row?.set_default_sales || 0),
+    set_default_storage: Number(row?.set_default_storage || 0)
+  });
+  uomMessage.value = '';
+}
+
+function normalizeProductDetailPayload(payload, row = null) {
+  let candidate = payload;
+
+  if (Array.isArray(candidate)) {
+    candidate = candidate.find((item) => item && typeof item === 'object') || null;
+  }
+
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    if (Array.isArray(candidate.items)) {
+      candidate = candidate.items.find((item) => item && typeof item === 'object') || candidate;
+    } else if (Array.isArray(candidate.rows)) {
+      candidate = candidate.rows.find((item) => item && typeof item === 'object') || candidate;
+    } else if (Array.isArray(candidate.data)) {
+      candidate = candidate.data.find((item) => item && typeof item === 'object') || candidate;
+    }
+  }
+
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    candidate = {};
+  }
+
+  return {
+    ...candidate,
+    produk_id: candidate.produk_id || candidate.id || row?.id || null,
+    id: candidate.id || candidate.produk_id || row?.id || null,
+    nama: candidate.nama || row?.nama || '',
+    kode_sku: candidate.kode_sku || row?.kode_sku || '',
+    kode_external: candidate.kode_external || row?.kode_external || '',
+    harga_beli:
+      candidate.harga_beli !== null && candidate.harga_beli !== undefined
+        ? candidate.harga_beli
+        : row?.harga_beli ?? '',
+    harga_jual:
+      candidate.harga_jual !== null && candidate.harga_jual !== undefined
+        ? candidate.harga_jual
+        : row?.harga_jual ?? '',
+    kubikasiperbox: candidate.kubikasiperbox ?? row?.kubikasiperbox ?? '',
+    kubikasiperkarton: candidate.kubikasiperkarton ?? row?.kubikasiperkarton ?? '',
+    kubikasiperpieces: candidate.kubikasiperpieces ?? row?.kubikasiperpieces ?? '',
+    isiperbox: candidate.isiperbox ?? row?.isiperbox ?? '',
+    isiperkarton: candidate.isiperkarton ?? row?.isiperkarton ?? '',
+    satuan: candidate.satuan || row?.satuan || '',
+    ppn:
+      candidate.ppn !== null && candidate.ppn !== undefined
+        ? candidate.ppn
+        : row?.ppn ?? '',
+    id_ppn: candidate.id_ppn ?? row?.id_ppn ?? '',
+    ppn_nama: candidate.ppn_nama || row?.ppn_nama || '',
+    brand_nama: candidate.brand_nama || row?.brand || '',
+    kategori_nama: candidate.kategori_nama || row?.kategori || '',
+    subbrand_nama: candidate.subbrand_nama || row?.subbrand || '',
+    id_subbrand: candidate.id_subbrand ?? row?.id_subbrand ?? '',
+    external_mappings: normalizeList(candidate.external_mappings),
+    uoms: normalizeList(candidate.uoms),
+    prices: normalizeList(candidate.prices)
+  };
+}
+
+function emptyProductDraft() {
+  return {
+    id_principal: filters.principalId ? String(filters.principalId) : '',
+    nama: '',
+    kode_sku: '',
+    kode_ean: '',
+    kode_external: '',
+    harga_beli: '',
+    harga_jual: '',
+    id_ppn: '',
+    ppn: '0',
+    keterangan: '',
+    satuan: '',
+    kubikasiperbox: '',
+    kubikasiperkarton: '',
+    kubikasiperpieces: '',
+    isiperbox: '',
+    isiperkarton: '',
+    id_brand: '',
+    id_kategori: '',
+    id_subbrand: '',
+    id_status: '1'
+  };
+}
+
+function makeProductDraft(detailPayload = {}) {
+  return {
+    id_principal: detailPayload?.id_principal ? String(detailPayload.id_principal) : '',
+    nama: detailPayload?.nama || '',
+    kode_sku: detailPayload?.kode_sku || '',
+    kode_ean: detailPayload?.kode_ean || '',
+    kode_external: detailPayload?.kode_external || '',
+    harga_beli: detailPayload?.harga_beli ?? '',
+    harga_jual: detailPayload?.harga_jual ?? '',
+    ppn: detailPayload?.ppn ?? '',
+    id_ppn: detailPayload?.id_ppn ? String(detailPayload.id_ppn) : '',
+    keterangan: detailPayload?.keterangan || '',
+    satuan: detailPayload?.satuan || '',
+    kubikasiperbox: detailPayload?.kubikasiperbox ?? '',
+    kubikasiperkarton: detailPayload?.kubikasiperkarton ?? '',
+    kubikasiperpieces: detailPayload?.kubikasiperpieces ?? '',
+    isiperbox: detailPayload?.isiperbox ?? '',
+    isiperkarton: detailPayload?.isiperkarton ?? '',
+    id_brand: detailPayload?.id_brand ? String(detailPayload.id_brand) : '',
+    id_kategori: detailPayload?.id_kategori ? String(detailPayload.id_kategori) : '',
+    id_subbrand: detailPayload?.id_subbrand ? String(detailPayload.id_subbrand) : '',
+    id_status: detailPayload?.id_status !== null && detailPayload?.id_status !== undefined ? String(detailPayload.id_status) : ''
+  };
+}
+
+function buildProductPayload() {
+  const payload = { ...(editProductDraft.value || {}) };
+  ['id_principal', 'id_brand', 'id_kategori', 'id_subbrand', 'id_ppn', 'id_status'].forEach((field) => {
+    payload[field] = payload[field] || null;
+  });
+  const selectedPpn = ppnOptions.value.find((item) => item.value === String(payload.id_ppn || ''));
+  if (selectedPpn) {
+    payload.ppn = selectedPpn.rate;
+  }
+  productNumberFields.forEach((field) => {
+    payload[field] = normalizeProductFieldValue(field, payload[field]);
+  });
+  return payload;
+}
+
+function buildPriceDrafts(existingPrices = [], priceTypes = []) {
+  const existingMap = new Map(
+    normalizeList(existingPrices).map((item) => [String(item.id_tipe_harga), item])
+  );
+
+  const merged = normalizeList(priceTypes).map((type) => {
+    const existing = existingMap.get(String(type.id)) || {};
+    return {
+      id: existing.id || null,
+      id_produk: existing.id_produk || null,
+      id_tipe_harga: existing.id_tipe_harga || type.id,
+      tipe_harga_nama: existing.tipe_harga_nama || type.nama || `Tipe ${type.id}`,
+      tipe_harga_kode: existing.tipe_harga_kode || type.kode || '',
+      harga: existing.harga ?? '',
+      isNew: !existing.id
+    };
+  });
+
+  if (merged.length) {
+    return merged;
+  }
+
+  return normalizeList(existingPrices).map((item) => ({
+    ...item,
+    harga: item.harga ?? '',
+    isNew: !item.id
+  }));
+}
+
+async function createReferenceOption(type) {
+  const label = type === 'brand' ? 'brand' : type === 'subbrand' ? 'subbrand' : 'kategori';
+  const name = window.prompt(`Nama ${label} baru`);
+  if (!name || !name.trim()) return;
+
+  detailError.value = '';
+
+  try {
+    const response = type === 'brand'
+      ? await createProductBrand({ nama: name.trim() })
+      : type === 'subbrand'
+        ? await createProductSubbrand({ nama: name.trim(), id_brand: editProductDraft.value?.id_brand || null })
+        : await createProductCategory({ nama: name.trim() });
+    const created = unwrapResponse(response);
+    await loadProductMetaOptions();
+    const createdId = created?.id || created?.result?.id;
+    if (createdId && editProductDraft.value) {
+      editProductDraft.value[
+        type === 'brand' ? 'id_brand' : type === 'subbrand' ? 'id_subbrand' : 'id_kategori'
+      ] = String(createdId);
+    }
+    productSaveMessage.value = `${label.charAt(0).toUpperCase()}${label.slice(1)} berhasil ditambahkan.`;
+  } catch (err) {
+    detailError.value = normalizeError(err, `${label} belum berhasil ditambahkan.`);
+  }
+}
+
+async function ensureDefaultProductSetup(productId, defaultPrice = 0) {
+  const productIdValue = Number(productId || 0);
+  if (!productIdValue) return;
+
+  const currentUoms = normalizeList(productUoms.value);
+  if (!currentUoms.length) {
+    await createProductUom({
+      id_produk: productIdValue,
+      kode: 'PCS',
+      nama: editProductDraft.value?.satuan || 'Pieces',
+      level: 1,
+      faktor_konversi: 1,
+      packing_satuan: editProductDraft.value?.satuan || 'Pieces',
+      set_default_sales: 1,
+      set_default_storage: 1
+    });
+  }
+
+  const currentPrices = normalizeList(productPrices.value);
+  const existingTypeIds = new Set(currentPrices.map((item) => String(item.id_tipe_harga)));
+  const priceValue = normalizeNonNegativeNumber(defaultPrice, { fallback: 0 });
+
+  await Promise.all(
+    productPriceTypes.value
+      .filter((type) => !existingTypeIds.has(String(type.id)))
+      .map((type) =>
+        updateProductPrice(productIdValue, {
+          id_tipe_harga: type.id,
+          harga: priceValue
+        })
+      )
+  );
+}
+
+async function loadPrincipals() {
+  loadingPrincipals.value = true;
+
+  try {
+    const [principalResponse, branchResponse] = await Promise.all([getPrincipals(), getBranches()]);
+    branches.value = normalizeList(unwrapResponse(branchResponse));
+    principals.value = normalizeList(unwrapResponse(principalResponse));
+    if (filters.principalId && !principalOptions.value.some((item) => item.value === String(filters.principalId))) {
+      filters.principalId = '';
+      products.value = [];
+    }
+  } catch (err) {
+    error.value = normalizeError(err, 'Daftar principal belum bisa dimuat.');
+    principals.value = [];
+  } finally {
+    loadingPrincipals.value = false;
+  }
+}
+
+async function loadProductMetaOptions() {
+  try {
+    const [brandResponse, categoryResponse, subbrandResponse, statusResponse, priceTypeResponse, ppnResponse, completenessResponse] = await Promise.all([
+      getProductBrands(),
+      getProductCategories(),
+      getProductSubbrands(),
+      getProductStatuses(),
+      getProductPriceTypes(),
+      getProductPpnOptions(),
+      getProductCompletenessSummary()
+    ]);
+
+    productBrands.value = normalizeList(unwrapResponse(brandResponse));
+    productCategories.value = normalizeList(unwrapResponse(categoryResponse));
+    productSubbrands.value = normalizeList(unwrapResponse(subbrandResponse));
+    productStatuses.value = normalizeList(unwrapResponse(statusResponse));
+    productPriceTypes.value = normalizeList(unwrapResponse(priceTypeResponse));
+    productPpnOptions.value = normalizeList(unwrapResponse(ppnResponse));
+    completenessSummary.value = unwrapResponse(completenessResponse) || null;
+  } catch (err) {
+    error.value = normalizeError(err, 'Daftar referensi produk belum bisa dimuat.');
+    productBrands.value = [];
+    productCategories.value = [];
+    productSubbrands.value = [];
+    productStatuses.value = [];
+    productPriceTypes.value = [];
+    productPpnOptions.value = [];
+    completenessSummary.value = null;
+  }
+}
+
+async function submit() {
+  hasSubmitted.value = true;
+  error.value = '';
+
+  if (!filters.search.trim() && !filters.principalId) {
+    products.value = [];
+    return [];
+  }
+
+  loading.value = true;
+
+  try {
+    const response = await getProducts({
+      search: filters.search.trim(),
+      id_principal: filters.principalId,
+      limit: 50
+    });
+
+    products.value = normalizeList(unwrapResponse(response));
+    return products.value;
+  } catch (err) {
+    error.value = normalizeError(err, 'Data master produk belum bisa dimuat.');
+    products.value = [];
+    return [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function openDetail(row) {
+  if (!row?.id) {
+    return;
+  }
+
+  drawerOpen.value = true;
+  productDrawerMode.value = 'detail';
+  detailLoading.value = true;
+  detailError.value = '';
+  selectedProduct.value = null;
+  editProductDraft.value = null;
+  productEditMode.value = false;
+  productSaveMessage.value = '';
+  productUoms.value = [];
+  resetUomDraft();
+  uomMessage.value = '';
+  productPrices.value = [];
+  priceDrafts.value = [];
+  priceSaveMessage.value = '';
+
+  try {
+    const detailResponse = await getProductDetail(row.id);
+    const detailPayload = normalizeProductDetailPayload(unwrapResponse(detailResponse), row);
+
+    selectedProduct.value = detailPayload;
+    editProductDraft.value = makeProductDraft(detailPayload);
+    productUoms.value = detailPayload.uoms;
+    productPrices.value = normalizeList(detailPayload.prices);
+    priceDrafts.value = buildPriceDrafts(productPrices.value, productPriceTypes.value);
+  } catch (err) {
+    detailError.value = normalizeError(err, 'Detail produk belum bisa dimuat.');
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+function openCreateProduct() {
+  drawerOpen.value = true;
+  productDrawerMode.value = 'create';
+  detailLoading.value = false;
+  detailError.value = '';
+  selectedProduct.value = {
+    produk_id: null,
+    id: null,
+    nama: '',
+    uoms: [],
+    prices: []
+  };
+  editProductDraft.value = emptyProductDraft();
+  productEditMode.value = true;
+  productSaveMessage.value = '';
+  productUoms.value = [];
+  resetUomDraft();
+  uomMessage.value = '';
+  productPrices.value = [];
+  priceDrafts.value = [];
+  priceSaveMessage.value = '';
+}
+
+async function refreshProductDetail(productId) {
+  const detailResponse = await getProductDetail(productId);
+  const detailPayload = normalizeProductDetailPayload(unwrapResponse(detailResponse), selectedProduct.value);
+
+  selectedProduct.value = detailPayload;
+  productUoms.value = detailPayload.uoms;
+  productPrices.value = normalizeList(detailPayload.prices);
+  priceDrafts.value = buildPriceDrafts(productPrices.value, productPriceTypes.value);
+}
+
+function closeDrawer() {
+  drawerOpen.value = false;
+}
+
+function toggleProductEditMode() {
+  productEditMode.value = !productEditMode.value;
+  productSaveMessage.value = '';
+
+  if (productEditMode.value && selectedProduct.value) {
+    editProductDraft.value = makeProductDraft(selectedProduct.value);
+  }
+}
+
+function updateProductField(field, value) {
+  editProductDraft.value = {
+    ...editProductDraft.value,
+    [field]: normalizeProductFieldValue(field, value)
+  };
+}
+
+watch(
+  () => editProductDraft.value?.id_brand,
+  (brandId, previousBrandId) => {
+    if (!editProductDraft.value || String(brandId || '') === String(previousBrandId || '')) return;
+
+    const selectedSubbrand = productSubbrands.value.find(
+      (item) => String(item.id) === String(editProductDraft.value.id_subbrand || '')
+    );
+
+    if (selectedSubbrand?.id_brand && String(selectedSubbrand.id_brand) !== String(brandId || '')) {
+      editProductDraft.value.id_subbrand = '';
+    }
+  }
+);
+
+async function saveProductDetail() {
+  if (productDrawerMode.value !== 'create' && !selectedProduct.value?.produk_id && !selectedProduct.value?.id) {
+    return;
+  }
+
+  const productId = selectedProduct.value.produk_id || selectedProduct.value.id;
+  productSaveLoading.value = true;
+  productSaveMessage.value = '';
+  detailError.value = '';
+
+  try {
+    const wasCreate = productDrawerMode.value === 'create';
+    const response =
+      wasCreate
+        ? await createProductDetail(buildProductPayload())
+        : await updateProductDetail(productId, buildProductPayload());
+
+    const detailPayload = normalizeProductDetailPayload(unwrapResponse(response), selectedProduct.value);
+    selectedProduct.value = detailPayload;
+    editProductDraft.value = makeProductDraft(detailPayload);
+    productUoms.value = detailPayload.uoms;
+    productPrices.value = normalizeList(detailPayload.prices);
+
+    if (wasCreate) {
+      await ensureDefaultProductSetup(detailPayload.produk_id || detailPayload.id, detailPayload.harga_jual);
+      await refreshProductDetail(detailPayload.produk_id || detailPayload.id);
+    }
+
+    priceDrafts.value = buildPriceDrafts(productPrices.value, productPriceTypes.value);
+    productDrawerMode.value = 'detail';
+    productEditMode.value = false;
+    productSaveMessage.value = wasCreate
+      ? 'Produk berhasil ditambahkan lengkap dengan default UOM dan harga per tipe.'
+      : 'Data produk berhasil diperbarui.';
+
+    if (hasSubmitted.value) {
+      await submit();
+    }
+  } catch (err) {
+    detailError.value = normalizeError(err, 'Data produk belum berhasil disimpan.');
+  } finally {
+    productSaveLoading.value = false;
+  }
+}
+
+async function removeProduct() {
+  const productId = selectedProduct.value?.produk_id || selectedProduct.value?.id;
+  if (!productId) return;
+
+  productDeleteLoading.value = true;
+  productSaveMessage.value = '';
+  detailError.value = '';
+
+  try {
+    await deleteProductDetail(productId);
+    drawerOpen.value = false;
+    if (hasSubmitted.value) {
+      await submit();
+    }
+  } catch (err) {
+    detailError.value = normalizeError(err, 'Produk belum berhasil dihapus. Pastikan produk belum dipakai transaksi.');
+  } finally {
+    productDeleteLoading.value = false;
+  }
+}
+
+async function saveUom() {
+  const productId = selectedProduct.value?.produk_id || selectedProduct.value?.id;
+  uomMessage.value = '';
+  detailError.value = '';
+
+  if (!productId) {
+    detailError.value = 'Produk belum dipilih.';
+    return;
+  }
+
+  if (!uomDraft.nama || !uomDraft.kode) {
+    detailError.value = 'Kode dan nama UOM wajib diisi.';
+    return;
+  }
+
+  uomSaving.value = true;
+
+  const payload = {
+    id_produk: productId,
+    kode: uomDraft.kode,
+    nama: uomDraft.nama,
+    level: normalizeNonNegativeNumber(uomDraft.level, { fallback: 1, min: 1, integer: true }),
+    faktor_konversi: normalizeNonNegativeNumber(uomDraft.faktor_konversi, { fallback: 1, min: 1, integer: true }),
+    packing_satuan: uomDraft.packing_satuan || '',
+    set_default_sales: Number(uomDraft.set_default_sales || 0),
+    set_default_storage: Number(uomDraft.set_default_storage || 0)
+  };
+
+  try {
+    if (uomDraft.id) {
+      await updateProductUom(uomDraft.id, payload);
+      uomMessage.value = 'UOM produk berhasil diperbarui.';
+    } else {
+      await createProductUom(payload);
+      uomMessage.value = 'UOM produk berhasil ditambahkan.';
+    }
+
+    resetUomDraft();
+    await refreshProductDetail(productId);
+  } catch (err) {
+    detailError.value = normalizeError(err, 'UOM produk belum berhasil disimpan.');
+  } finally {
+    uomSaving.value = false;
+  }
+}
+
+async function removeUom(row) {
+  const productId = selectedProduct.value?.produk_id || selectedProduct.value?.id;
+
+  if (!row?.id || !productId) {
+    return;
+  }
+
+  uomDeletingId.value = row.id;
+  uomMessage.value = '';
+  detailError.value = '';
+
+  try {
+    await deleteProductUom(row.id);
+    uomMessage.value = 'UOM produk berhasil dihapus.';
+    if (String(uomDraft.id) === String(row.id)) {
+      resetUomDraft();
+    }
+    await refreshProductDetail(productId);
+  } catch (err) {
+    detailError.value = normalizeError(err, 'UOM produk belum berhasil dihapus.');
+  } finally {
+    uomDeletingId.value = null;
+  }
+}
+
+function updatePriceDraft(index, value) {
+  priceDrafts.value[index] = {
+    ...priceDrafts.value[index],
+    harga: normalizeNonNegativeNumber(value, { fallback: 0 })
+  };
+}
+
+async function savePrice(item, index) {
+  if (!selectedProduct.value?.produk_id && !selectedProduct.value?.id) {
+    return;
+  }
+
+  const productId = selectedProduct.value.produk_id || selectedProduct.value.id;
+  priceSavingId.value = item.id || `draft-${item.id_tipe_harga}`;
+  priceSaveMessage.value = '';
+
+  try {
+    const response = await updateProductPrice(productId, {
+      id_tipe_harga: item.id_tipe_harga,
+      harga: normalizeNonNegativeNumber(item.harga, { fallback: 0 })
+    });
+
+    const savedRow = unwrapResponse(response);
+
+    priceDrafts.value[index] = {
+      ...priceDrafts.value[index],
+      ...savedRow,
+      id_tipe_harga: savedRow?.id_tipe_harga ?? priceDrafts.value[index].id_tipe_harga,
+      tipe_harga_nama: savedRow?.tipe_harga_nama ?? priceDrafts.value[index].tipe_harga_nama,
+      tipe_harga_kode: savedRow?.tipe_harga_kode ?? priceDrafts.value[index].tipe_harga_kode,
+      harga: savedRow?.harga ?? priceDrafts.value[index].harga,
+      isNew: false
+    };
+
+    productPrices.value = priceDrafts.value.map((row) => ({ ...row }));
+    priceSaveMessage.value = `Harga untuk ${savedRow?.tipe_harga_nama || `tipe ${item.id_tipe_harga}`} berhasil disimpan.`;
+  } catch (err) {
+    detailError.value = normalizeError(err, 'Sinkron harga belum berhasil disimpan.');
+  } finally {
+    priceSavingId.value = null;
+  }
+}
+
+function reset() {
+  filters.search = '';
+  filters.principalId = '';
+  products.value = [];
+  error.value = '';
+  hasSubmitted.value = false;
+}
+
+async function loadBulkPriceRows() {
+  if (!filters.principalId) {
+    bulkPriceRows.value = [];
+    bulkPriceDrafts.value = [];
+    bulkPage.value = 1;
+    return;
+  }
+
+  bulkLoading.value = true;
+  bulkError.value = '';
+
+  try {
+    const response = await getPrincipalPriceRows(filters.principalId, {
+      search: filters.search.trim(),
+      limit: 300
+    });
+
+    const rows = normalizeList(unwrapResponse(response));
+    bulkPriceRows.value = rows;
+    bulkPriceDrafts.value = rows.map((item) => ({
+      ...item,
+      originalHarga: item.harga ?? '',
+      harga: item.harga ?? ''
+    }));
+    bulkPage.value = 1;
+  } catch (err) {
+    bulkError.value = normalizeError(err, 'Daftar harga principal belum bisa dimuat.');
+    bulkPriceRows.value = [];
+    bulkPriceDrafts.value = [];
+    bulkPage.value = 1;
+  } finally {
+    bulkLoading.value = false;
+  }
+}
+
+async function openBulkModal() {
+  if (!filters.principalId) {
+    error.value = 'Pilih principal dulu sebelum membuka bulk maintenance harga.';
+    return;
+  }
+
+  bulkModalOpen.value = true;
+  bulkSaveMessage.value = '';
+  await loadBulkPriceRows();
+}
+
+function closeBulkModal() {
+  bulkModalOpen.value = false;
+}
+
+function updateBulkPriceDraft(index, value) {
+  bulkPriceDrafts.value[index] = {
+    ...bulkPriceDrafts.value[index],
+    harga: normalizeNonNegativeNumber(value, { fallback: 0 })
+  };
+}
+
+function goToBulkPage(page) {
+  bulkPage.value = Math.min(Math.max(1, page), bulkTotalPages.value);
+}
+
+async function saveBulkPrices() {
+  const changedRows = bulkPriceDrafts.value.filter(
+    (item) => String(item.harga ?? '') !== String(item.originalHarga ?? '')
+  );
+
+  if (!changedRows.length) {
+    bulkSaveMessage.value = 'Belum ada perubahan harga yang perlu disimpan.';
+    return;
+  }
+
+  bulkSaveLoading.value = true;
+  bulkError.value = '';
+  bulkSaveMessage.value = '';
+
+  try {
+    const response = await bulkUpdateProductPrices({
+      updates: changedRows.map((item) => ({
+        id_produk: item.id_produk,
+        id_tipe_harga: item.id_tipe_harga,
+        harga: normalizeNonNegativeNumber(item.harga, { fallback: 0 })
+      }))
+    });
+
+    const payload = unwrapResponse(response) || {};
+    const updatedRows = normalizeList(payload.updated_rows);
+    const updatedMap = new Map(updatedRows.map((item) => [`${item.id_produk}-${item.id_tipe_harga}`, item]));
+
+    bulkPriceDrafts.value = bulkPriceDrafts.value.map((item) => {
+      const key = `${item.id_produk}-${item.id_tipe_harga}`;
+      const updated = updatedMap.get(key);
+      if (!updated) {
+        return item;
+      }
+
+      return {
+        ...item,
+        ...updated,
+        harga: updated.harga ?? item.harga,
+        originalHarga: updated.harga ?? item.originalHarga
+      };
+    });
+
+    bulkPriceRows.value = bulkPriceDrafts.value.map((item) => ({ ...item }));
+    bulkSaveMessage.value = `${payload.updated_count || updatedRows.length} harga berhasil disimpan.`;
+
+    if (hasSubmitted.value) {
+      await submit();
+    }
+  } catch (err) {
+    bulkError.value = normalizeError(err, 'Bulk maintenance harga belum berhasil disimpan.');
+  } finally {
+    bulkSaveLoading.value = false;
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadPrincipals(), loadProductMetaOptions()]);
+});
+
+watch([bulkTotalPages, bulkPageSize], () => {
+  if (bulkPage.value > bulkTotalPages.value) {
+    bulkPage.value = bulkTotalPages.value;
+  }
+});
+</script>
+
+<template>
+  <div class="space-y-6">
+    <!-- HEADER -->
+    <PageHeader title="Master Produk">
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="rounded-2xl border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100"
+          :disabled="!filters.principalId"
+          @click="openBulkModal"
+        >
+          Bulk Harga
+        </button>
+
+        <button
+          class="rounded-2xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+          @click="openCreateProduct"
+        >
+          + Produk
+        </button>
+      </div>
+    </PageHeader>
+
+    <!-- KPI -->
+    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <article
+        v-for="card in summaryCards"
+        :key="card.label"
+        class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950"
+      >
+        <p class="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+          {{ card.label }}
+        </p>
+        <p class="mt-3 text-3xl font-bold text-slate-950 dark:text-white">
+          {{ Number(card.value || 0).toLocaleString('id-ID') }}
+        </p>
+      </article>
+    </section>
+
+    <section
+      v-if="readinessWarnings.length"
+      class="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+    >
+      <p class="font-semibold">Audit kesiapan master produk</p>
+      <p class="mt-1">
+        Masih ada
+        <span v-for="(item, index) in readinessWarnings" :key="item.label">
+          <strong>{{ Number(item.value || 0).toLocaleString('id-ID') }}</strong> {{ item.label }}<span v-if="index < readinessWarnings.length - 1">, </span>
+        </span>.
+        Lengkapi bagian ini agar order, UOM, harga, dan promo cashback bertingkat lebih aman.
+      </p>
+    </section>
+
+    <!-- FILTER -->
+    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto]">
+        <input
+          v-model="filters.search"
+          type="text"
+          placeholder="Cari produk / SKU"
+          class="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          @keyup.enter="submit"
+        />
+
+        <AppSearchSelect
+          v-model="filters.principalId"
+          placeholder="Pilih principal"
+          :options="principalOptions"
+        />
+
+        <button
+          class="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700"
+          @click="submit"
+        >
+          Tampilkan
+        </button>
+
+        <button
+          class="rounded-2xl border border-slate-200 px-5 py-3 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+          @click="reset"
+        >
+          Reset
+        </button>
+      </div>
+    </section>
+
+    <!-- ERROR -->
+    <section
+      v-if="error"
+      class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+    >
+      {{ error }}
+    </section>
+
+    <!-- TABLE -->
+    <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div class="mb-4 flex items-center justify-between">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white">
+          Data Produk
+        </h3>
+
+        <span class="text-sm text-slate-500">
+          {{ products.length }} data
+        </span>
+      </div>
+
+      <div
+        v-if="hasSubmitted || loading"
+        class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800"
+      >
+        <AppTable
+          :rows="products"
+          :columns="productColumns"
+          :loading="loading"
+          :clickable-rows="true"
+          @row-click="openDetail"
+        />
+      </div>
+
+      <AppEmptyState
+        v-else
+        title="Belum ada data"
+      />
+    </section>
+
+    <!-- MODAL DETAIL PRODUK -->
+    <AppModal
+      :open="drawerOpen"
+      :title="productDrawerMode === 'create' ? 'Tambah Produk' : selectedProduct?.nama || 'Detail Produk'"
+      size="6xl"
+      @close="closeDrawer"
+    >
+      <div v-if="detailLoading" class="text-sm text-slate-500">
+        Loading...
+      </div>
+
+      <div v-else-if="detailError" class="text-sm text-rose-600">
+        {{ detailError }}
+      </div>
+
+      <div v-else-if="selectedProduct" class="space-y-6">
+        <!-- FORM / DETAIL -->
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <AppFormField v-model="editProductDraft.nama" label="Nama" />
+          <AppFormField v-model="editProductDraft.kode_sku" label="SKU" />
+          <AppFormField v-model="editProductDraft.kode_ean" label="Kode EAN" />
+          <AppFormField
+            v-model="editProductDraft.kode_external"
+            label="Kode External"
+            placeholder="Contoh: 4.140102.093, MCAB001"
+          />
+          <AppFormField v-model="editProductDraft.harga_beli" label="Harga Beli" type="number" />
+          <AppFormField v-model="editProductDraft.harga_jual" label="Harga Jual" type="number" />
+          <AppSearchSelect
+            v-model="editProductDraft.id_ppn"
+            label="Status PPN"
+            :options="ppnOptions"
+            placeholder="Pilih status PPN"
+            empty-text="Tipe PPN belum tersedia."
+          />
+
+          <AppSearchSelect v-model="editProductDraft.id_principal" label="Principal" :options="principalOptions" />
+          <div class="space-y-2">
+            <AppSearchSelect v-model="editProductDraft.id_brand" label="Brand" :options="brandOptions" />
+            <button class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" @click="createReferenceOption('brand')">
+              + Brand Baru
+            </button>
+          </div>
+          <div class="space-y-2">
+            <AppSearchSelect
+              v-model="editProductDraft.id_subbrand"
+              label="Sub-brand / Varian Promo"
+              :options="subbrandOptions"
+              placeholder="Pilih subbrand promo"
+              empty-text="Sub-brand belum tersedia."
+            />
+            <button class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" @click="createReferenceOption('subbrand')">
+              + Sub-brand Baru
+            </button>
+          </div>
+          <div class="space-y-2">
+            <AppSearchSelect v-model="editProductDraft.id_kategori" label="Kategori" :options="categoryOptions" />
+            <button class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" @click="createReferenceOption('category')">
+              + Kategori Baru
+            </button>
+          </div>
+        </div>
+
+        <div v-if="productSaveMessage" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {{ productSaveMessage }}
+        </div>
+
+        <section v-if="productDrawerMode !== 'create'" class="grid gap-6 xl:grid-cols-2">
+          <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 class="font-semibold text-slate-900">Harga per Tipe</h3>
+                <p class="mt-1 text-xs text-slate-500">Modern Trade, Retail, dan tipe harga lain wajib punya baris harga.</p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <div v-for="(item, index) in priceDrafts" :key="`${item.id_tipe_harga}-${index}`" class="grid items-end gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_140px_auto]">
+                <div>
+                  <p class="text-sm font-semibold text-slate-800">{{ item.tipe_harga_nama || `Tipe ${item.id_tipe_harga}` }}</p>
+                  <p class="text-xs text-slate-500">{{ item.tipe_harga_kode || '-' }}</p>
+                </div>
+                <AppFormField :model-value="item.harga" label="Harga" type="number" @update:model-value="updatePriceDraft(index, $event)" />
+                <button class="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60" :disabled="priceSavingId === (item.id || `draft-${item.id_tipe_harga}`)" @click="savePrice(item, index)">
+                  Simpan
+                </button>
+              </div>
+              <p v-if="!priceDrafts.length" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                Tipe harga belum tersedia.
+              </p>
+            </div>
+            <p v-if="priceSaveMessage" class="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ priceSaveMessage }}</p>
+          </div>
+
+          <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div class="mb-3">
+              <h3 class="font-semibold text-slate-900">Setting UOM</h3>
+              <p class="mt-1 text-xs text-slate-500">Produk baru minimal punya UOM level 1 agar inventory, opname, dan transfer tidak gagal.</p>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <AppFormField v-model="uomDraft.kode" label="Kode UOM" placeholder="PCS / BOX / CTN" />
+              <AppFormField v-model="uomDraft.nama" label="Nama UOM" placeholder="Pieces" />
+              <AppFormField v-model="uomDraft.level" label="Level" type="number" min="1" />
+              <AppFormField v-model="uomDraft.faktor_konversi" label="Faktor Konversi" type="number" min="1" />
+            </div>
+            <button class="mt-3 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" :disabled="uomSaving" @click="saveUom">
+              {{ uomDraft.id ? 'Update UOM' : 'Tambah UOM' }}
+            </button>
+            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <table class="min-w-full text-sm">
+                <thead class="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2">Kode</th>
+                    <th class="px-3 py-2">Nama</th>
+                    <th class="px-3 py-2">Level</th>
+                    <th class="px-3 py-2">Konversi</th>
+                    <th class="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <tr v-if="!productUoms.length">
+                    <td colspan="5" class="px-3 py-6 text-center text-slate-500">Belum ada UOM.</td>
+                  </tr>
+                  <tr v-for="item in productUoms" v-else :key="item.id">
+                    <td class="px-3 py-2">{{ item.kode || '-' }}</td>
+                    <td class="px-3 py-2">{{ item.nama || '-' }}</td>
+                    <td class="px-3 py-2">{{ item.level || '-' }}</td>
+                    <td class="px-3 py-2">{{ item.faktor_konversi || '-' }}</td>
+                    <td class="px-3 py-2 text-right">
+                      <button class="rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-600 disabled:opacity-60" :disabled="uomDeletingId === item.id" @click="removeUom(item)">
+                        Hapus
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-if="uomMessage" class="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ uomMessage }}</p>
+          </div>
+        </section>
+
+        <!-- ACTION -->
+        <div class="flex flex-wrap gap-2 pt-4">
+          <button
+            class="rounded-2xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white"
+            :disabled="productSaveLoading"
+            @click="saveProductDetail"
+          >
+            Simpan
+          </button>
+
+          <button
+            class="rounded-2xl border border-slate-200 px-5 py-2 text-sm text-slate-600"
+            @click="closeDrawer"
+          >
+            Tutup
+          </button>
+
+          <button
+            v-if="productDrawerMode !== 'create'"
+            class="rounded-2xl border border-rose-200 px-5 py-2 text-sm text-rose-600"
+            @click="removeProduct"
+          >
+            Hapus
+          </button>
+        </div>
+      </div>
+    </AppModal>
+
+    <!-- BULK -->
+    <AppModal
+      :open="bulkModalOpen"
+      size="6xl"
+      title="Bulk Harga"
+      @close="closeBulkModal"
+    >
+      <div class="space-y-4">
+        <button
+          class="rounded-2xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white"
+          @click="saveBulkPrices"
+        >
+          Simpan
+        </button>
+
+        <div class="max-h-[60vh] overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th class="p-2">Produk</th>
+                <th class="p-2">Tipe Harga</th>
+                <th class="p-2">Harga</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="bulkLoading">
+                <td colspan="3" class="p-6 text-center text-slate-500">Memuat harga...</td>
+              </tr>
+              <tr v-else-if="!paginatedBulkPriceDrafts.length">
+                <td colspan="3" class="p-6 text-center text-slate-500">Belum ada produk atau tipe harga untuk principal ini.</td>
+              </tr>
+              <tr v-for="item in paginatedBulkPriceDrafts" :key="item.__index">
+                <td class="p-2">{{ item.nama_produk }}</td>
+                <td class="p-2">{{ item.tipe_harga_nama || `Tipe ${item.id_tipe_harga}` }}</td>
+                <td class="p-2">
+                  <input
+                    :value="item.harga"
+                    type="number"
+                    class="w-full rounded border px-2 py-1"
+                    @input="updateBulkPriceDraft(item.__index, $event.target.value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="bulkError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ bulkError }}</div>
+        <div v-if="bulkSaveMessage" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ bulkSaveMessage }}</div>
+      </div>
+    </AppModal>
+  </div>
+</template>

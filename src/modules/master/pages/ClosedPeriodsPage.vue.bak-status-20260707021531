@@ -1,0 +1,198 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue';
+import { createClosedPeriod, deleteClosedPeriod, getBranches, getClosedPeriods, updateClosedPeriod } from '@/api/master';
+import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import { getLoginBranchId, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
+import { useAuthStore } from '@/stores/auth';
+import AppFilterBar from '@/shared/components/AppFilterBar.vue';
+import AppFormField from '@/shared/components/AppFormField.vue';
+import AppModal from '@/shared/components/AppModal.vue';
+import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
+import AppTable from '@/shared/components/AppTable.vue';
+import PageHeader from '@/shared/components/PageHeader.vue';
+
+const authStore = useAuthStore();
+const filters = reactive({ search: '' });
+const form = reactive({ tanggal_close: '', keterangan: '', id_cabang: '' });
+
+const rows = ref([]);
+const branches = ref([]);
+const loading = ref(false);
+const saving = ref(false);
+const modalOpen = ref(false);
+const mode = ref('create');
+const selectedRow = ref(null);
+const error = ref('');
+const actionError = ref('');
+const feedback = ref('');
+const loginBranchId = computed(() => getLoginBranchId(authStore.user));
+const scopedRows = computed(() => scopeRowsByLoginBranch(rows.value, authStore));
+
+const branchOptions = computed(() =>
+  scopeRowsByLoginBranch(branches.value, authStore).map((item) => ({
+    value: String(item.id),
+    label: `${item.kode ? `${item.kode} - ` : ''}${item.nama || `Cabang ${item.id}`}`
+  }))
+);
+
+const filteredRows = computed(() => {
+  const query = filters.search.trim().toLowerCase();
+  if (!query) return scopedRows.value;
+  return scopedRows.value.filter((item) =>
+    [item.tanggal_close, item.keterangan, item.nama_cabang]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query))
+  );
+});
+
+const columns = [
+  { key: 'tanggal_close', label: 'Tanggal Close' },
+  { key: 'nama_cabang', label: 'Cabang' },
+  { key: 'keterangan', label: 'Keterangan' }
+];
+
+function normalizeId(value) {
+  return value === undefined || value === null || value === '' ? '' : String(value);
+}
+
+function resetForm() {
+  Object.assign(form, { tanggal_close: '', keterangan: '', id_cabang: '' });
+  if (!isSuperUser(authStore) && loginBranchId.value) {
+    form.id_cabang = String(loginBranchId.value);
+  }
+}
+
+function buildPayload() {
+  const payload = {};
+  Object.entries(form).forEach(([key, value]) => {
+    if (value !== '') payload[key] = value;
+  });
+  return payload;
+}
+
+async function loadRows() {
+  loading.value = true;
+  error.value = '';
+  try {
+    const response = await getClosedPeriods();
+    rows.value = normalizeList(unwrapResponse(response));
+  } catch (err) {
+    error.value = normalizeError(err, 'Data periode close belum bisa dimuat.');
+    rows.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadReferences() {
+  const response = await getBranches();
+  branches.value = normalizeList(unwrapResponse(response));
+  if (!isSuperUser(authStore) && loginBranchId.value) {
+    form.id_cabang = String(loginBranchId.value);
+  }
+}
+
+function openCreate() {
+  mode.value = 'create';
+  selectedRow.value = null;
+  resetForm();
+  feedback.value = '';
+  actionError.value = '';
+  modalOpen.value = true;
+}
+
+function openEdit(row) {
+  mode.value = 'edit';
+  selectedRow.value = row;
+  Object.assign(form, {
+    tanggal_close: row?.tanggal_close || '',
+    keterangan: row?.keterangan || '',
+    id_cabang: normalizeId(row?.id_cabang)
+  });
+  feedback.value = '';
+  actionError.value = '';
+  modalOpen.value = true;
+}
+
+async function save() {
+  if (!form.tanggal_close) {
+    actionError.value = 'Tanggal close wajib diisi.';
+    return;
+  }
+
+  saving.value = true;
+  feedback.value = '';
+  actionError.value = '';
+  try {
+    if (mode.value === 'create') {
+      await createClosedPeriod(buildPayload());
+      feedback.value = 'Periode close berhasil ditambahkan.';
+      resetForm();
+    } else {
+      await updateClosedPeriod(selectedRow.value?.id_periode, buildPayload());
+      feedback.value = 'Periode close berhasil diperbarui.';
+    }
+    await loadRows();
+  } catch (err) {
+    actionError.value = normalizeError(err, 'Data periode close belum berhasil disimpan.');
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function remove() {
+  if (!selectedRow.value?.id_periode) return;
+  saving.value = true;
+  feedback.value = '';
+  actionError.value = '';
+  try {
+    await deleteClosedPeriod(selectedRow.value.id_periode);
+    modalOpen.value = false;
+    await loadRows();
+  } catch (err) {
+    actionError.value = normalizeError(err, 'Data periode close belum berhasil dihapus.');
+  } finally {
+    saving.value = false;
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([loadReferences(), loadRows()]);
+});
+</script>
+
+<template>
+  <div class="space-y-4">
+    <PageHeader title="Master Periode Close" description="Penutupan periode sekarang memakai pilihan cabang langsung agar input lebih aman.">
+      <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700" @click="openCreate">Tambah Periode</button>
+    </PageHeader>
+
+    <AppFilterBar :model-value="filters" :fields="[{ key: 'search', label: 'Cari periode', placeholder: 'Tanggal, keterangan, atau cabang' }]" @update:model-value="Object.assign(filters, $event)" @submit="loadRows" @reset="filters.search = ''" />
+
+    <section v-if="error" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ error }}</section>
+
+    <AppTable :rows="filteredRows" :columns="columns" :loading="loading" :clickable-rows="true" empty-message="Belum ada data periode close." @row-click="openEdit" />
+
+    <AppModal :open="modalOpen" :title="mode === 'create' ? 'Tambah Periode Close' : 'Edit Periode Close'" panel-class="max-w-2xl" @close="modalOpen = false">
+      <div class="space-y-4">
+        <div class="grid gap-4 md:grid-cols-2">
+          <AppFormField v-model="form.tanggal_close" label="Tanggal Close" type="date" />
+          <AppSearchSelect v-model="form.id_cabang" label="Cabang" placeholder="Pilih cabang" :options="branchOptions" :disabled="!isSuperUser(authStore) && !!loginBranchId" empty-text="Cabang belum tersedia." />
+        </div>
+        <AppFormField v-model="form.keterangan" label="Keterangan" />
+
+        <div v-if="feedback" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ feedback }}</div>
+        <div v-if="actionError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ actionError }}</div>
+
+        <div class="flex flex-wrap gap-2">
+          <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60" :disabled="saving" @click="save">
+            {{ saving ? 'Menyimpan...' : mode === 'create' ? 'Simpan' : 'Update' }}
+          </button>
+          <button v-if="mode === 'edit'" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-60" :disabled="saving" @click="remove">
+            Hapus
+          </button>
+        </div>
+      </div>
+    </AppModal>
+  </div>
+</template>

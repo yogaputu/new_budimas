@@ -1,0 +1,1414 @@
+From 2cf576336a7e805ca8e5dfdf364aa5ac244a6f51 Mon Sep 17 00:00:00 2001
+From: yoga putu pradana <yogaputupradana@gmail.com>
+Date: Sun, 4 Oct 2026 06:40:19 +0000
+Subject: [PATCH] Add transactional receipt, LPH claims and giro payment
+ workflow
+
+---
+ app.py                                        |   3 +
+ apps/models/lph.py                            |   1 +
+ apps/routes/mobile_gateway.py                 |  18 +-
+ apps/routes/payment_workflow.py               | 169 ++++++
+ apps/services/Akuntansi/Setoran.py            |   4 +-
+ apps/services/Akuntansi/lph.py                |  13 +
+ apps/services/FinanceWorkflow/__init__.py     |   1 +
+ apps/services/FinanceWorkflow/rules.py        |  58 ++
+ apps/services/FinanceWorkflow/service.py      | 556 ++++++++++++++++++
+ apps/test/fixtures/payment_workflow.sql       |  23 +
+ apps/test/test_payment_receipt_workflow.py    | 232 ++++++++
+ docs/payment-receipt-workflow.md              |  47 ++
+ .../20261004_payment_receipt_workflow.sql     | 104 ++++
+ 13 files changed, 1227 insertions(+), 2 deletions(-)
+ create mode 100644 apps/routes/payment_workflow.py
+ create mode 100644 apps/services/FinanceWorkflow/__init__.py
+ create mode 100644 apps/services/FinanceWorkflow/rules.py
+ create mode 100644 apps/services/FinanceWorkflow/service.py
+ create mode 100644 apps/test/fixtures/payment_workflow.sql
+ create mode 100644 apps/test/test_payment_receipt_workflow.py
+ create mode 100644 docs/payment-receipt-workflow.md
+ create mode 100644 tools/migrations/20261004_payment_receipt_workflow.sql
+
+diff --git a/app.py b/app.py
+index b65d71c..29fccc5 100644
+--- a/app.py
++++ b/app.py
+@@ -39,6 +39,7 @@ from apps.routes.distribusi import distribusi
+ from apps.routes.DMS import dms
+ from apps.routes.extra import extra
+ from apps.routes.finance import finance
++from apps.routes.payment_workflow import payment_workflow, mobile_receipt_workflow
+ from apps.routes.helper_driver import helper_driver
+ from apps.routes.mobile_gateway import mobile_gateway
+ from apps.routes.pajak import pajak
+@@ -142,6 +143,8 @@ app.register_blueprint(sales)
+ app.register_blueprint(sales_kunjungan)
+ app.register_blueprint(customer)
+ app.register_blueprint(finance)
++app.register_blueprint(payment_workflow)
++app.register_blueprint(mobile_receipt_workflow)
+ app.register_blueprint(sales_canvas)
+ app.register_blueprint(akuntasi)
+ app.register_blueprint(promo)
+diff --git a/apps/models/lph.py b/apps/models/lph.py
+index a3479b8..86fa794 100755
+--- a/apps/models/lph.py
++++ b/apps/models/lph.py
+@@ -5,6 +5,7 @@ class lph(BaseModel):
+     __tablename__ = 'lph'
+ 
+     id = Column(Integer, primary_key=True)
++    payment_workflow_version = Column(Integer, default=1, nullable=False)
+     id_sales = Column(Integer)
+     id_user = Column(Integer)
+     kode_lph = Column(String(50))
+diff --git a/apps/routes/mobile_gateway.py b/apps/routes/mobile_gateway.py
+index c088522..e27b9eb 100755
+--- a/apps/routes/mobile_gateway.py
++++ b/apps/routes/mobile_gateway.py
+@@ -4517,6 +4517,7 @@ def _get_mobile_lph_or_error(lph_id, identity, lock=False):
+             COALESCE(l.status_dokumen, 'AKTIF') AS status_dokumen,
+             l.tanggal_diterima,
+             l.tanggal_dikembalikan,
++            l.payment_workflow_version,
+             l.pengembalian_tunai,
+             l.pengembalian_non_tunai,
+             l.catatan_pengembalian
+@@ -4754,6 +4755,12 @@ def mobile_lph_return(lph_id):
+             db.session.rollback()
+             return error_response("Hanya LPH yang aktif di sales yang dapat dikembalikan.", 409)
+ 
++        if row.get('payment_workflow_version') == 2:
++            from apps.services.FinanceWorkflow.service import PaymentWorkflow
++            result = PaymentWorkflow(db.session).handover(identity, lph_id, payload)
++            db.session.commit()
++            return jsonify({'success': True, 'data': result}), 200
++
+         summary = lph_payment_summary(db.session, int(lph_id), int(identity['id_sales']))
+         try:
+             validate_return_summary(summary, payload.get('payment_summary'))
+@@ -4834,6 +4841,12 @@ def payment_save():
+         return error_response("Identitas sales tidak valid. Silakan login ulang.", 403)
+     id_sales = int(identity["id_sales"])
+ 
++    workflow_lph = payload.get('id_lph')
++    if workflow_lph:
++        workflow_row = fetch_one("SELECT payment_workflow_version FROM lph WHERE id=:id", {'id': workflow_lph})
++        if workflow_row and workflow_row['payment_workflow_version'] == 2:
++            return error_response('LPH kuitansi memakai /api/mobile/workflow/lphs/:id/claims; jangan kirim sebagai pembayaran Rekap.', 409)
++
+     if not nota:
+         return error_response("Nota wajib diisi", 400)
+     if jumlah_bayar in (None, ""):
+@@ -4944,7 +4957,7 @@ def payment_save():
+     # Serialize payment and return against the same LPH row. A handover must
+     # never snapshot totals while another request is still adding a claim.
+     active_lphs = fetch_all('''
+-        SELECT l.id FROM lph l
++        SELECT l.id, l.payment_workflow_version FROM lph l
+         WHERE l.id_sales = :id_sales AND COALESCE(l.status_dokumen, 'AKTIF') = 'AKTIF'
+           AND EXISTS (SELECT 1 FROM lph_detail ld WHERE ld.id_lph = l.id AND ld.id_faktur = :id_faktur)
+         ORDER BY l.id FOR UPDATE
+@@ -4952,6 +4965,9 @@ def payment_save():
+     if len(active_lphs) != 1:
+         db.session.rollback()
+         return error_response('Faktur harus terhubung ke tepat satu LPH aktif. Muat ulang atau hubungi admin.', 409)
++    if active_lphs[0].get('payment_workflow_version') == 2:
++        db.session.rollback()
++        return error_response('LPH ini menggunakan klaim kuitansi. Gunakan menu LPH & Klaim Sales.', 409)
+     payment_lph_id = int(active_lphs[0]['id'])
+ 
+     payment_balance = get_payment_balance_for_update(int(invoice["id_sales_order"]))
+diff --git a/apps/routes/payment_workflow.py b/apps/routes/payment_workflow.py
+new file mode 100644
+index 0000000..44953bb
+--- /dev/null
++++ b/apps/routes/payment_workflow.py
+@@ -0,0 +1,169 @@
++"""Explicit role-capability API for the receipt workflow; no client-controlled roles."""
++from functools import wraps
++from flask import Blueprint, request, jsonify
++from sqlalchemy.exc import IntegrityError
++from apps.services.BaseServices import token_auth
++from apps.handler import handle_error_rollback
++from apps.services.FinanceWorkflow.service import PaymentWorkflow
++from apps.services.FinanceWorkflow.rules import fail
++
++payment_workflow=Blueprint('payment_workflow',__name__,url_prefix='/api/finance/workflow')
++@payment_workflow.before_request
++def authenticate():
++    if request.method!='OPTIONS': return token_auth.login_required(lambda:None)()
++
++
++def endpoint(permission,write=False):
++    def decorate(fn):
++        @wraps(fn)
++        @handle_error_rollback
++        def run(*args,**kwargs):
++            service=PaymentWorkflow()
++            actor=service.actor(permission)
++            try:
++                result=fn(service,actor,*args,**kwargs)
++                if write: service.session.commit()
++                return jsonify({'data':result})
++            except IntegrityError:
++                service.session.rollback()
++                fail('Referensi transaksi sudah dipakai atau data berubah. Muat ulang daftar.',409)
++        return run
++    return decorate
++
++
++def body():
++    data=request.get_json(silent=True)
++    if not isinstance(data,dict): fail('Data JSON tidak valid.')
++    return data
++
++@payment_workflow.get('/lphs')
++@endpoint('finance.receipts.view')
++def lphs(s,a): return s.lp_list(a)
++@payment_workflow.get('/lphs/<int:id>/detail')
++@endpoint('finance.receipts.view')
++def lph_detail(s,a,id): return s.lp_detail(id,a)
++@payment_workflow.get('/funds')
++@endpoint('finance.funds.view')
++def funds(s,a): return s.funds(a)
++@payment_workflow.post('/funds')
++@endpoint('finance.funds.create',True)
++def create_fund(s,a): return s.create_fund(a,body())
++@payment_workflow.put('/funds/<int:id>')
++@endpoint('finance.funds.create',True)
++def edit_fund(s,a,id): return s.revise_fund(a,id,body())
++@payment_workflow.delete('/funds/<int:id>')
++@endpoint('finance.funds.create',True)
++def delete_fund(s,a,id): return s.revise_fund(a,id)
++@payment_workflow.post('/funds/<int:id>/approve')
++@endpoint('finance.funds.approve',True)
++def approve_fund(s,a,id): return s.approve_cash(a,id)
++@payment_workflow.post('/mutations/<int:id>/import')
++@endpoint('finance.funds.create',True)
++def import_mutation(s,a,id): return s.import_mutation(a,id)
++@payment_workflow.post('/credit-notes/<int:id>/reserve')
++@endpoint('finance.receipts.create',True)
++def credit_note(s,a,id): return s.credit_note_source(a,id)
++@payment_workflow.post('/giro/<int:id>/clear')
++@endpoint('finance.giro.clear',True)
++def clear(s,a,id): return s.clear_giro(a,id,body())
++@payment_workflow.post('/giro/<int:id>/bounce')
++@endpoint('finance.giro.bounce',True)
++def bounce(s,a,id): return s.bounce_giro(a,id,body())
++@payment_workflow.get('/receipts')
++@endpoint('finance.receipts.view')
++def receipts(s,a): return s.receipts(a)
++@payment_workflow.post('/receipts')
++@endpoint('finance.receipts.create',True)
++def save(s,a): return s.save_receipt(a,body())
++@payment_workflow.post('/receipts/preview')
++@endpoint('finance.receipts.create')
++def preview(s,a): return s.save_receipt(a,body(),body().get('edit_id'),preview=True)
++@payment_workflow.get('/receipts/<int:id>')
++@endpoint('finance.receipts.view')
++def detail(s,a,id): return s.receipt_detail(a,id)
++@payment_workflow.put('/receipts/<int:id>')
++@endpoint('finance.receipts.create',True)
++def edit(s,a,id): return s.save_receipt(a,body(),id)
++@payment_workflow.post('/receipts/<int:id>/finalize')
++@endpoint('finance.receipts.approve',True)
++def finalize(s,a,id):
++    if body().get('confirm_reconciliation') is not True: fail('Konfirmasi rekonsiliasi sebelum finalisasi.')
++    return s.finalize(a,id)
++@payment_workflow.post('/receipts/<int:id>/cancel')
++@endpoint('finance.receipts.cancel',True)
++def cancel(s,a,id): return s.request_cancel(a,id,body())
++@payment_workflow.get('/cancellations')
++@endpoint('finance.receipts.view')
++def cancellations(s,a): return s.cancellations(a)
++@payment_workflow.post('/cancellations/<int:id>/decision')
++@endpoint('finance.receipts.cancel-approve',True)
++def decision(s,a,id): return s.decide_cancel(a,id,body())
++@payment_workflow.get('/settings')
++@endpoint('finance.workflow.configure')
++def settings(s,a): return s.configuration(a)
++@payment_workflow.put('/settings')
++@endpoint('finance.workflow.configure',True)
++def configure(s,a): return s.configuration(a,body())
++@payment_workflow.get('/journals')
++@endpoint('finance.receipts.view')
++def journals(s,a): return s.journals(a)
++
++# Mobile identity is always derived from the same token-bound resolver as the gateway.
++mobile_receipt_workflow=Blueprint('mobile_receipt_workflow',__name__,url_prefix='/api/mobile/workflow')
++@mobile_receipt_workflow.before_request
++def authenticate_mobile():
++    if request.method!='OPTIONS': return token_auth.login_required(lambda:None)()
++
++def mobile_endpoint(write=False):
++    def decorate(fn):
++        @wraps(fn)
++        @handle_error_rollback
++        def run(*args,**kwargs):
++            from apps.routes.mobile_gateway import resolve_mobile_sales_identity
++            identity=resolve_mobile_sales_identity()
++            if not identity: fail('Identitas sales tidak valid.',403)
++            s=PaymentWorkflow();s.schema()
++            try:
++                result=fn(s,identity,*args,**kwargs)
++                if write: s.session.commit()
++                return jsonify({'data':result})
++            except IntegrityError:
++                s.session.rollback()
++                fail('Referensi klaim sudah dipakai. Muat ulang daftar.',409)
++        return run
++    return decorate
++
++@mobile_receipt_workflow.get('/lphs')
++@mobile_endpoint()
++def mobile_lphs(s,i): return s.lp_list(identity=i)
++@mobile_receipt_workflow.get('/lphs/<int:id>')
++@mobile_endpoint()
++def mobile_detail(s,i,id):
++    row=s.lp_detail(id,identity=i)
++    row['checked_details']=s.all('SELECT id,id_faktur FROM lph_detail WHERE id_lph=:id ORDER BY id',id=id)
++    return row
++@mobile_receipt_workflow.post('/lphs/<int:id>/accept')
++@mobile_endpoint(True)
++def mobile_accept(s,i,id): return s.accept_lph(i,id,body())
++@mobile_receipt_workflow.post('/lphs/<int:id>/claims')
++@mobile_endpoint(True)
++def mobile_claim(s,i,id): return s.mobile_claim(i,id,body())
++@mobile_receipt_workflow.delete('/claims/<int:id>')
++@mobile_endpoint(True)
++def mobile_delete(s,i,id): return s.delete_claim(i,id)
++@mobile_receipt_workflow.post('/lphs/<int:id>/return')
++@mobile_endpoint(True)
++def mobile_return(s,i,id): return s.handover(i,id,body())
++
++@payment_workflow.get('/bank-mutations')
++@endpoint('finance.funds.create')
++def bank_mutations(s,a):
++    from apps.lib.finance_access import scope_conditions
++    params={};conditions=scope_conditions(a,'r',params)
++    return s.all("SELECT m.* FROM mutasi_bank m JOIN rekening_perusahaan r ON r.id_rekening_perusahaan=m.id_rekening_perusahaan WHERE m.tipe=1 AND m.status_mutasi=1 AND m.sisa=m.nominal_mutasi AND r.is_aktif AND NOT EXISTS(SELECT 1 FROM finance_fund_source f WHERE f.id_mutasi=m.id_mutasi)"+(' AND '+' AND '.join(conditions) if conditions else '')+" ORDER BY m.id_mutasi DESC LIMIT 500",**params)
++
++@payment_workflow.get('/credit-notes')
++@endpoint('finance.receipts.create')
++def credit_notes(s,a):
++    rows=s.all("SELECT cn.*,pr.id_perusahaan,c.id_cabang FROM credit_note cn JOIN principal pr ON pr.id=cn.id_principal JOIN customer c ON c.id=cn.id_customer WHERE cn.status_cn IN (0,3) AND cn.id_faktur IS NULL AND COALESCE(cn.nominal_refund,0)=0 AND NOT EXISTS(SELECT 1 FROM finance_fund_source f WHERE f.id_credit_note=cn.id_cn) AND NOT EXISTS(SELECT 1 FROM payment_voucher_usage u WHERE u.usage_type='credit_note' AND u.usage_id=cn.id_cn AND u.status=1) ORDER BY cn.id_cn DESC LIMIT 500")
++    return [r for r in rows if a['is_superuser'] or (not a['companies'] or r['id_perusahaan'] in a['companies']) and (not a['branches'] or r['id_cabang'] in a['branches'])]
+diff --git a/apps/services/Akuntansi/Setoran.py b/apps/services/Akuntansi/Setoran.py
+index f34e620..00547d5 100755
+--- a/apps/services/Akuntansi/Setoran.py
++++ b/apps/services/Akuntansi/Setoran.py
+@@ -110,7 +110,7 @@ class Setoran(BaseAkuntansi):
+         lph_row = self.db.session.execute(
+             text(
+                 """
+-                SELECT id, COALESCE(NULLIF(status_dokumen, ''), 'MENUNGGU_PENERIMAAN') AS status_dokumen
++                SELECT id, payment_workflow_version, COALESCE(NULLIF(status_dokumen, ''), 'MENUNGGU_PENERIMAAN') AS status_dokumen
+                 FROM lph
+                 WHERE id = :id_lph
+                 FOR SHARE
+@@ -120,6 +120,8 @@ class Setoran(BaseAkuntansi):
+         ).mappings().first()
+         if not lph_row:
+             raise nonServerErrorException("LPH untuk setoran tidak ditemukan", 404)
++        if lph_row.get("payment_workflow_version") == 2:
++            raise nonServerErrorException("LPH ini menggunakan menu Pembayaran Kuitansi.", 409)
+         if str(lph_row.get("status_dokumen") or "").upper() != "AKTIF":
+             raise nonServerErrorException(
+                 "LPH belum aktif di sales atau sudah dikembalikan, sehingga setoran tidak dapat diproses.",
+diff --git a/apps/services/Akuntansi/lph.py b/apps/services/Akuntansi/lph.py
+index 9570908..d31d275 100755
+--- a/apps/services/Akuntansi/lph.py
++++ b/apps/services/Akuntansi/lph.py
+@@ -1337,6 +1337,18 @@ class lph(BaseAkuntansi):
+                 or ''
+             ).strip().lower() in ('1', 'true', 'yes', 'ya', 'on'),
+         }
++        workflow_version = self._to_int_or_none(self.req('payment_workflow_version') or 1)
++        if workflow_version not in (1, 2):
++            raise nonServerErrorException('Versi alur pembayaran tidak valid.', 400)
++        if workflow_version == 2:
++            from apps.services.FinanceWorkflow.service import PaymentWorkflow
++            from apps.lib.finance_access import assert_finance_scope
++            workflow = PaymentWorkflow(self.db.session)
++            actor = workflow.actor('finance.receipts.create')
++            assert_finance_scope(actor, data['id_perusahaan'], data['id_cabang'])
++            setting = workflow.one('SELECT enabled FROM finance_workflow_setting WHERE id_perusahaan=:id', id=data['id_perusahaan'])
++            if not setting or not setting['enabled']:
++                raise nonServerErrorException('Alur kuitansi belum diaktifkan dan dipetakan akunnya untuk perusahaan ini.', 409)
+         timestamp = datetime_now()
+ 
+ 
+@@ -1406,6 +1418,7 @@ class lph(BaseAkuntansi):
+             # LPH baru harus diterima sales dari aplikasi Mobile Sales sebelum
+             # faktur di dalamnya dapat dipakai untuk pembayaran.
+             status_dokumen='MENUNGGU_PENERIMAAN',
++            payment_workflow_version=workflow_version,
+         )
+         self.db.session.add(new_lph)
+         self.db.session.flush()
+diff --git a/apps/services/FinanceWorkflow/__init__.py b/apps/services/FinanceWorkflow/__init__.py
+new file mode 100644
+index 0000000..6d46aac
+--- /dev/null
++++ b/apps/services/FinanceWorkflow/__init__.py
+@@ -0,0 +1 @@
++"""Receipt-based billing workflow, isolated from legacy Rekap LPHs."""
+diff --git a/apps/services/FinanceWorkflow/rules.py b/apps/services/FinanceWorkflow/rules.py
+new file mode 100644
+index 0000000..0465e37
+--- /dev/null
++++ b/apps/services/FinanceWorkflow/rules.py
+@@ -0,0 +1,58 @@
++from decimal import Decimal
++from uuid import UUID
++from apps.handler import nonServerErrorException
++from apps.lib.finance_access import money, iso_date, positive_id
++
++
++def fail(message, code=400):
++    raise nonServerErrorException(message, code)
++
++
++def key(value):
++    try:
++        return str(UUID(str(value)))
++    except (ValueError, TypeError, AttributeError):
++        fail('ID transaksi tidak valid. Buka ulang form.')
++
++
++def note(value):
++    value = str(value or '').strip()
++    if not value or len(value)>2000:
++        fail('Alasan wajib diisi, maksimal 2.000 karakter.')
++    return value
++
++
++def nonnegative(value):
++    if value in (0, '0', '0.00', None, ''):
++        return Decimal('0.00')
++    return money(value)
++
++
++def receipt_split(total, remaining, treatment):
++    total, remaining = Decimal(str(total)), Decimal(str(remaining))
++    if total<=0 or remaining<=0:
++        fail('Faktur sudah lunas atau belum ada sumber dana.',409)
++    excess=max(total-remaining, Decimal(0))
++    if excess and treatment not in ('ADVANCE','FEE'):
++        fail('Pilih perlakuan kelebihan dana: uang muka atau biaya lain.')
++    return min(total,remaining),excess
++
++
++def distinct_approver(created_by, actor):
++    if int(created_by)==int(actor):
++        fail('Pembuat transaksi tidak boleh memutuskan transaksinya sendiri.',403)
++
++
++def fund_payload(data):
++    if not isinstance(data,dict): fail('Data setoran tidak valid.')
++    kind=data.get('kind')
++    if kind not in ('CASH','TRANSFER','GIRO'): fail('Jenis setoran tidak valid.')
++    result={k:positive_id(data.get(k),k) for k in ('id_perusahaan','id_cabang')}
++    result.update(kind=kind,reference=note(data.get('reference'))[:160],bank=str(data.get('bank') or '').strip()[:160],
++                  received_date=iso_date(data.get('received_date')),amount=money(data.get('amount')),client_key=key(data.get('client_key')),
++                  id_sales=positive_id(data['id_sales']) if data.get('id_sales') else None,
++                  account_name=str(data.get('account_name') or '').strip()[:160],due_date=None)
++    if kind=='GIRO':
++        if not result['bank']: fail('Bank giro wajib diisi.')
++        result['due_date']=iso_date(data.get('due_date'))
++    return result
+diff --git a/apps/services/FinanceWorkflow/service.py b/apps/services/FinanceWorkflow/service.py
+new file mode 100644
+index 0000000..537d176
+--- /dev/null
++++ b/apps/services/FinanceWorkflow/service.py
+@@ -0,0 +1,556 @@
++"""Transactional receipt/Giro workflow. Legacy deposits are projected only at finalization."""
++import json
++import hashlib
++from datetime import date
++from decimal import Decimal
++from uuid import uuid4
++from sqlalchemy import text
++from apps import native_db
++from apps.lib.finance_access import finance_actor, assert_finance_scope, scope_conditions, positive_id, money, iso_date
++from apps.lib.cashier_expense import resolve_expense_scope
++from apps.lib.schema_guard import require_tables
++from .rules import fail, key, note, nonnegative, receipt_split, distinct_approver, fund_payload
++
++MIGRATION='tools/migrations/20261004_payment_receipt_workflow.sql'
++PURPOSES=('CASH','BANK','GIRO','CLEARING','RECEIVABLE','ADVANCE','RETURN','FEE')
++ACTIVE="('DRAFT','FINALIZED','CANCEL_REQUESTED')"
++INVOICE_SQL='''SELECT DISTINCT f.id, f.no_faktur, f.id_sales_order, f.id_order_batch,
++ COALESCE(f.total_penjualan,0)::numeric total, COALESCE(f.nominal_retur,0)::numeric existing_return,
++ so.id AS source_order, c.id AS id_customer, c.nama AS nama_customer,
++ c.id_cabang, pr.id_perusahaan, pl.id_principal
++ FROM lph_detail ld JOIN faktur f ON f.id=ld.id_faktur
++ JOIN sales_order so ON so.id=COALESCE(f.id_sales_order,
++   (SELECT MIN(fd.id_sales_order) FROM faktur_detail fd WHERE fd.id_faktur=f.id))
++ JOIN plafon pl ON pl.id=so.id_plafon JOIN customer c ON c.id=pl.id_customer
++ JOIN principal pr ON pr.id=pl.id_principal
++ WHERE ld.id_lph=:id ORDER BY f.id'''
++
++class PaymentWorkflow:
++    def __init__(self, session=None):
++        self.session=session if session is not None else native_db.session
++
++    def one(self, sql, **params):
++        row=self.session.execute(text(sql),params).mappings().first()
++        return dict(row) if row else None
++
++    def all(self, sql, **params):
++        return [dict(r) for r in self.session.execute(text(sql),params).mappings().all()]
++
++    def execute(self, sql, **params):
++        return self.session.execute(text(sql),params)
++
++    def schema(self):
++        require_tables(self.session,{'lph':['payment_workflow_version'], 'finance_receipt':['revision'],
++            'finance_fund_source':['giro_status'], 'finance_workflow_audit':['actor_id']},MIGRATION)
++
++    def actor(self, permission):
++        self.schema()
++        return finance_actor(self.session,[permission])
++
++    def audit(self, actor, company, entity, entity_id, action, message=''):
++        self.execute('''INSERT INTO finance_workflow_audit(id_perusahaan,entity,entity_id,action,actor_id,note)
++            VALUES(:company,:entity,:id,:action,:actor,:note)''',company=company,entity=entity,id=entity_id,action=action,actor=actor['id_user'],note=message)
++
++    def lph(self, id_lph, actor=None, identity=None, lock=True):
++        row=self.one('SELECT * FROM lph WHERE id=:id'+(' FOR UPDATE' if lock else ''),id=positive_id(id_lph))
++        if not row: fail('LPH tidak ditemukan.',404)
++        if row['payment_workflow_version']!=2: fail('LPH ini memakai alur Rekap lama. Gunakan menu legacy.',409)
++        if identity and int(row['id_sales'])!=int(identity['id_sales']): fail('LPH bukan milik sales ini.',403)
++        invoices=self.all(INVOICE_SQL,id=id_lph)
++        if not invoices: fail('LPH tidak mempunyai faktur yang valid.',409)
++        scopes={(r['id_perusahaan'],r['id_cabang']) for r in invoices}
++        if len(scopes)!=1: fail('LPH harus berada dalam satu perusahaan/cabang.',409)
++        row['id_perusahaan'],row['id_cabang']=next(iter(scopes))
++        if self.one("""SELECT fd.id_faktur FROM faktur_detail fd
++            JOIN sales_order so ON so.id=fd.id_sales_order JOIN plafon pl ON pl.id=so.id_plafon
++            JOIN principal pr ON pr.id=pl.id_principal JOIN customer c ON c.id=pl.id_customer
++            WHERE fd.id_faktur=ANY(:invoices) AND (pr.id_perusahaan<>:company OR c.id_cabang<>:branch)
++            LIMIT 1""",invoices=[i['id'] for i in invoices],company=row['id_perusahaan'],branch=row['id_cabang']):
++            fail('Faktur gabungan melintasi perusahaan/cabang; pisahkan dokumen sebelum membuat kuitansi.',409)
++        if actor: assert_finance_scope(actor,row['id_perusahaan'],row['id_cabang'])
++        row['invoices']=invoices
++        return row
++
++    def remaining(self, invoice):
++        # New receipts project final rows into existing Setoran; count them once.
++        paid=self.one('''SELECT COALESCE(SUM(COALESCE(draft_jumlah_setor,jumlah_setoran,0)),0)::numeric amount
++            FROM setoran WHERE id_faktur=:id AND status_setoran=3''',id=invoice['id'])['amount']
++        used=self.one('''SELECT COALESCE(SUM(nominal),0)::numeric amount FROM payment_voucher_usage
++            WHERE id_faktur=:id AND status=1''',id=invoice['id'])['amount']
++        return max(Decimal(str(invoice['total']))-Decimal(str(invoice['existing_return']))-paid-used,Decimal(0))
++
++    def configuration(self, actor, data=None):
++        if data is not None:
++            company=positive_id(data.get('id_perusahaan'))
++            assert_finance_scope(actor,company)
++            accounts=data.get('accounts',{})
++            if not isinstance(accounts,dict) or set(accounts)!=set(PURPOSES): fail('Lengkapi delapan akun jurnal workflow.')
++            for purpose, raw in accounts.items():
++                account=self.one('SELECT * FROM coa WHERE id_coa=:id FOR SHARE',id=positive_id(raw))
++                if not account or account['id_perusahaan']!=company or not account['is_active']: fail('Akun jurnal tidak aktif atau berbeda perusahaan.')
++                self.execute('''INSERT INTO finance_workflow_account(id_perusahaan,purpose,id_coa) VALUES(:company,:purpose,:account)
++                    ON CONFLICT(id_perusahaan,purpose) DO UPDATE SET id_coa=EXCLUDED.id_coa''',company=company,purpose=purpose,account=account['id_coa'])
++            self.execute('''INSERT INTO finance_workflow_setting(id_perusahaan,enabled,max_fee) VALUES(:company,:enabled,:fee)
++                ON CONFLICT(id_perusahaan) DO UPDATE SET enabled=EXCLUDED.enabled,max_fee=EXCLUDED.max_fee''',company=company,enabled=data.get('enabled') is True,fee=nonnegative(data.get('max_fee',2900)))
++            self.audit(actor,company,'setting',company,'CONFIGURED')
++        rows=self.all('SELECT s.*, COALESCE(json_object_agg(a.purpose,a.id_coa) FILTER(WHERE a.purpose IS NOT NULL),\'{}\') accounts FROM finance_workflow_setting s LEFT JOIN finance_workflow_account a ON a.id_perusahaan=s.id_perusahaan GROUP BY s.id_perusahaan ORDER BY s.id_perusahaan')
++        return [r for r in rows if actor['is_superuser'] or not actor['companies'] or r['id_perusahaan'] in actor['companies']]
++
++    def journal(self, actor, company, branch, reference, lines, description):
++        if self.one('SELECT id FROM finance_workflow_journal WHERE reference=:ref',ref=reference): fail('Jurnal transaksi sudah tercatat.',409)
++        if sum((v[1] for v in lines),Decimal(0))!=sum((v[2] for v in lines),Decimal(0)): fail('Jurnal transaksi tidak seimbang.',409)
++        accounts={r['purpose']:r for r in self.all('''SELECT a.purpose,c.* FROM finance_workflow_account a
++            JOIN coa c ON c.id_coa=a.id_coa WHERE a.id_perusahaan=:company AND c.id_perusahaan=:company AND c.is_active''',company=company)}
++        for purpose, debit, credit in lines:
++            if purpose not in accounts: fail('Akun jurnal '+purpose+' belum dikonfigurasi untuk perusahaan ini.',409)
++            branches=str(accounts[purpose].get('id_cabang_list') or '').split(',')
++            if any(x.strip() for x in branches) and str(branch) not in [x.strip() for x in branches]: fail('Akun jurnal tidak mencakup cabang transaksi.',409)
++        j=self.one('''INSERT INTO jurnal(id_perusahaan,id_cabang,tanggal,keterangan)
++            VALUES(:company,:branch,NOW(),:description) RETURNING id_jurnal''',company=company,branch=branch,description=description+' ['+reference+']')['id_jurnal']
++        for purpose, debit, credit in lines:
++            account=accounts[purpose]
++            self.execute('''INSERT INTO jurnal_detail(id_jurnal,kode_jurnal,nama_akun,keterangan,debit,kredit,created_at,created_by)
++                VALUES(:id,:code,:name,:note,:debit,:credit,NOW(),:actor)''',id=j,code=account['nomor_akun'],name=account['nama_akun'],note=description,debit=debit,credit=credit,actor=actor['id_user'])
++        self.execute('INSERT INTO finance_workflow_journal(reference,id_jurnal,id_perusahaan) VALUES(:ref,:id,:company)',ref=reference,id=j,company=company)
++
++    def lp_list(self, actor=None, identity=None):
++        rows=self.all('SELECT l.*,u.nama nama_sales FROM lph l JOIN sales s ON s.id=l.id_sales JOIN users u ON u.id=s.id_user WHERE l.payment_workflow_version=2 ORDER BY l.id DESC LIMIT 500')
++        result=[]
++        for row in rows:
++            if identity and int(row['id_sales'])!=int(identity['id_sales']): continue
++            invoices=self.all(INVOICE_SQL,id=row['id'])
++            if not invoices: continue
++            company,branch=invoices[0]['id_perusahaan'],invoices[0]['id_cabang']
++            if actor and not actor['is_superuser'] and ((actor['companies'] and company not in actor['companies']) or (actor['branches'] and branch not in actor['branches'])): continue
++            row.update(id_perusahaan=company,id_cabang=branch)
++            result.append(row)
++        return result
++
++    def lp_detail(self,id_lph,actor=None,identity=None):
++        row=self.lph(id_lph,actor,identity,lock=False)
++        for invoice in row['invoices']:
++            invoice['remaining']=self.remaining(invoice)
++        row['claims']=self.all('SELECT * FROM finance_lph_claim WHERE id_lph=:id ORDER BY id',id=id_lph)
++        row['handover']=self.one('SELECT * FROM finance_lph_handover WHERE id_lph=:id',id=id_lph)
++        return row
++
++    def mobile_claim(self, identity, id_lph, data):
++        self.schema();lp=self.lph(id_lph,identity=identity)
++        if lp['status_dokumen']!='AKTIF': fail('Klaim hanya dapat dicatat pada LPH yang telah diterima sales.',409)
++        id_invoice=positive_id(data.get('id_faktur'));method=data.get('method');amount=money(data.get('amount'));client=key(data.get('client_key'))
++        if method not in ('CASH','TRANSFER','GIRO'): fail('Metode klaim tidak valid.')
++        invoice=next((i for i in lp['invoices'] if i['id']==id_invoice),None)
++        if not invoice: fail('Faktur tidak berada dalam LPH ini.',403)
++        self.execute('SELECT pg_advisory_xact_lock(:actor,hashtext(:key))',actor=identity['id_user'],key=client)
++        existing=self.one('SELECT * FROM finance_lph_claim WHERE created_by=:actor AND client_key=CAST(:key AS UUID)',actor=identity['id_user'],key=client)
++        giro_number=str(data.get('giro_number') or '').strip();bank=str(data.get('bank') or '').strip();due=iso_date(data.get('due_date')) if method=='GIRO' else None
++        if method=='GIRO' and (not giro_number or not bank): fail('Nomor BG, bank, dan jatuh tempo wajib diisi.')
++        if existing:
++            if any(existing[k]!=v for k,v in {'id_lph':int(id_lph),'id_faktur':id_invoice,'method':method,'amount':amount,'giro_number':giro_number,'bank':bank,'due_date':due}.items()): fail('ID klaim sudah dipakai untuk data berbeda.',409)
++            return existing
++        claimed=self.one('SELECT COALESCE(SUM(amount),0) amount FROM finance_lph_claim WHERE id_lph=:id AND id_faktur=:invoice',id=id_lph,invoice=id_invoice)['amount']
++        if claimed+amount>self.remaining(invoice): fail('Klaim melebihi sisa piutang faktur.',409)
++        result=self.one('''INSERT INTO finance_lph_claim(id_lph,id_faktur,method,amount,giro_number,bank,due_date,client_key,created_by)
++            VALUES(:id,:invoice,:method,:amount,:number,:bank,:due,CAST(:key AS UUID),:actor) RETURNING *''',id=id_lph,invoice=id_invoice,method=method,amount=amount,number=giro_number,bank=bank,due=due,key=client,actor=identity['id_user'])
++        self.audit(identity,lp['id_perusahaan'],'claim',result['id'],'CREATED')
++        return result
++
++    def delete_claim(self,identity,id_claim):
++        row=self.one('SELECT * FROM finance_lph_claim WHERE id=:id FOR UPDATE',id=id_claim)
++        if not row: fail('Klaim tidak ditemukan.',404)
++        lp=self.lph(row['id_lph'],identity=identity)
++        if lp['status_dokumen']!='AKTIF': fail('Klaim dikunci setelah LPH dikembalikan.',409)
++        self.execute('DELETE FROM finance_lph_claim WHERE id=:id',id=id_claim)
++        self.audit(identity,lp['id_perusahaan'],'claim',id_claim,'DELETED')
++
++    def handover(self,identity,id_lph,data):
++        self.schema();lp=self.lph(id_lph,identity=identity)
++        transfer=nonnegative(data.get('cash_transfer'))
++        existing=self.one('SELECT * FROM finance_lph_handover WHERE id_lph=:id',id=id_lph)
++        if existing:
++            if existing['cash_transfer']!=transfer: fail('LPH sudah dikembalikan dengan nominal berbeda.',409)
++            return existing
++        if lp['status_dokumen']!='AKTIF': fail('Hanya LPH aktif yang dapat dikembalikan.',409)
++        cash=self.one("SELECT COALESCE(SUM(amount),0) amount FROM finance_lph_claim WHERE id_lph=:id AND method='CASH'",id=id_lph)['amount']
++        if transfer>cash: fail('Cash yang ditransfer melebihi total klaim cash.')
++        result=self.one('''INSERT INTO finance_lph_handover(id_lph,cash_transfer,cash_to_cashier,submitted_by)
++            VALUES(:id,:transfer,:cash,:actor) RETURNING *''',id=id_lph,transfer=transfer,cash=cash-transfer,actor=identity['id_user'])
++        self.execute("UPDATE lph SET status_dokumen='DIKEMBALIKAN',dikembalikan_oleh=:actor,tanggal_dikembalikan=NOW() WHERE id=:id",id=id_lph,actor=identity['id_user'])
++        if cash>transfer:
++            self.execute('''INSERT INTO finance_fund_source(id_perusahaan,id_cabang,id_sales,kind,reference,received_date,amount,approval,id_lph,client_key,created_by)
++                VALUES(:company,:branch,:sales,'CASH',:reference,CURRENT_DATE,:amount,'PENDING',:lph,CAST(:key AS UUID),:actor)''',company=lp['id_perusahaan'],branch=lp['id_cabang'],sales=lp['id_sales'],reference='LPH-CASH-'+str(id_lph),amount=cash-transfer,lph=id_lph,key=str(uuid4()),actor=identity['id_user'])
++        self.audit(identity,lp['id_perusahaan'],'lph',id_lph,'RETURNED',str(transfer))
++        return result
++
++    def fund_remaining(self,id_source,exclude=None):
++        used=self.one('''SELECT COALESCE(SUM(a.amount),0) amount FROM finance_receipt_allocation a JOIN finance_receipt r ON r.id=a.id_receipt
++          WHERE a.id_source=:id AND r.status IN '''+ACTIVE+''' AND (:exclude IS NULL OR r.id<>CAST(:exclude AS BIGINT))''',id=id_source,exclude=exclude)['amount']
++        fund=self.one('SELECT amount FROM finance_fund_source WHERE id=:id',id=id_source)
++        return fund['amount']-used
++
++    def funds(self,actor):
++        params={};where=scope_conditions(actor,'d',params)
++        rows=self.all('SELECT d.* FROM finance_fund_source d WHERE '+(' AND '.join(where) or 'TRUE')+' ORDER BY d.id DESC LIMIT 1000',**params)
++        for r in rows:
++            r['remaining']=self.fund_remaining(r['id']);r['overdue']=r['kind']=='GIRO' and r['giro_status']=='NOT_CLEARED' and r['due_date']<date.today()
++        return rows
++
++    def create_fund(self,actor,data):
++        values=fund_payload(data);assert_finance_scope(actor,values['id_perusahaan'],values['id_cabang'])
++        resolve_expense_scope(self.session,values['id_cabang'],values['id_perusahaan'])
++        if values['id_sales'] and not self.one('SELECT id FROM sales WHERE id=:id',id=values['id_sales']): fail('Sales tidak ditemukan.')
++        self.execute('SELECT pg_advisory_xact_lock(:actor,hashtext(:key))',actor=actor['id_user'],key=values['client_key'])
++        existing=self.one('SELECT * FROM finance_fund_source WHERE created_by=:actor AND client_key=CAST(:key AS UUID)',actor=actor['id_user'],key=values['client_key'])
++        if existing:
++            if any(existing[k]!=v for k,v in values.items() if k!='client_key'): fail('ID setoran sudah dipakai untuk data berbeda.',409)
++            return existing
++        values.update(created_by=actor['id_user'],approval='PENDING' if values['kind']=='CASH' else 'APPROVED',giro_status='NOT_CLEARED' if values['kind']=='GIRO' else None)
++        result=self.one('''INSERT INTO finance_fund_source(id_perusahaan,id_cabang,id_sales,kind,reference,bank,account_name,received_date,due_date,amount,client_key,created_by,approval,giro_status)
++          VALUES(:id_perusahaan,:id_cabang,:id_sales,:kind,:reference,:bank,:account_name,:received_date,:due_date,:amount,CAST(:client_key AS UUID),:created_by,:approval,:giro_status) RETURNING *''',**values)
++        if values['kind']!='CASH': self.post_fund(actor,result)
++        self.audit(actor,result['id_perusahaan'],'fund',result['id'],'CREATED')
++        return result
++
++    def post_fund(self,actor,fund):
++        purpose={'CASH':'CASH','TRANSFER':'BANK','GIRO':'GIRO'}[fund['kind']]
++        self.journal(actor,fund['id_perusahaan'],fund['id_cabang'],'FUND:'+str(fund['id']),[(purpose,fund['amount'],Decimal(0)),('CLEARING',Decimal(0),fund['amount'])],'Penerimaan setoran '+fund['reference'])
++
++    def approve_cash(self,actor,id_source):
++        fund=self.lock_fund(actor,id_source)
++        if fund['kind']!='CASH': fail('Hanya setoran tunai yang membutuhkan approval Kasir.')
++        if fund['approval']=='APPROVED': return fund
++        self.post_fund(actor,fund)
++        self.execute("UPDATE finance_fund_source SET approval='APPROVED' WHERE id=:id",id=id_source)
++        self.audit(actor,fund['id_perusahaan'],'fund',id_source,'APPROVED')
++        return dict(fund,approval='APPROVED')
++
++    def lock_fund(self,actor,id_source):
++        fund=self.one('SELECT * FROM finance_fund_source WHERE id=:id FOR UPDATE',id=positive_id(id_source))
++        if not fund: fail('Setoran tidak ditemukan.',404)
++        assert_finance_scope(actor,fund['id_perusahaan'],fund['id_cabang'])
++        return fund
++
++    def import_mutation(self,actor,id_mutasi):
++        mutation=self.one('''SELECT m.*,r.id_perusahaan,r.id_cabang,r.is_aktif FROM mutasi_bank m
++            JOIN rekening_perusahaan r ON r.id_rekening_perusahaan=m.id_rekening_perusahaan WHERE m.id_mutasi=:id FOR UPDATE OF m''',id=positive_id(id_mutasi))
++        if not mutation: fail('Mutasi tidak ditemukan.',404)
++        assert_finance_scope(actor,mutation['id_perusahaan'],mutation['id_cabang'])
++        if mutation['tipe']!=1 or mutation['status_mutasi']!=1 or Decimal(str(mutation['sisa']))!=Decimal(str(mutation['nominal_mutasi'])) or not mutation['is_aktif']: fail('Pilih mutasi CR/dana masuk yang belum dialokasikan.',409)
++        if self.one('SELECT id FROM finance_fund_source WHERE id_mutasi=:id',id=id_mutasi): fail('Mutasi sudah diimpor.',409)
++        result=self.create_fund(actor,dict(kind='TRANSFER',id_perusahaan=mutation['id_perusahaan'],id_cabang=mutation['id_cabang'],reference=mutation['kode_mutasi'],bank=str(mutation['id_rekening_perusahaan']),amount=str(mutation['nominal_mutasi']),received_date=str(mutation['tanggal_mutasi'])[:10],client_key=str(uuid4())))
++        self.execute('UPDATE finance_fund_source SET id_mutasi=:mutation WHERE id=:id',mutation=id_mutasi,id=result['id'])
++        # Reserve the entire bank movement; legacy allocation must not reuse it.
++        self.execute('UPDATE mutasi_bank SET sisa=0,status_mutasi=3 WHERE id_mutasi=:id',id=id_mutasi)
++        return result
++
++    def receipt(self,actor,id_receipt,lock=True):
++        row=self.one('SELECT * FROM finance_receipt WHERE id=:id'+(' FOR UPDATE' if lock else ''),id=positive_id(id_receipt))
++        if not row: fail('Kuitansi tidak ditemukan.',404)
++        assert_finance_scope(actor,row['id_perusahaan'],row['id_cabang'])
++        return row
++
++    def receipts(self,actor):
++        params={};where=scope_conditions(actor,'r',params)
++        rows=self.all('''SELECT r.*,u.nama nama_pengaju,l.kode_lph,
++           (SELECT COALESCE(SUM(i.paid),0) FROM finance_receipt_invoice i WHERE i.id_receipt=r.id) total
++           FROM finance_receipt r JOIN users u ON u.id=r.created_by JOIN lph l ON l.id=r.id_lph
++           WHERE '''+(' AND '.join(where) or 'TRUE')+' ORDER BY r.id DESC LIMIT 500',**params)
++        return rows
++
++    def receipt_detail(self,actor,id_receipt):
++        row=self.receipt(actor,id_receipt,False)
++        row['invoices']=self.all('''SELECT i.*,f.no_faktur,c.nama nama_customer FROM finance_receipt_invoice i
++            JOIN faktur f ON f.id=i.id_faktur JOIN customer c ON c.id=i.id_customer WHERE i.id_receipt=:id ORDER BY i.id''',id=id_receipt)
++        row['allocations']=self.all('''SELECT a.*,s.kind,s.reference FROM finance_receipt_allocation a
++            LEFT JOIN finance_fund_source s ON s.id=a.id_source WHERE a.id_receipt=:id ORDER BY a.id''',id=id_receipt)
++        row['audit']=self.all("SELECT a.*,u.nama FROM finance_workflow_audit a JOIN users u ON u.id=a.actor_id WHERE a.entity='receipt' AND a.entity_id=:id ORDER BY a.id",id=id_receipt)
++        return row
++
++    def claim_limits(self,lp):
++        limits={i['id']:{'CASH':Decimal(0),'TRANSFER':Decimal(0),'GIRO':Decimal(0)} for i in lp['invoices']}
++        for r in self.all('SELECT id_faktur,method,SUM(amount) amount FROM finance_lph_claim WHERE id_lph=:id GROUP BY id_faktur,method',id=lp['id']):
++            limits[r['id_faktur']][r['method']]=r['amount']
++        handover=self.one('SELECT cash_transfer FROM finance_lph_handover WHERE id_lph=:id',id=lp['id'])
++        converted=handover['cash_transfer'] if handover else Decimal(0)
++        for invoice in sorted(limits):
++            taken=min(limits[invoice]['CASH'],converted)
++            limits[invoice]['CASH']-=taken;limits[invoice]['TRANSFER']+=taken;converted-=taken
++        return limits
++
++    def save_receipt(self,actor,data,id_receipt=None,preview=False):
++        existing=self.receipt(actor,id_receipt) if id_receipt else None
++        lp=self.lph(positive_id(data.get('id_lph')),actor)
++        number=note(data.get('number'))[:100];when=iso_date(data.get('receipt_date'))
++        selected=data.get('invoices')
++        if not isinstance(selected,list) or not selected: fail('Pilih faktur dan sumber dananya.')
++        client=key(data.get('client_key'))
++        request_hash=hashlib.sha256(json.dumps({k:v for k,v in data.items() if k!='client_key'},sort_keys=True).encode()).hexdigest()
++        if id_receipt:
++            if existing['status']!='CANCELLED' or existing['created_by']!=actor['id_user']: fail('Hanya pembuat kuitansi Cancelled yang dapat mengedit ulang.',409)
++            if existing['id_lph']!=lp['id'] or existing['number']!=number: fail('LPH dan nomor kuitansi tidak dapat diganti saat edit ulang.')
++        else:
++            self.execute('SELECT pg_advisory_xact_lock(:actor,hashtext(:key))',actor=actor['id_user'],key=client)
++            replay=self.one('SELECT * FROM finance_receipt WHERE created_by=:actor AND client_key=CAST(:key AS UUID)',actor=actor['id_user'],key=client)
++            if replay:
++                # A retry can only retrieve the same header. Detail edits require a cancelled receipt.
++                if replay['request_hash']!=request_hash: fail('ID kuitansi sudah digunakan.',409)
++                return replay
++        if lp['status_dokumen']!='DIKEMBALIKAN': fail('Pilih LPH yang sudah dikembalikan sales.',409)
++        for choice in selected:
++            if not isinstance(choice,dict) or not isinstance(choice.get('sources',[]),list): fail('Pilihan sumber dana tidak valid.')
++        known={i['id']:i for i in lp['invoices']};seen=set();draft=[];limits=self.claim_limits(lp)
++        # Stable lock ordering prevents two drafts sharing the same bank/Giro funds.
++        all_sources=sorted({positive_id(v) for i in selected for v in i.get('sources',[])})
++        funds={v:self.lock_fund(actor,v) for v in all_sources}
++        remaining={v:self.fund_remaining(v) for v in all_sources}
++        for choice in selected:
++            invoice_id=positive_id(choice.get('id_faktur'))
++            if invoice_id in seen or invoice_id not in known: fail('Faktur duplikat atau di luar LPH.')
++            seen.add(invoice_id);invoice=known[invoice_id]
++            self.execute('SELECT id FROM faktur WHERE id=:id FOR UPDATE',id=invoice_id)
++            if self.one('''SELECT r.id FROM finance_receipt_invoice i JOIN finance_receipt r ON r.id=i.id_receipt
++                WHERE i.id_faktur=:id AND r.status='DRAFT' ''',id=invoice_id): fail('Faktur sudah ditahan kuitansi Draft lain.',409)
++            current=self.remaining(invoice);allocations=[];used_methods={k:Decimal(0) for k in ('CASH','TRANSFER','GIRO')}
++            sources=choice.get('sources',[])
++            if len(sources)!=len(set(map(str,sources))): fail('Sumber dana dipilih lebih dari sekali.')
++            for value in sources:
++                source_id=int(value);fund=funds[source_id]
++                if (fund['id_perusahaan'],fund['id_cabang'])!=(lp['id_perusahaan'],lp['id_cabang']): fail('Sumber dana berbeda perusahaan/cabang.',403)
++                if fund['approval']!='APPROVED' or fund['giro_status']=='BOUNCED': fail('Setoran belum disetujui atau giro ditolak.',409)
++                if fund['id_sales'] and fund['id_sales']!=lp['id_sales']: fail('Setoran bukan milik sales LPH ini.',403)
++                if fund['id_customer'] and fund['id_customer']!=invoice['id_customer']: fail('Uang muka/retur milik customer lain.',403)
++                amount=remaining[source_id]
++                if fund['kind'] in used_methods:
++                    amount=min(amount,max(limits[invoice_id][fund['kind']]-used_methods[fund['kind']],Decimal(0)))
++                    used_methods[fund['kind']]+=amount
++                if amount<=0: fail('Sumber dana habis atau melebihi klaim sales faktur.',409)
++                allocations.append((source_id,None,amount,fund['kind']));remaining[source_id]-=amount
++            fee=nonnegative(choice.get('fee'))
++            if fee:
++                setting=self.one('SELECT max_fee FROM finance_workflow_setting WHERE id_perusahaan=:id',id=lp['id_perusahaan'])
++                if not setting or fee>setting['max_fee']: fail('Biaya Lain melebihi batas perusahaan.',409)
++                fee_name=note(choice.get('fee_name'))[:160]
++                allocations.append((None,fee_name,fee,'FEE'))
++            total=sum((a[2] for a in allocations),Decimal(0));paid,excess=receipt_split(total,current,choice.get('excess_treatment'))
++            draft.append((invoice,paid,excess,choice.get('excess_treatment'),allocations))
++        if preview:
++            return {'invoices':[dict(id_faktur=i['id'],no_faktur=i['no_faktur'],paid=paid,excess=excess,excess_treatment=treatment,allocations=[dict(id_source=a[0],fee_name=a[1],amount=a[2],kind=a[3]) for a in allocations]) for i,paid,excess,treatment,allocations in draft]}
++        if existing:
++            self.execute('DELETE FROM finance_receipt_allocation WHERE id_receipt=:id',id=id_receipt)
++            self.execute('DELETE FROM finance_receipt_invoice WHERE id_receipt=:id',id=id_receipt)
++            result=self.one("UPDATE finance_receipt SET status='DRAFT',receipt_date=:date,request_hash=:hash,revision=revision+1,finalized_by=NULL,finalized_at=NULL WHERE id=:id RETURNING *",date=when,id=id_receipt,hash=request_hash)
++        else:
++            result=self.one('''INSERT INTO finance_receipt(id_lph,id_perusahaan,id_cabang,number,receipt_date,status,created_by,client_key,request_hash)
++               VALUES(:lph,:company,:branch,:number,:date,'DRAFT',:actor,CAST(:key AS UUID),:hash) RETURNING *''',lph=lp['id'],company=lp['id_perusahaan'],branch=lp['id_cabang'],number=number,date=when,actor=actor['id_user'],key=client,hash=request_hash)
++        for invoice,paid,excess,treatment,allocations in draft:
++            self.execute('''INSERT INTO finance_receipt_invoice(id_receipt,id_faktur,id_customer,paid,excess,excess_treatment)
++                VALUES(:receipt,:invoice,:customer,:paid,:excess,:treatment)''',receipt=result['id'],invoice=invoice['id'],customer=invoice['id_customer'],paid=paid,excess=excess,treatment=treatment if excess else None)
++            for source,name,amount,_kind in allocations:
++                self.execute('''INSERT INTO finance_receipt_allocation(id_receipt,id_faktur,id_source,fee_name,amount)
++                    VALUES(:receipt,:invoice,:source,:name,:amount)''',receipt=result['id'],invoice=invoice['id'],source=source,name=name,amount=amount)
++        self.audit(actor,lp['id_perusahaan'],'receipt',result['id'],'DRAFT')
++        return result
++
++    def finalize(self,actor,id_receipt):
++        row=self.receipt(actor,id_receipt);distinct_approver(row['created_by'],actor['id_user'])
++        if row['status']=='FINALIZED': return row
++        if row['status']!='DRAFT': fail('Hanya kuitansi Draft yang dapat difinalisasi.',409)
++        lp=self.lph(row['id_lph'],actor)
++        if lp['status_dokumen'] not in ('DIKEMBALIKAN','DITUTUP'): fail('LPH belum dikembalikan.',409)
++        allocations=self.all('''SELECT a.*,s.kind,s.approval,s.giro_status FROM finance_receipt_allocation a
++            LEFT JOIN finance_fund_source s ON s.id=a.id_source WHERE a.id_receipt=:id ORDER BY a.id_source NULLS LAST,a.id''',id=id_receipt)
++        for source_id in sorted({a['id_source'] for a in allocations if a['id_source']}):
++            fund=self.lock_fund(actor,source_id)
++            if fund['giro_status']=='BOUNCED' or fund['approval']!='APPROVED' or self.fund_remaining(source_id)<0: fail('Sumber dana berubah. Buat ulang kuitansi.',409)
++        invoices=self.all('SELECT * FROM finance_receipt_invoice WHERE id_receipt=:id ORDER BY id_faktur',id=id_receipt)
++        known={i['id']:i for i in lp['invoices']};lines=[]
++        for detail in invoices:
++            invoice=known[detail['id_faktur']]
++            self.execute('SELECT id FROM faktur WHERE id=:id FOR UPDATE',id=invoice['id'])
++            if detail['paid']>self.remaining(invoice): fail('Sisa piutang berubah. Batalkan dan buat ulang Draft.',409)
++            for a in [a for a in allocations if a['id_faktur']==invoice['id']]:
++                purpose={'ADVANCE':'ADVANCE','RETURN':'RETURN'}.get(a['kind'],'CLEARING') if a['id_source'] else 'FEE'
++                lines.append((purpose,a['amount'],Decimal(0)))
++            lines.append(('RECEIVABLE',Decimal(0),detail['paid']))
++            if detail['excess']:
++                purpose=detail['excess_treatment'];lines.append((purpose,Decimal(0),detail['excess']))
++                if purpose=='ADVANCE':
++                    self.execute('''INSERT INTO finance_fund_source(id_perusahaan,id_cabang,id_customer,kind,reference,received_date,amount,approval,origin_receipt,client_key,created_by)
++                     VALUES(:company,:branch,:customer,'ADVANCE',:ref,:date,:amount,'APPROVED',:receipt,CAST(:key AS UUID),:actor)''',company=row['id_perusahaan'],branch=row['id_cabang'],customer=invoice['id_customer'],ref=f'UM-{id_receipt}-{row["revision"]}-{invoice["id"]}',date=row['receipt_date'],amount=detail['excess'],receipt=id_receipt,key=str(uuid4()),actor=actor['id_user'])
++            # Project settlement into existing Finance balances, never the pre-final mobile claim.
++            sc=self.one('''INSERT INTO setoran_customer(id_sales,id_sales_order,id_faktur,id_order_batch,jumlah_setoran,tipe_setoran,tanggal_input,is_rekap)
++              VALUES(:sales,:order,:invoice,:batch,:amount,2,:date,1) RETURNING id''',sales=lp['id_sales'],order=invoice['source_order'],invoice=invoice['id'],batch=invoice['id_order_batch'],amount=detail['paid'],date=row['receipt_date'])['id']
++            dep=self.one('''INSERT INTO setoran(id_sales_order,id_faktur,id_setoran_customer,draft_tanggal_input,draft_jumlah_setor,draft_tipe_setor,status_setoran,setor_diterima_kasir,setoran_bersih,pj_setoran,keterangan)
++              VALUES(:order,:invoice,:source,:date,:amount,2,3,:amount,:amount,1,:note) RETURNING id''',order=invoice['source_order'],invoice=invoice['id'],source=sc,date=row['receipt_date'],amount=detail['paid'],note='Kuitansi '+row['number'])['id']
++            self.execute('INSERT INTO finance_receipt_legacy_link VALUES(:receipt,:deposit,:source)',receipt=id_receipt,deposit=dep,source=sc)
++            self.execute('UPDATE faktur SET status_faktur=:status WHERE id=:id',status=3 if self.remaining(invoice)==0 else 2,id=invoice['id'])
++        self.journal(actor,row['id_perusahaan'],row['id_cabang'],f'RECEIPT:{id_receipt}:{row["revision"]}',lines,'Penerimaan pembayaran '+row['number'])
++        self.execute("UPDATE finance_receipt SET status='FINALIZED',finalized_by=:actor,finalized_at=NOW() WHERE id=:id",actor=actor['id_user'],id=id_receipt)
++        # Closing is documentary; remaining invoices can be placed in a fresh LPH.
++        self.execute("UPDATE lph SET status_dokumen='DITUTUP' WHERE id=:id",id=row['id_lph'])
++        self.audit(actor,row['id_perusahaan'],'receipt',id_receipt,'FINALIZED')
++        return dict(row,status='FINALIZED')
++
++    def cancellations(self,actor):
++        params={};where=scope_conditions(actor,'r',params)
++        return self.all('''SELECT c.*,r.number,r.id_perusahaan,r.id_cabang,r.created_by FROM finance_receipt_cancellation c
++          JOIN finance_receipt r ON r.id=c.id_receipt WHERE '''+(' AND '.join(where) or 'TRUE')+' ORDER BY c.id DESC LIMIT 500',**params)
++
++    def request_cancel(self,actor,id_receipt,data):
++        row=self.receipt(actor,id_receipt)
++        reason=note(data.get('reason'))
++        draft=self.one("SELECT * FROM finance_receipt_cancellation WHERE id_receipt=:id AND status IN ('DRAFT','PENDING') FOR UPDATE",id=id_receipt)
++        if draft and draft['status']=='PENDING': return draft
++        if row['status']!='FINALIZED': fail('Hanya kuitansi Finalized yang dapat diajukan batal.',409)
++        if draft:
++            result=self.one("UPDATE finance_receipt_cancellation SET status='PENDING',requested_by=:actor,reason=:reason WHERE id=:id RETURNING *",actor=actor['id_user'],reason=reason,id=draft['id'])
++        else:
++            result=self.one("INSERT INTO finance_receipt_cancellation(id_receipt,status,reason,requested_by) VALUES(:id,'PENDING',:reason,:actor) RETURNING *",id=id_receipt,reason=reason,actor=actor['id_user'])
++        self.execute("UPDATE finance_receipt SET status='CANCEL_REQUESTED' WHERE id=:id",id=id_receipt)
++        self.audit(actor,row['id_perusahaan'],'receipt',id_receipt,'CANCEL_REQUESTED',reason)
++        return result
++
++    def decide_cancel(self,actor,id_cancel,data):
++        # Lock parent receipt before request, in the same order as request/bounce.
++        target=self.one('SELECT id_receipt FROM finance_receipt_cancellation WHERE id=:id',id=id_cancel)
++        if not target: fail('Pengajuan batal tidak ditemukan.',404)
++        row=self.receipt(actor,target['id_receipt'])
++        cancellation=self.one('SELECT * FROM finance_receipt_cancellation WHERE id=:id FOR UPDATE',id=id_cancel)
++        distinct_approver(row['created_by'],actor['id_user']);distinct_approver(cancellation['requested_by'],actor['id_user'])
++        decision=data.get('decision')
++        if decision not in ('APPROVED','REJECTED'): fail('Keputusan pembatalan tidak valid.')
++        if cancellation['status']!= 'PENDING' or row['status']!='CANCEL_REQUESTED': fail('Pengajuan sudah diputuskan atau belum diajukan.',409)
++        if decision=='APPROVED':
++            self.lph(row['id_lph'],actor)
++            derived=self.all("SELECT * FROM finance_fund_source WHERE origin_receipt=:id AND kind='ADVANCE' ORDER BY id FOR UPDATE",id=row['id'])
++            for fund in derived:
++                if self.fund_remaining(fund['id'])!=fund['amount']: fail('Uang muka hasil kuitansi sudah dipakai/ditahan. Batalkan kuitansi pengguna terlebih dahulu.',409)
++            # Keep historical surplus funds but make them unselectable; no audit data is deleted.
++            self.execute("UPDATE finance_fund_source SET approval='PENDING' WHERE origin_receipt=:id",id=row['id'])
++            links=self.all('SELECT * FROM finance_receipt_legacy_link WHERE id_receipt=:id ORDER BY id_setoran',id=row['id'])
++            for link in links:
++                self.execute('UPDATE setoran SET status_setoran=0 WHERE id=:id',id=link['id_setoran'])
++                self.execute('UPDATE setoran_customer SET jumlah_setoran=0 WHERE id=:id',id=link['id_setoran_customer'])
++            journal=self.one('SELECT id_jurnal FROM finance_workflow_journal WHERE reference=:ref',ref=f'RECEIPT:{row["id"]}:{row["revision"]}')
++            if not journal: fail('Jurnal kuitansi asli tidak ditemukan. Pembatalan dihentikan.',409)
++            # Reverse original lines verbatim; configuration changes must not change the reversal.
++            reversal=self.one('INSERT INTO jurnal(id_perusahaan,id_cabang,tanggal,keterangan) VALUES(:company,:branch,NOW(),:description) RETURNING id_jurnal',company=row['id_perusahaan'],branch=row['id_cabang'],description='Reversal '+row['number'])['id_jurnal']
++            self.execute('''INSERT INTO jurnal_detail(id_jurnal,kode_jurnal,nama_akun,keterangan,debit,kredit,created_at,created_by)
++               SELECT :id,kode_jurnal,nama_akun,:note,kredit,debit,NOW(),:actor FROM jurnal_detail WHERE id_jurnal=:original''',id=reversal,note='Reversal '+row['number'],actor=actor['id_user'],original=journal['id_jurnal'])
++            self.execute('INSERT INTO finance_workflow_journal(reference,id_jurnal,id_perusahaan) VALUES(:ref,:id,:company)',ref=f'CANCEL:{cancellation["id"]}',id=reversal,company=row['id_perusahaan'])
++            self.execute("UPDATE finance_receipt SET status='CANCELLED' WHERE id=:id",id=row['id'])
++            self.execute("UPDATE lph SET status_dokumen='DIKEMBALIKAN' WHERE id=:id",id=row['id_lph'])
++            for inv in self.lph(row['id_lph'],actor)['invoices']:
++                balance=self.remaining(inv)
++                self.execute('UPDATE faktur SET status_faktur=:status WHERE id=:id',status=3 if balance==0 else (1 if balance==inv['total']-inv['existing_return'] else 2),id=inv['id'])
++        else:
++            self.execute("UPDATE finance_receipt SET status='FINALIZED' WHERE id=:id",id=row['id'])
++        self.execute('UPDATE finance_receipt_cancellation SET status=:status,decided_by=:actor,decided_at=NOW() WHERE id=:id',status=decision,actor=actor['id_user'],id=id_cancel)
++        self.audit(actor,row['id_perusahaan'],'receipt',row['id'],'CANCEL_'+decision,str(data.get('note') or '')[:2000])
++        return dict(cancellation,status=decision)
++
++    def clear_giro(self,actor,id_source,data):
++        fund=self.lock_fund(actor,id_source)
++        if fund['kind']!='GIRO' or fund['giro_status']!='NOT_CLEARED': fail('Giro tidak dalam status belum cair.',409)
++        mutation_id=data.get('id_mutasi')
++        if mutation_id:
++            mut=self.one('''SELECT m.*,r.id_perusahaan,r.id_cabang FROM mutasi_bank m JOIN rekening_perusahaan r ON r.id_rekening_perusahaan=m.id_rekening_perusahaan
++                WHERE m.id_mutasi=:id FOR UPDATE OF m''',id=positive_id(mutation_id))
++            if not mut or mut['tipe']!=1 or mut['status_mutasi']!=1 or Decimal(str(mut['sisa']))!=fund['amount'] or Decimal(str(mut['nominal_mutasi']))!=fund['amount']: fail('Pilih mutasi dana masuk belum dipakai dengan nominal persis sama.',409)
++            if (mut['id_perusahaan'],mut['id_cabang'])!=(fund['id_perusahaan'],fund['id_cabang']): fail('Mutasi kliring berbeda perusahaan/cabang.',403)
++            if self.one('SELECT id FROM finance_fund_source WHERE id_mutasi=:id',id=mutation_id): fail('Mutasi sudah dipakai sumber lain.',409)
++            self.execute('UPDATE mutasi_bank SET status_mutasi=3,sisa=0 WHERE id_mutasi=:id',id=mutation_id)
++        else:
++            # A clearing record is evidence only, never another allocatable source.
++            note(data.get('clearing_reference'))
++        self.execute('''INSERT INTO finance_giro_clearing(id_source,id_perusahaan,reference,id_mutasi,amount,created_by) VALUES(:source,:company,:reference,:mutation,:amount,:actor)''',source=id_source,company=fund['id_perusahaan'],reference=str(data.get('clearing_reference') or ('CLR-'+str(id_source))),mutation=positive_id(mutation_id) if mutation_id else None,amount=fund['amount'],actor=actor['id_user'])
++        self.journal(actor,fund['id_perusahaan'],fund['id_cabang'],'CLEAR:'+str(id_source),[('BANK',fund['amount'],Decimal(0)),('GIRO',Decimal(0),fund['amount'])],'Pencairan giro '+fund['reference'])
++        self.execute("UPDATE finance_fund_source SET giro_status='CLEARED',id_mutasi=COALESCE(CAST(:mutation AS INTEGER),id_mutasi) WHERE id=:id",id=id_source,mutation=mutation_id)
++        self.audit(actor,fund['id_perusahaan'],'fund',id_source,'CLEARED',str(data.get('clearing_reference') or mutation_id))
++        return dict(fund,giro_status='CLEARED')
++
++    def bounce_giro(self,actor,id_source,data):
++        reason=note(data.get('reason'))
++        # Receipt locks precede fund locks, matching finalization/cancellation.
++        receipts=self.all('''SELECT DISTINCT r.id FROM finance_receipt r JOIN finance_receipt_allocation a ON a.id_receipt=r.id
++            WHERE a.id_source=:id AND r.status IN ('DRAFT','FINALIZED','CANCEL_REQUESTED') ORDER BY r.id''',id=id_source)
++        for r in receipts: self.receipt(actor,r['id'])
++        fund=self.lock_fund(actor,id_source)
++        if fund['kind']!='GIRO' or fund['giro_status']!='NOT_CLEARED': fail('Giro sudah cair atau ditolak.',409)
++        original=self.one('SELECT id_jurnal FROM finance_workflow_journal WHERE reference=:ref',ref='FUND:'+str(id_source))
++        if not original: fail('Jurnal penerimaan giro tidak ditemukan.',409)
++        journal=self.one('INSERT INTO jurnal(id_perusahaan,id_cabang,tanggal,keterangan) VALUES(:company,:branch,NOW(),:note) RETURNING id_jurnal',company=fund['id_perusahaan'],branch=fund['id_cabang'],note='Giro ditolak '+fund['reference'])['id_jurnal']
++        self.execute("INSERT INTO jurnal_detail(id_jurnal,kode_jurnal,nama_akun,keterangan,debit,kredit,created_at,created_by) SELECT :id,kode_jurnal,nama_akun,'Giro ditolak',kredit,debit,NOW(),:actor FROM jurnal_detail WHERE id_jurnal=:original",id=journal,actor=actor['id_user'],original=original['id_jurnal'])
++        self.execute('INSERT INTO finance_workflow_journal(reference,id_jurnal,id_perusahaan) VALUES(:reference,:journal,:company)',reference='BOUNCE:'+str(id_source),journal=journal,company=fund['id_perusahaan'])
++        self.execute("UPDATE finance_fund_source SET giro_status='BOUNCED' WHERE id=:id",id=id_source)
++        for r in receipts:
++            receipt=self.receipt(actor,r['id'])
++            if receipt['status']=='DRAFT':
++                self.execute("UPDATE finance_receipt SET status='CANCELLED' WHERE id=:id",id=r['id'])
++                self.audit(actor,fund['id_perusahaan'],'receipt',r['id'],'DRAFT_VOID_GIRO',reason)
++            else:
++                self.execute("INSERT INTO finance_receipt_cancellation(id_receipt,status,reason,auto_giro) VALUES(:receipt,'DRAFT',:reason,:giro) ON CONFLICT DO NOTHING",receipt=r['id'],reason=reason,giro=id_source)
++        self.execute("UPDATE finance_receipt_cancellation SET auto_giro=:giro WHERE id_receipt IN (SELECT a.id_receipt FROM finance_receipt_allocation a WHERE a.id_source=:giro) AND status IN ('DRAFT','PENDING')",giro=id_source)
++        self.audit(actor,fund['id_perusahaan'],'fund',id_source,'BOUNCED',reason)
++        return dict(fund,giro_status='BOUNCED')
++
++    def revise_fund(self,actor,id_source,data=None):
++        fund=self.lock_fund(actor,id_source)
++        # Once allocated, history remains immutable even after a receipt cancellation.
++        if self.one('SELECT id FROM finance_receipt_allocation WHERE id_source=:id LIMIT 1',id=id_source): fail('Setoran memiliki riwayat alokasi; buat transaksi koreksi baru.',409)
++        if self.fund_remaining(id_source)!=fund['amount'] or fund['origin_receipt'] or fund['id_lph'] or fund['id_mutasi'] or fund['kind'] in ('ADVANCE','RETURN') or fund['giro_status'] in ('CLEARED','BOUNCED'):
++            fail('Setoran sudah dialokasikan atau memiliki hubungan terkunci; tidak dapat diubah/dihapus.',409)
++        # Reversal uses the original lines, even if account mapping has changed.
++        original=self.one('SELECT id_jurnal FROM finance_workflow_journal WHERE reference=:ref',ref='FUND:'+str(id_source))
++        if original:
++            j=self.one('INSERT INTO jurnal(id_perusahaan,id_cabang,tanggal,keterangan) VALUES(:company,:branch,NOW(),:note) RETURNING id_jurnal',company=fund['id_perusahaan'],branch=fund['id_cabang'],note='Koreksi setoran '+fund['reference'])['id_jurnal']
++            self.execute('''INSERT INTO jurnal_detail(id_jurnal,kode_jurnal,nama_akun,keterangan,debit,kredit,created_at,created_by)
++               SELECT :id,kode_jurnal,nama_akun,'Koreksi setoran',kredit,debit,NOW(),:actor FROM jurnal_detail WHERE id_jurnal=:original''',id=j,actor=actor['id_user'],original=original['id_jurnal'])
++            self.execute('INSERT INTO finance_workflow_journal(reference,id_jurnal,id_perusahaan) VALUES(:reference,:journal,:company)',reference='FUND-CORRECTION:'+str(j),journal=j,company=fund['id_perusahaan'])
++            self.execute('UPDATE finance_workflow_journal SET reference=:ref WHERE reference=:old',ref='FUND-OLD:'+str(id_source)+':'+str(j),old='FUND:'+str(id_source))
++        if data is None:
++            self.execute('DELETE FROM finance_fund_source WHERE id=:id',id=id_source)
++            self.audit(actor,fund['id_perusahaan'],'fund',id_source,'DELETED')
++            return {'id':id_source}
++        values=fund_payload(data)
++        if any(values[k]!=fund[k] for k in ('kind','id_perusahaan','id_cabang')): fail('Jenis dan cakupan setoran tidak dapat diganti.')
++        self.execute('''UPDATE finance_fund_source SET reference=:reference,bank=:bank,account_name=:account_name,
++            received_date=:received_date,due_date=:due_date,amount=:amount,id_sales=:id_sales WHERE id=:id''',id=id_source,**values)
++        updated=self.one('SELECT * FROM finance_fund_source WHERE id=:id',id=id_source)
++        if updated['approval']=='APPROVED': self.post_fund(actor,updated)
++        self.audit(actor,fund['id_perusahaan'],'fund',id_source,'UPDATED')
++        return updated
++
++    def credit_note_source(self,actor,id_cn):
++        cn=self.one('''SELECT cn.*,pr.id_perusahaan,c.id_cabang FROM credit_note cn JOIN principal pr ON pr.id=cn.id_principal
++            JOIN customer c ON c.id=cn.id_customer WHERE cn.id_cn=:id FOR UPDATE OF cn''',id=positive_id(id_cn))
++        if not cn: fail('Credit note tidak ditemukan.',404)
++        assert_finance_scope(actor,cn['id_perusahaan'],cn['id_cabang'])
++        if cn['status_cn'] not in (0,3) or Decimal(str(cn['nominal_refund'] or 0))>0: fail('Credit note sudah digunakan/refund.',409)
++        if self.one("SELECT id FROM payment_voucher_usage WHERE usage_type='credit_note' AND usage_id=:id AND status=1",id=id_cn): fail('Credit note sudah digunakan pada pembayaran lama.',409)
++        if cn['id_faktur']: fail('Credit note terikat faktur asal; retur tersebut sudah masuk saldo faktur dan tidak boleh dialokasikan dua kali.',409)
++        existing=self.one('SELECT * FROM finance_fund_source WHERE id_credit_note=:id',id=id_cn)
++        if existing: return existing
++        result=self.one('''INSERT INTO finance_fund_source(id_perusahaan,id_cabang,id_customer,kind,reference,received_date,amount,approval,id_credit_note,client_key,created_by)
++           VALUES(:company,:branch,:customer,'RETURN',:ref,CURRENT_DATE,:amount,'APPROVED',:cn,CAST(:key AS UUID),:actor) RETURNING *''',company=cn['id_perusahaan'],branch=cn['id_cabang'],customer=cn['id_customer'],ref=cn['kode_cn'],amount=money(cn['total_cn']),cn=id_cn,key=str(uuid4()),actor=actor['id_user'])
++        self.execute('UPDATE credit_note SET status_cn=1 WHERE id_cn=:id',id=id_cn)
++        self.audit(actor,cn['id_perusahaan'],'fund',result['id'],'CREDIT_NOTE_RESERVED')
++        return result
++
++    def journals(self,actor):
++        params={};where=scope_conditions(actor,'j',params)
++        return self.all('''SELECT w.reference,j.*,COALESCE(json_agg(d.* ORDER BY d.id_jurnal_detail), '[]') lines
++           FROM finance_workflow_journal w JOIN jurnal j ON j.id_jurnal=w.id_jurnal JOIN jurnal_detail d ON d.id_jurnal=j.id_jurnal
++           WHERE '''+(' AND '.join(where) or 'TRUE')+' GROUP BY w.reference,j.id_jurnal ORDER BY j.id_jurnal DESC LIMIT 500',**params)
++
++    def accept_lph(self,identity,id_lph,data):
++        from apps.lib.lph_handover import validate_checked_details
++        self.schema();lp=self.lph(id_lph,identity=identity)
++        if lp['status_dokumen']=='AKTIF': return lp
++        if lp['status_dokumen']!='MENUNGGU_PENERIMAAN': fail('LPH sudah dikembalikan/ditutup.',409)
++        expected=self.all('SELECT id FROM lph_detail WHERE id_lph=:id ORDER BY id',id=id_lph)
++        try: checked=validate_checked_details(data.get('checked_detail_ids'),[v['id'] for v in expected])
++        except ValueError as exc: fail(str(exc))
++        self.execute("UPDATE lph SET status_dokumen='AKTIF',diterima_oleh=:actor,tanggal_diterima=NOW() WHERE id=:id",actor=identity['id_user'],id=id_lph)
++        self.audit(identity,lp['id_perusahaan'],'lph',id_lph,'RECEIVED',json.dumps(checked))
++        return dict(lp,status_dokumen='AKTIF')
+diff --git a/apps/test/fixtures/payment_workflow.sql b/apps/test/fixtures/payment_workflow.sql
+new file mode 100644
+index 0000000..171e358
+--- /dev/null
++++ b/apps/test/fixtures/payment_workflow.sql
+@@ -0,0 +1,23 @@
++CREATE TABLE users(id SERIAL PRIMARY KEY,nama TEXT,tokens TEXT,id_cabang INTEGER,id_perusahaan INTEGER,id_cabang_list TEXT,id_perusahaan_list TEXT);
++CREATE TABLE perusahaan(id INTEGER PRIMARY KEY,nama TEXT,kode TEXT);
++CREATE TABLE cabang(id INTEGER PRIMARY KEY,id_perusahaan INTEGER,nama TEXT,kode TEXT);
++CREATE TABLE perusahaan_cabang(id_perusahaan INTEGER,id_cabang INTEGER);
++CREATE TABLE sales(id INTEGER PRIMARY KEY,id_user INTEGER);
++CREATE TABLE customer(id INTEGER PRIMARY KEY,id_cabang INTEGER,nama TEXT);
++CREATE TABLE principal(id INTEGER PRIMARY KEY,id_perusahaan INTEGER);
++CREATE TABLE plafon(id INTEGER PRIMARY KEY,id_customer INTEGER,id_principal INTEGER);
++CREATE TABLE sales_order(id INTEGER PRIMARY KEY,id_plafon INTEGER,id_order_batch INTEGER);
++CREATE TABLE faktur(id INTEGER PRIMARY KEY,id_sales_order INTEGER,id_order_batch INTEGER,no_faktur TEXT,total_penjualan NUMERIC,nominal_retur NUMERIC DEFAULT 0,status_faktur INTEGER);
++CREATE TABLE faktur_detail(id_faktur INTEGER,id_sales_order INTEGER);
++CREATE TABLE lph(id SERIAL PRIMARY KEY,id_sales INTEGER,kode_lph TEXT,status_dokumen TEXT,diterima_oleh INTEGER,tanggal_diterima TIMESTAMPTZ,dikembalikan_oleh INTEGER,tanggal_dikembalikan TIMESTAMPTZ);
++CREATE TABLE lph_detail(id SERIAL PRIMARY KEY,id_lph INTEGER,id_faktur INTEGER);
++CREATE TABLE setoran_customer(id SERIAL PRIMARY KEY,id_sales INTEGER,id_sales_order INTEGER,id_faktur INTEGER,id_order_batch INTEGER,jumlah_setoran NUMERIC,tipe_setoran INTEGER,tanggal_input DATE,is_rekap INTEGER);
++CREATE TABLE setoran(id SERIAL PRIMARY KEY,id_sales_order INTEGER,id_faktur INTEGER,id_setoran_customer INTEGER,draft_tanggal_input DATE,draft_jumlah_setor NUMERIC,draft_tipe_setor INTEGER,status_setoran INTEGER,setor_diterima_kasir NUMERIC,setoran_bersih NUMERIC,pj_setoran INTEGER,keterangan TEXT,jumlah_setoran NUMERIC);
++CREATE TABLE payment_voucher_usage(id SERIAL PRIMARY KEY,id_faktur INTEGER,usage_type TEXT,usage_id INTEGER,nominal NUMERIC,status INTEGER);
++CREATE TABLE rekening_perusahaan(id_rekening_perusahaan INTEGER PRIMARY KEY,id_perusahaan INTEGER,id_cabang INTEGER,is_aktif BOOLEAN);
++CREATE TABLE mutasi_bank(id_mutasi INTEGER PRIMARY KEY,id_rekening_perusahaan INTEGER,tipe INTEGER,status_mutasi INTEGER,sisa NUMERIC,nominal_mutasi NUMERIC,kode_mutasi TEXT,tanggal_mutasi DATE);
++CREATE TABLE credit_note(id_cn INTEGER PRIMARY KEY,id_customer INTEGER,id_principal INTEGER,tanggal TIMESTAMPTZ,status_cn INTEGER,total_cn NUMERIC,id_faktur INTEGER,nominal_refund NUMERIC,kode_cn TEXT);
++CREATE TABLE coa(id_coa INTEGER PRIMARY KEY,id_perusahaan INTEGER,id_cabang_list TEXT,nomor_akun TEXT,nama_akun TEXT,is_active BOOLEAN);
++CREATE TABLE jurnal(id_jurnal SERIAL PRIMARY KEY,id_perusahaan INTEGER,id_cabang INTEGER,tanggal TIMESTAMPTZ,keterangan TEXT);
++CREATE TABLE jurnal_detail(id_jurnal_detail SERIAL PRIMARY KEY,id_jurnal INTEGER,kode_jurnal TEXT,nama_akun TEXT,keterangan TEXT,debit NUMERIC(18,2),kredit NUMERIC(18,2),created_at TIMESTAMPTZ,created_by INTEGER);
++CREATE TABLE fitur(id INTEGER PRIMARY KEY,nama TEXT);
+diff --git a/apps/test/test_payment_receipt_workflow.py b/apps/test/test_payment_receipt_workflow.py
+new file mode 100644
+index 0000000..411559e
+--- /dev/null
++++ b/apps/test/test_payment_receipt_workflow.py
+@@ -0,0 +1,232 @@
++"""Real PostgreSQL workflow tests; only an explicitly named local throwaway DB is allowed."""
++import os
++import unittest
++from pathlib import Path
++from decimal import Decimal
++from uuid import uuid4
++from sqlalchemy import create_engine,text
++from sqlalchemy.orm import Session
++from sqlalchemy.engine.url import make_url
++from apps.handler import nonServerErrorException
++from apps.services.FinanceWorkflow.service import PaymentWorkflow, PURPOSES
++
++URL=os.environ.get('WORKFLOW_TEST_DATABASE_URL')
++ADMIN={'id_user':1,'is_superuser':True,'companies':[],'branches':[]}
++SPV=dict(ADMIN,id_user=2)
++SALES={'id_user':3,'id_sales':1}
++
++@unittest.skipUnless(URL,'Set WORKFLOW_TEST_DATABASE_URL to an isolated local PostgreSQL test database.')
++class WorkflowTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        url=make_url(URL)
++        if url.host not in ('localhost','127.0.0.1') or url.database!='budimas_workflow_tests' or url.port!=55432:
++            raise RuntimeError('Tests only permit localhost:55432/budimas_workflow_tests.')
++        cls.engine=create_engine(URL)
++        raw=cls.engine.raw_connection();cur=raw.cursor()
++        cur.execute('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
++        root=Path(__file__).resolve().parents[2]
++        cur.execute((Path(__file__).parent/'fixtures/payment_workflow.sql').read_text())
++        raw.commit()
++        cur.execute((root/'tools/migrations/20261004_payment_receipt_workflow.sql').read_text())
++        raw.commit();cur.close();raw.close()
++
++    def setUp(self):
++        self.session=Session(self.engine);self.s=PaymentWorkflow(self.session)
++        tables='finance_workflow_audit,finance_workflow_journal,finance_receipt_cancellation,finance_receipt_legacy_link,finance_receipt_allocation,finance_receipt_invoice,finance_receipt,finance_fund_source,finance_lph_handover,finance_lph_claim,lph_detail,lph,faktur_detail,faktur,sales_order,plafon,principal,customer,sales,users,perusahaan_cabang,cabang,perusahaan,finance_workflow_account,finance_workflow_setting,coa,jurnal_detail,jurnal,credit_note,mutasi_bank,rekening_perusahaan,setoran,setoran_customer,payment_voucher_usage'
++        self.s.execute('TRUNCATE '+tables+' RESTART IDENTITY CASCADE')
++        self.s.execute("INSERT INTO users(id,nama) VALUES(1,'Admin'),(2,'Supervisor'),(3,'Sales')")
++        self.s.execute("INSERT INTO perusahaan VALUES(1,'Perusahaan','P'),(2,'Lain','L')")
++        self.s.execute("INSERT INTO cabang VALUES(1,1,'Cabang','C'),(2,2,'Lain','L')")
++        self.s.execute("INSERT INTO sales VALUES(1,3)")
++        self.s.execute("INSERT INTO customer VALUES(1,1,'Toko'),(2,2,'Lain')")
++        self.s.execute("INSERT INTO principal VALUES(1,1)")
++        self.s.execute("INSERT INTO plafon VALUES(1,1,1)")
++        self.s.execute("INSERT INTO sales_order VALUES(1,1,NULL),(2,1,NULL)")
++        self.s.execute("INSERT INTO faktur(id,id_sales_order,no_faktur,total_penjualan) VALUES(1,1,'F1',1000),(2,2,'F2',1000)")
++        self.s.execute("INSERT INTO lph(id,id_sales,kode_lph,status_dokumen,payment_workflow_version) VALUES(1,1,'LPH1','MENUNGGU_PENERIMAAN',2)")
++        self.s.execute("INSERT INTO lph_detail(id,id_lph,id_faktur) VALUES(1,1,1),(2,1,2)")
++        for index,purpose in enumerate(PURPOSES,1):
++            self.s.execute('INSERT INTO coa VALUES(:id,1,\'1\',:code,:name,TRUE)',id=index,code=str(1000+index),name=purpose)
++        self.s.configuration(ADMIN,{'id_perusahaan':1,'accounts':{p:i for i,p in enumerate(PURPOSES,1)},'enabled':True})
++        self.session.commit()
++
++    def tearDown(self): self.session.rollback();self.session.close()
++
++    def returned(self,method='CASH',amount='1000',invoice=1,transfer=0):
++        self.s.accept_lph(SALES,1,{'checked_detail_ids':[1,2]})
++        self.s.mobile_claim(SALES,1,dict(id_faktur=invoice,method=method,amount=amount,client_key=str(uuid4()),giro_number='BG-1',bank='Bank',due_date='2026-10-31'))
++        return self.s.handover(SALES,1,{'cash_transfer':transfer})
++
++    def fund(self,kind='CASH',amount='1000',**extra):
++        data=dict(kind=kind,reference=str(uuid4()),bank='Bank' if kind=='GIRO' else '',received_date='2026-10-04',due_date='2026-10-31',amount=amount,id_perusahaan=1,id_cabang=1,id_sales=1,client_key=str(uuid4()))
++        data.update(extra);row=self.s.create_fund(ADMIN,data)
++        if kind=='CASH': self.s.approve_cash(SPV,row['id'])
++        return row
++
++    def draft(self,source,**extra):
++        data=dict(id_lph=1,number='KW-1',receipt_date='2026-10-04',client_key=str(uuid4()),invoices=[dict(id_faktur=1,sources=[source['id']])])
++        data.update(extra);return self.s.save_receipt(ADMIN,data)
++
++    def test_mobile_claim_is_not_a_receivable_payment(self):
++        self.returned()
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM setoran_customer')['n'],0)
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][0]['remaining'],1000)
++        auto=self.s.one("SELECT * FROM finance_fund_source WHERE id_lph=1")
++        self.assertEqual(auto['approval'],'PENDING')
++        self.assertEqual(auto['amount'],1000)
++
++    def test_accept_requires_every_checked_invoice(self):
++        with self.assertRaises(nonServerErrorException): self.s.accept_lph(SALES,1,{'checked_detail_ids':[1]})
++        self.assertEqual(self.s.one('SELECT status_dokumen FROM lph WHERE id=1')['status_dokumen'],'MENUNGGU_PENERIMAAN')
++
++    def test_cash_transfer_splits_handover(self):
++        row=self.returned(transfer='250')
++        self.assertEqual(row['cash_to_cashier'],750)
++        self.assertEqual(self.s.one('SELECT amount FROM finance_fund_source WHERE id_lph=1')['amount'],750)
++        self.assertEqual(self.s.claim_limits(self.s.lph(1,ADMIN))[1]['TRANSFER'],250)
++
++    def test_handover_retry_does_not_duplicate_cash(self):
++        self.returned();self.s.handover(SALES,1,{'cash_transfer':0})
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM finance_fund_source')['n'],1)
++        with self.assertRaises(nonServerErrorException): self.s.handover(SALES,1,{'cash_transfer':1})
++
++    def test_finalize_settles_exact_invoice_once_and_posts_balanced_journal(self):
++        self.returned();fund=self.fund();receipt=self.draft(fund)
++        self.s.finalize(SPV,receipt['id']);self.s.finalize(SPV,receipt['id'])
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][0]['remaining'],0)
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][1]['remaining'],1000)
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM setoran')['n'],1)
++        self.assertEqual(self.s.one('SELECT SUM(debit)-SUM(kredit) d FROM jurnal_detail')['d'],0)
++        self.assertEqual(self.s.one('SELECT status_dokumen FROM lph WHERE id=1')['status_dokumen'],'DITUTUP')
++
++    def test_self_approval_denied(self):
++        self.returned();receipt=self.draft(self.fund())
++        with self.assertRaises(nonServerErrorException) as exc: self.s.finalize(ADMIN,receipt['id'])
++        self.assertEqual(exc.exception.status_code,403)
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM setoran')['n'],0)
++
++    def test_returned_lph_and_cash_approval_required(self):
++        source=self.s.create_fund(ADMIN,dict(kind='CASH',reference='CASH',received_date='2026-10-04',amount='1000',id_perusahaan=1,id_cabang=1,client_key=str(uuid4())))
++        with self.assertRaises(nonServerErrorException): self.draft(source)
++        self.returned()
++        with self.assertRaises(nonServerErrorException): self.draft(source)
++
++    def test_source_hold_blocks_a_second_draft(self):
++        self.returned();fund=self.fund();self.draft(fund)
++        with self.assertRaises(nonServerErrorException): self.draft(fund,number='KW-2')
++        with self.assertRaises(nonServerErrorException): self.s.revise_fund(ADMIN,fund['id'])
++
++    def test_cancellation_restores_receivable_and_reverses_original_accounts(self):
++        self.returned();fund=self.fund();receipt=self.draft(fund);self.s.finalize(SPV,receipt['id'])
++        c=self.s.request_cancel(ADMIN,receipt['id'],{'reason':'Salah sumber dana'})
++        self.s.decide_cancel(SPV,c['id'],{'decision':'APPROVED'})
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][0]['remaining'],1000)
++        self.assertEqual(self.s.fund_remaining(fund['id']),1000)
++        journal=self.s.one("SELECT id_jurnal FROM finance_workflow_journal WHERE reference LIKE 'RECEIPT:%'")['id_jurnal']
++        reverse=self.s.one("SELECT id_jurnal FROM finance_workflow_journal WHERE reference LIKE 'CANCEL:%'")['id_jurnal']
++        a=self.s.all('SELECT kode_jurnal,debit,kredit FROM jurnal_detail WHERE id_jurnal=:id ORDER BY id_jurnal_detail',id=journal)
++        b=self.s.all('SELECT kode_jurnal,debit,kredit FROM jurnal_detail WHERE id_jurnal=:id ORDER BY id_jurnal_detail',id=reverse)
++        self.assertEqual([(v['kode_jurnal'],v['debit'],v['kredit']) for v in a],[(v['kode_jurnal'],v['kredit'],v['debit']) for v in b])
++
++    def test_cancel_rejection_keeps_payment_final(self):
++        self.returned();receipt=self.draft(self.fund());self.s.finalize(SPV,receipt['id'])
++        c=self.s.request_cancel(ADMIN,receipt['id'],{'reason':'Salah'})
++        self.s.decide_cancel(SPV,c['id'],{'decision':'REJECTED'})
++        self.assertEqual(self.s.receipt(ADMIN,receipt['id'])['status'],'FINALIZED')
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][0]['remaining'],0)
++
++    def test_giro_bounce_creates_one_auto_draft(self):
++        self.returned('GIRO');fund=self.fund('GIRO');receipt=self.draft(fund);self.s.finalize(SPV,receipt['id'])
++        self.s.bounce_giro(ADMIN,fund['id'],{'reason':'Saldo tidak cukup'})
++        c=self.s.cancellations(ADMIN)[0];self.assertEqual(c['status'],'DRAFT');self.assertEqual(c['auto_giro'],fund['id'])
++        self.s.request_cancel(ADMIN,receipt['id'],{'reason':c['reason']})
++        self.s.decide_cancel(SPV,c['id'],{'decision':'APPROVED'})
++        self.assertEqual(self.s.lp_detail(1,ADMIN)['invoices'][0]['remaining'],1000)
++        with self.assertRaises(nonServerErrorException): self.draft(fund,number='KW-2')
++
++    def test_giro_clear_is_not_a_second_payment_source(self):
++        self.returned('GIRO');fund=self.fund('GIRO')
++        self.s.clear_giro(ADMIN,fund['id'],{'clearing_reference':'CLR-01'})
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM finance_fund_source')['n'],1)
++        self.assertEqual(self.s.one("SELECT COUNT(*) n FROM finance_workflow_journal WHERE reference LIKE 'CLEAR:%'")['n'],1)
++        with self.assertRaises(nonServerErrorException): self.s.clear_giro(ADMIN,fund['id'],{'clearing_reference':'CLR-01'})
++
++    def test_missing_account_rolls_back_receivable_settlement(self):
++        self.returned();receipt=self.draft(self.fund());self.session.commit()
++        self.s.execute("DELETE FROM finance_workflow_account WHERE purpose='RECEIVABLE'")
++        self.session.commit()
++        with self.assertRaises(nonServerErrorException): self.s.finalize(SPV,receipt['id'])
++        self.session.rollback()
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM setoran')['n'],0)
++        self.assertEqual(self.s.receipt(ADMIN,receipt['id'])['status'],'DRAFT')
++
++    def test_legacy_lph_never_enters_new_engine(self):
++        self.s.execute('UPDATE lph SET payment_workflow_version=1 WHERE id=1')
++        with self.assertRaises(nonServerErrorException): self.s.lp_detail(1,ADMIN)
++
++    def test_customer_and_company_scope_are_enforced(self):
++        self.returned();fund=self.fund()
++        with self.assertRaises(nonServerErrorException): self.s.lock_fund(dict(ADMIN,is_superuser=False,companies=[2],branches=[2]),fund['id'])
++        self.s.execute('UPDATE finance_fund_source SET id_customer=2 WHERE id=:id',id=fund['id'])
++        with self.assertRaises(nonServerErrorException): self.draft(fund)
++
++    def test_cash_manual_reference_is_unique(self):
++        self.fund(reference='SAME')
++        from sqlalchemy.exc import IntegrityError
++        with self.assertRaises(IntegrityError): self.fund(reference='SAME')
++
++    def test_setoran_edit_reverses_posted_fund_journal(self):
++        fund=self.fund('TRANSFER')
++        self.s.revise_fund(ADMIN,fund['id'],dict(kind='TRANSFER',reference=fund['reference'],bank='',received_date='2026-10-04',amount='500',id_perusahaan=1,id_cabang=1,id_sales=1,client_key=str(uuid4())))
++        self.assertEqual(self.s.one('SELECT SUM(debit)-SUM(kredit) d FROM jurnal_detail')['d'],0)
++        self.assertEqual(self.s.lock_fund(ADMIN,fund['id'])['amount'],500)
++
++    def test_claim_key_replay_validates_payload(self):
++        self.s.accept_lph(SALES,1,{'checked_detail_ids':[1,2]});payload=dict(id_faktur=1,method='CASH',amount='100',client_key=str(uuid4()))
++        first=self.s.mobile_claim(SALES,1,payload);second=self.s.mobile_claim(SALES,1,payload)
++        self.assertEqual(first['id'],second['id'])
++        with self.assertRaises(nonServerErrorException): self.s.mobile_claim(SALES,1,dict(payload,amount='101'))
++
++
++    def test_receipt_retry_after_finalization_is_idempotent(self):
++        self.returned();fund=self.fund()
++        data=dict(id_lph=1,number='KW-retry',receipt_date='2026-10-04',client_key=str(uuid4()),invoices=[dict(id_faktur=1,sources=[fund['id']])])
++        receipt=self.s.save_receipt(ADMIN,data);self.s.finalize(SPV,receipt['id'])
++        self.assertEqual(self.s.save_receipt(ADMIN,data)['id'],receipt['id'])
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM finance_receipt')['n'],1)
++
++    def test_receipt_key_cannot_change_allocations(self):
++        self.returned();fund=self.fund()
++        data=dict(id_lph=1,number='KW-key',receipt_date='2026-10-04',client_key=str(uuid4()),invoices=[dict(id_faktur=1,sources=[fund['id']])])
++        self.s.save_receipt(ADMIN,data)
++        data['invoices'][0]['fee']=1
++        with self.assertRaises(nonServerErrorException): self.s.save_receipt(ADMIN,data)
++
++    def test_fee_limit_is_enforced_before_holding_funds(self):
++        self.returned();fund=self.fund()
++        with self.assertRaises(nonServerErrorException):
++            self.draft(fund,invoices=[dict(id_faktur=1,sources=[fund['id']],fee=3000,fee_name='Biaya',excess_treatment='FEE')])
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM finance_receipt')['n'],0)
++
++    def test_giro_clearing_reference_is_recorded(self):
++        fund=self.fund('GIRO')
++        self.s.clear_giro(SPV,fund['id'],{'clearing_reference':'CLR-1'})
++        row=self.s.one('SELECT * FROM finance_giro_clearing WHERE id_source=:id',id=fund['id'])
++        self.assertEqual(row['reference'],'CLR-1')
++        self.assertEqual(row['amount'],1000)
++
++    def test_bounced_unallocated_giro_reverses_asset(self):
++        fund=self.fund('GIRO')
++        self.s.bounce_giro(SPV,fund['id'],{'reason':'Ditolak bank'})
++        self.assertEqual(self.s.one('SELECT SUM(debit)-SUM(kredit) balance FROM jurnal_detail WHERE nama_akun=\'GIRO\'')['balance'],0)
++        self.assertEqual(self.s.one('SELECT COUNT(*) n FROM finance_workflow_journal')['n'],2)
++
++    def test_batch_invoice_cannot_hide_another_company(self):
++        self.s.execute('INSERT INTO principal VALUES(2,2)')
++        self.s.execute('INSERT INTO plafon VALUES(2,1,2)')
++        self.s.execute('INSERT INTO sales_order VALUES(3,2,NULL)')
++        self.s.execute('INSERT INTO faktur_detail VALUES(1,3)')
++        with self.assertRaises(nonServerErrorException): self.s.lp_detail(1,ADMIN)
++
++if __name__=='__main__': unittest.main()
+diff --git a/docs/payment-receipt-workflow.md b/docs/payment-receipt-workflow.md
+new file mode 100644
+index 0000000..ae6aaaf
+--- /dev/null
++++ b/docs/payment-receipt-workflow.md
+@@ -0,0 +1,47 @@
++# Workflow pembayaran, kuitansi, dan giro
++
++Implementasi berdasarkan demo HTML pembayaran/LPH/setoran/giro/jurnal. Data disimpan di PostgreSQL melalui `/api/finance/workflow` dan `/api/mobile/workflow`, bukan localStorage. Alur Rekap lama tetap tersedia. LPH lama memiliki `payment_workflow_version=1`; jangan mengubah versi dokumen yang sudah diproses.
++
++## Deployment
++
++1. Pull `main` repo API dan frontend. Siapkan backup database.
++2. Pastikan migrasi Finance/LPH sebelumnya telah diterapkan, terutama `20260909_canvas_voucher_usage.sql`, `20260917_lph_mobile_handover.sql`, `20261001_lph_payment_handover.sql`, dan perubahan rekonsiliasi/setoran yang digunakan aplikasi saat ini.
++3. Jalankan `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tools/migrations/20261004_payment_receipt_workflow.sql` pada database tujuan **sebelum** restart API. Migrasi menambahkan kolom pada model LPH, tabel workflow, dan capabilities; tidak memindahkan pembayaran lama.
++4. Restart API; build dan deploy frontend mengikuti konfigurasi yang sudah digunakan.
++5. Berikan capabilities melalui RBAC kepada pengguna yang sesuai. Migrasi hanya mendaftarkan fitur, tidak otomatis memberikan kewenangan approval.
++6. Buka **Konfigurasi Pembayaran**, pilih perusahaan, petakan delapan akun COA aktif: CASH (kas), BANK, GIRO, CLEARING (penampung penerimaan), RECEIVABLE (piutang), ADVANCE (uang muka customer), RETURN (retur), FEE (biaya/selisih). Atur batas Biaya Lain dan aktifkan workflow perusahaan. Pilih akun yang disetujui Accounting; tidak ada nomor akun yang diasumsikan aplikasi.
++7. Buat LPH baru di menu LPH dan pilih **Kuitansi & Giro (baru)**. Data versi 2 memakai menu tambahan dengan label Kuitansi; data versi 1 tetap menggunakan menu sebelumnya.
++
++## Hak akses
++
++| Petugas | Capabilities |
++|---|---|
++| Admin kuitansi | `finance.receipts.view`, `finance.receipts.create`, `finance.receipts.cancel`, `finance.funds.view`, `finance.funds.create` |
++| Supervisor | `finance.receipts.view`, `finance.receipts.approve`, `finance.receipts.cancel-approve`, `finance.funds.view` |
++| Kasir | `finance.funds.view`, `finance.funds.approve` |
++| Accounting | `finance.funds.view`, `finance.giro.clear`, `finance.giro.bounce`, `finance.receipts.view` |
++| Konfigurasi | `finance.workflow.configure` |
++| Sales | Identitas sales terikat token; menu memakai `distribution.orders.view` |
++
++Scope perusahaan/cabang dan master yang sudah berlaku tetap diperlukan. Finalisasi dan keputusan pembatalan tidak boleh dilakukan pembuat kuitansi; keputusan pembatalan juga tidak boleh dilakukan pengajunya. Gunakan pengguna Supervisor berbeda ketika menguji approval.
++
++## Operasional
++
++- **LPH & Pembayaran Sales**: periksa seluruh faktur, terima LPH, catat klaim CASH/TRANSFER/GIRO. Klaim belum mengurangi piutang. Saat return, isi bagian cash yang ditransfer; sisa cash menjadi setoran Pending untuk Kasir.
++- **Setoran Tunai — Kuitansi**: Kasir menyetujui cash. **Setoran Non Tunai — Kuitansi**: input transfer atau impor mutasi masuk yang masih tersedia. Mutasi masuk mengikuti kontrak API yang sudah ada (`CR=1`), bukan label debit pada demo.
++- **Setoran Giro**: catat giro, jatuh tempo, rekening dan bank. Giro belum cair boleh dialokasikan. Pencairan harus memiliki referensi CLR atau mutasi masuk sejumlah giro; tidak membuat sumber dana pembayaran kedua. Giro ditolak menyiapkan draft pembatalan kuitansi terkait.
++- **Pembayaran Tagihan — Kuitansi**: pilih LPH yang dikembalikan, faktur dan sumber dana. Preview menampilkan alokasi otomatis yang dibatasi klaim per metode, sisa sumber dana dan piutang. Biaya Lain harus bernama dan sesuai batas perusahaan; kelebihan wajib ditentukan menjadi uang muka atau biaya/selisih. Simpan Draft lalu Supervisor melihat rincian dan mengonfirmasi rekonsiliasi sebelum Finalisasi.
++- Finalisasi memposting jurnal berimbang, memproyeksikan pembayaran ke subledger Setoran existing sekali, dan menutup LPH. Faktur yang belum lunas dapat ditagih melalui LPH baru.
++- **Batal Kuitansi**: pengajuan beralasan, keputusan Supervisor. Approval membalik jurnal asli, memulihkan piutang dan membebaskan sumber dana. Pembatalan ditolak mempertahankan pembayaran. Uang muka turunan yang sudah dipakai/ditahan harus dilepas terlebih dahulu. Kuitansi Cancelled dapat diedit pembuatnya dengan nomor yang sama dan difinalisasi ulang.
++- Retur: hanya Credit Note standalone yang belum dipakai/direfund dapat dicadangkan sebagai sumber. Credit Note yang sudah terhubung faktur tidak ditambahkan lagi karena pengurangnya sudah ada pada piutang.
++- **Jurnal Pembayaran** menampilkan jurnal nyata beserta detail debit/kredit dan audit tindakan. Pengubahan setoran hanya diizinkan sebelum pernah dialokasikan; jurnal penerimaan yang sudah diposting dibalik saat perubahan.
++
++## Validasi
++
++Tes integrasi memakai PostgreSQL terpisah bernama `budimas_workflow_tests`, hanya localhost port 55432. Tes menghapus schema database tersebut; jangan memakai database bisnis. Jalankan dari root API:
++
++```sh
++WORKFLOW_TEST_DATABASE_URL=postgresql+psycopg2://USER@127.0.0.1:55432/budimas_workflow_tests python -m unittest discover -s apps/test -p test_payment_receipt_workflow.py
++```
++
++Migrasi dan pengujian cloud tidak menerapkan perubahan pada database produksi. Lakukan uji penerimaan dengan role terpisah sebelum mengaktifkan perusahaan operasional.
+diff --git a/tools/migrations/20261004_payment_receipt_workflow.sql b/tools/migrations/20261004_payment_receipt_workflow.sql
+new file mode 100644
+index 0000000..874c000
+--- /dev/null
++++ b/tools/migrations/20261004_payment_receipt_workflow.sql
+@@ -0,0 +1,104 @@
++-- Additive receipt/Giro rollout. Existing LPHs retain workflow version 1.
++BEGIN;
++ALTER TABLE lph ADD COLUMN IF NOT EXISTS payment_workflow_version INTEGER NOT NULL DEFAULT 1;
++CREATE TABLE IF NOT EXISTS finance_workflow_setting (
++ id_perusahaan INTEGER PRIMARY KEY REFERENCES perusahaan(id), enabled BOOLEAN NOT NULL DEFAULT FALSE, max_fee NUMERIC(18,2) NOT NULL DEFAULT 2900 CHECK(max_fee>=0)
++);
++CREATE TABLE IF NOT EXISTS finance_workflow_account (
++ id_perusahaan INTEGER REFERENCES perusahaan(id), purpose TEXT NOT NULL,
++ id_coa INTEGER NOT NULL REFERENCES coa(id_coa),
++ PRIMARY KEY(id_perusahaan,purpose),
++ CHECK(purpose IN ('CASH','BANK','GIRO','CLEARING','RECEIVABLE','ADVANCE','RETURN','FEE'))
++);
++CREATE TABLE IF NOT EXISTS finance_lph_claim (
++ id BIGSERIAL PRIMARY KEY, id_lph INTEGER NOT NULL REFERENCES lph(id),
++ id_faktur INTEGER NOT NULL REFERENCES faktur(id), method TEXT NOT NULL CHECK(method IN ('CASH','TRANSFER','GIRO')),
++ amount NUMERIC(18,2) NOT NULL CHECK(amount>0), giro_number TEXT, bank TEXT, due_date DATE,
++ client_key UUID NOT NULL, created_by INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++ UNIQUE(created_by,client_key), CHECK(method<>'GIRO' OR (length(btrim(giro_number))>0 AND length(btrim(bank))>0 AND due_date IS NOT NULL))
++);
++CREATE TABLE IF NOT EXISTS finance_lph_handover (
++ id_lph INTEGER PRIMARY KEY REFERENCES lph(id), cash_transfer NUMERIC(18,2) NOT NULL CHECK(cash_transfer>=0),
++ cash_to_cashier NUMERIC(18,2) NOT NULL CHECK(cash_to_cashier>=0), submitted_by INTEGER NOT NULL REFERENCES users(id),
++ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++);
++CREATE TABLE IF NOT EXISTS finance_fund_source (
++ id BIGSERIAL PRIMARY KEY, id_perusahaan INTEGER NOT NULL REFERENCES perusahaan(id), id_cabang INTEGER NOT NULL REFERENCES cabang(id),
++ id_sales INTEGER REFERENCES sales(id), id_customer INTEGER REFERENCES customer(id),
++ kind TEXT NOT NULL CHECK(kind IN ('CASH','TRANSFER','GIRO','ADVANCE','RETURN')),
++ reference TEXT NOT NULL, bank TEXT NOT NULL DEFAULT '', account_name TEXT, received_date DATE NOT NULL,
++ due_date DATE, amount NUMERIC(18,2) NOT NULL CHECK(amount>0),
++ approval TEXT NOT NULL CHECK(approval IN ('PENDING','APPROVED')), giro_status TEXT,
++ id_lph INTEGER REFERENCES lph(id), id_mutasi INTEGER REFERENCES mutasi_bank(id_mutasi),
++ id_credit_note INTEGER REFERENCES credit_note(id_cn), origin_receipt BIGINT,
++ client_key UUID NOT NULL, created_by INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++ UNIQUE(created_by,client_key), UNIQUE(id_perusahaan,kind,reference,bank), UNIQUE(id_mutasi), UNIQUE(id_credit_note),
++ CHECK(kind<>'GIRO' OR (giro_status IN ('NOT_CLEARED','CLEARED','BOUNCED') AND due_date IS NOT NULL AND length(bank)>0))
++);
++CREATE TABLE IF NOT EXISTS finance_receipt (
++ id BIGSERIAL PRIMARY KEY, id_lph INTEGER NOT NULL REFERENCES lph(id), id_perusahaan INTEGER NOT NULL REFERENCES perusahaan(id),
++ id_cabang INTEGER NOT NULL REFERENCES cabang(id), number TEXT NOT NULL, receipt_date DATE NOT NULL,
++ status TEXT NOT NULL CHECK(status IN ('DRAFT','FINALIZED','CANCEL_REQUESTED','CANCELLED')),
++ created_by INTEGER NOT NULL REFERENCES users(id), finalized_by INTEGER REFERENCES users(id), finalized_at TIMESTAMPTZ,
++ client_key UUID NOT NULL, request_hash TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
++ UNIQUE(id_perusahaan,number), UNIQUE(created_by,client_key)
++);
++ALTER TABLE finance_fund_source DROP CONSTRAINT IF EXISTS finance_fund_source_origin_receipt_fkey;
++ALTER TABLE finance_fund_source ADD CONSTRAINT finance_fund_source_origin_receipt_fkey FOREIGN KEY(origin_receipt) REFERENCES finance_receipt(id);
++CREATE TABLE IF NOT EXISTS finance_receipt_invoice (
++ id BIGSERIAL PRIMARY KEY, id_receipt BIGINT NOT NULL REFERENCES finance_receipt(id), id_faktur INTEGER NOT NULL REFERENCES faktur(id),
++ id_customer INTEGER NOT NULL REFERENCES customer(id), paid NUMERIC(18,2) NOT NULL CHECK(paid>0),
++ excess NUMERIC(18,2) NOT NULL DEFAULT 0 CHECK(excess>=0), excess_treatment TEXT CHECK(excess_treatment IN ('ADVANCE','FEE')),
++ UNIQUE(id_receipt,id_faktur)
++);
++CREATE TABLE IF NOT EXISTS finance_receipt_allocation (
++ id BIGSERIAL PRIMARY KEY, id_receipt BIGINT NOT NULL REFERENCES finance_receipt(id), id_faktur INTEGER NOT NULL REFERENCES faktur(id),
++ id_source BIGINT REFERENCES finance_fund_source(id), fee_name TEXT,
++ amount NUMERIC(18,2) NOT NULL CHECK(amount>0), CHECK((id_source IS NOT NULL) <> (fee_name IS NOT NULL))
++);
++CREATE TABLE IF NOT EXISTS finance_receipt_legacy_link (
++ id_receipt BIGINT NOT NULL REFERENCES finance_receipt(id), id_setoran INTEGER NOT NULL REFERENCES setoran(id),
++ id_setoran_customer INTEGER NOT NULL REFERENCES setoran_customer(id), PRIMARY KEY(id_receipt,id_setoran)
++);
++CREATE TABLE IF NOT EXISTS finance_receipt_cancellation (
++ id BIGSERIAL PRIMARY KEY, id_receipt BIGINT NOT NULL REFERENCES finance_receipt(id),
++ status TEXT NOT NULL CHECK(status IN ('DRAFT','PENDING','APPROVED','REJECTED')),
++ reason TEXT NOT NULL, auto_giro BIGINT REFERENCES finance_fund_source(id),
++ requested_by INTEGER REFERENCES users(id), decided_by INTEGER REFERENCES users(id), decided_at TIMESTAMPTZ,
++ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++);
++CREATE UNIQUE INDEX IF NOT EXISTS finance_cancel_active ON finance_receipt_cancellation(id_receipt) WHERE status IN ('DRAFT','PENDING');
++CREATE TABLE IF NOT EXISTS finance_giro_clearing (
++ id BIGSERIAL PRIMARY KEY, id_source BIGINT NOT NULL UNIQUE REFERENCES finance_fund_source(id),
++ id_perusahaan INTEGER NOT NULL REFERENCES perusahaan(id), reference TEXT NOT NULL,
++ id_mutasi INTEGER UNIQUE REFERENCES mutasi_bank(id_mutasi), amount NUMERIC(18,2) NOT NULL,
++ created_by INTEGER NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++ UNIQUE(id_perusahaan,reference)
++);
++CREATE TABLE IF NOT EXISTS finance_workflow_journal (
++ id BIGSERIAL PRIMARY KEY, reference TEXT NOT NULL UNIQUE, id_jurnal INTEGER NOT NULL REFERENCES jurnal(id_jurnal),
++ id_perusahaan INTEGER NOT NULL REFERENCES perusahaan(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++);
++CREATE TABLE IF NOT EXISTS finance_workflow_audit (
++ id BIGSERIAL PRIMARY KEY, id_perusahaan INTEGER NOT NULL REFERENCES perusahaan(id), entity TEXT NOT NULL, entity_id BIGINT NOT NULL,
++ action TEXT NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id), note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++);
++CREATE INDEX IF NOT EXISTS finance_claim_lph ON finance_lph_claim(id_lph,id_faktur);
++CREATE INDEX IF NOT EXISTS finance_allocation_source ON finance_receipt_allocation(id_source,id_receipt);
++CREATE INDEX IF NOT EXISTS finance_receipt_lph ON finance_receipt(id_lph,status);
++-- Register explicit capabilities only; never grant business approval automatically.
++LOCK TABLE fitur IN SHARE ROW EXCLUSIVE MODE;
++WITH missing AS (
++ SELECT code, row_number() OVER(ORDER BY code) rn FROM (VALUES
++ ('finance.receipts.view'),('finance.receipts.create'),('finance.receipts.approve'),
++ ('finance.receipts.cancel'),('finance.receipts.cancel-approve'),
++ ('finance.funds.view'),('finance.funds.create'),('finance.funds.approve'),
++ ('finance.giro.clear'),('finance.giro.bounce'),('finance.workflow.configure')
++ ) p(code) WHERE NOT EXISTS(SELECT 1 FROM fitur f WHERE f.nama=p.code)
++), last_id AS(SELECT COALESCE(MAX(id),0) n FROM fitur)
++INSERT INTO fitur(id,nama) SELECT n+rn,code FROM missing CROSS JOIN last_id;
++DO $$ DECLARE seq TEXT; BEGIN
++ SELECT pg_get_serial_sequence('fitur','id') INTO seq;
++ IF seq IS NOT NULL THEN PERFORM setval(seq::regclass,GREATEST((SELECT COALESCE(MAX(id),1) FROM fitur),1),true); END IF;
++END $$;
++COMMIT;
+-- 
+2.52.0
+

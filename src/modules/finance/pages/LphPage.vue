@@ -50,6 +50,7 @@ const candidateRows = ref([]);
 const selectedCandidateIds = ref([]);
 let candidateRequestController = null;
 const createForm = reactive({
+  payment_workflow_version: '1',
   id_cabang: '',
   id_perusahaan: '',
   id_sales: '',
@@ -419,6 +420,7 @@ function openCreateModal() {
     tanggal_lph: today,
     tanggal_jatuh_tempo_sampai: '',
     is_cp: '2',
+    payment_workflow_version: '1',
     include_other_sales: false
   });
   createModalOpen.value = true;
@@ -524,6 +526,7 @@ async function saveCreateLph() {
       id_sales: createForm.id_sales,
       tanggal_lph: createForm.tanggal_lph,
       is_cp: Number(createForm.is_cp || 2),
+      payment_workflow_version: Number(createForm.payment_workflow_version || 1),
       include_other_sales: createForm.include_other_sales ? 1 : 0,
       id_user: auth.user?.id || auth.user?.id_user || auth.user?.user_id,
       kode_perusahaan: selectedCandidateRows.value[0]?.kode_perusahaan || selectedCreateCompany.value?.kode || '',
@@ -1103,6 +1106,7 @@ watch(
           <AppSearchSelect v-model="createForm.id_perusahaan" class="min-w-0 xl:col-span-2" label="Perusahaan" placeholder="Pilih perusahaan" :options="createCompanyOptions" :disabled="shouldLockBusinessScope && !!fallbackCompanyId" empty-text="Perusahaan belum tersedia." />
           <AppSearchSelect v-model="createForm.id_cabang" class="min-w-0 xl:col-span-2" label="Cabang" placeholder="Pilih cabang" :options="createBranchOptions" :disabled="!createForm.id_perusahaan || (shouldLockBusinessScope && !!fallbackBranchId)" empty-text="Pilih perusahaan terlebih dahulu." />
           <AppSearchSelect v-model="createForm.id_sales" class="min-w-0 xl:col-span-2" label="Sales" placeholder="Pilih sales" :options="salesOptions" :disabled="canUseLoginScope && !!fallbackSalesId" empty-text="Sales belum tersedia." />
+          <label v-if="auth.hasPermission('finance.receipts.create')" class="min-w-0 xl:col-span-2 field-label">Alur pembayaran<select v-model="createForm.payment_workflow_version" class="field-control mt-1"><option value="1">Rekap lama</option><option value="2">Kuitansi &amp; Giro (baru)</option></select></label>
           <AppFormField v-model="createForm.tanggal_lph" class="min-w-0 xl:col-span-2" label="Tanggal LPH" type="date" />
           <AppFormField v-model="createForm.tanggal_jatuh_tempo_sampai" class="min-w-0 xl:col-span-2" label="Jatuh Tempo s.d." type="date" />
           <AppSearchSelect

@@ -1,7 +1,5 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { canDecideEmployeeAdvance, validateEmployeeAdvance } from '../employeeAdvance';
 import { getBranches, getCompanies } from '@/api/master';
 import { getEmployeeAdvances, getEmployeeAdvance, getEmployeeAdvanceEmployees, createEmployeeAdvance, decideEmployeeAdvance } from '@/api/finance';
 import { useAuthStore } from '@/stores/auth';
@@ -15,8 +13,6 @@ import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
 
 const auth = useAuthStore();
-const route = useRoute(), router = useRouter();
-const approvalQueue = computed(() => Boolean(route.meta.approvalQueue));
 const canCreate = computed(() => auth.hasPermission('finance.employee-advances.create'));
 const canApprove = computed(() => auth.hasPermission('finance.employee-advances.approve'));
 const companyRows = ref([]), branchRows = ref([]), employees = ref([]), rows = ref([]);
@@ -36,7 +32,7 @@ const states = { PENDING: 'Menunggu approval', APPROVED: 'Disetujui', REJECTED: 
 const statusOptions = Object.entries(states).map(([value, label]) => ({ value, label }));
 const money = value => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 2 }).format(Number(value || 0));
 const date = value => value ? new Date(value).toLocaleDateString('id-ID') : '-';
-const canDecide = computed(() => canDecideEmployeeAdvance(detail.value, auth.user, canApprove.value));
+const canDecide = computed(() => canApprove.value && detail.value?.status === 'PENDING' && ![detail.value?.created_by, detail.value?.id_karyawan].map(String).includes(String(auth.user?.id_user || auth.user?.id)));
 const columns = [
   { key: 'nomor', label: 'No. Kasbon' }, { key: 'tanggal_pengajuan', label: 'Tanggal', render: row => date(row.tanggal_pengajuan) },
   { key: 'nama_karyawan', label: 'Karyawan' }, { key: 'nama_perusahaan', label: 'Perusahaan' }, { key: 'nama_cabang', label: 'Cabang' },
@@ -47,27 +43,25 @@ const columns = [
 async function loadRows(page = 1) {
   const sequence = ++listSequence;
   loading.list = true; pageError.value = ''; filters.page = page;
-  if (filters.from && filters.to && filters.from > filters.to) { rows.value = []; total.value = 0; loading.list = false; pageError.value = 'Rentang tanggal tidak valid.'; return; }
   try {
-    const response = await getEmployeeAdvances({ id_perusahaan: filters.company || undefined, id_cabang: filters.branch || undefined, status: approvalQueue.value ? 'PENDING' : filters.status || undefined, periode_awal: filters.from || undefined, periode_akhir: filters.to || undefined, page, limit });
+    const response = await getEmployeeAdvances({ id_perusahaan: filters.company || undefined, id_cabang: filters.branch || undefined, status: filters.status || undefined, periode_awal: filters.from || undefined, periode_akhir: filters.to || undefined, page, limit });
     if (sequence !== listSequence) return;
-    rows.value = normalizeList(unwrapResponse(response)); total.value = Number(response.data?.total ?? response.data?.data?.total ?? response.data?.pagination?.total ?? rows.value.length);
+    rows.value = normalizeList(response.data); total.value = Number(response.data?.total || 0);
   } catch (error) { if (sequence === listSequence) { rows.value = []; total.value = 0; pageError.value = normalizeError(error); } }
   finally { if (sequence === listSequence) loading.list = false; }
 }
 
 function openCreate() {
-  if (!canCreate.value) return;
   formError.value = ''; feedback.value = '';
   Object.assign(form, { id_perusahaan: filters.company || getLoginCompanyId(auth.user), id_cabang: filters.branch || getLoginBranchId(auth.user), id_karyawan: '', tanggal_pengajuan: toLocalDateInputValue(), tanggal_jatuh_tempo: '', nominal: '', keperluan: '', client_request_id: crypto.randomUUID() });
   createOpen.value = true;
+  loadEmployees();
 }
-
 
 async function loadEmployees() {
   const sequence = ++employeeSequence;
   employees.value = []; form.id_karyawan = ''; loading.employees = false;
-  if (!createOpen.value || !form.id_perusahaan || !form.id_cabang) return;
+  if (!form.id_perusahaan || !form.id_cabang) return;
   loading.employees = true;
   try {
     const response = await getEmployeeAdvanceEmployees({ id_perusahaan: form.id_perusahaan, id_cabang: form.id_cabang });
@@ -77,16 +71,14 @@ async function loadEmployees() {
 }
 
 async function submit() {
-  if (!canCreate.value || loading.save || loading.employees) return;
+  if (loading.save) return;
   formError.value = '';
-  formError.value = validateEmployeeAdvance(form, employees.value);
-  if (formError.value) return;
+  if (!form.id_perusahaan || !form.id_cabang || !form.id_karyawan || !form.tanggal_pengajuan || !form.keperluan.trim() || !Number.isFinite(Number(form.nominal)) || Number(form.nominal) <= 0) { formError.value = 'Lengkapi perusahaan, cabang, karyawan, tanggal, nominal positif, dan keperluan.'; return; }
+  if (form.tanggal_jatuh_tempo && form.tanggal_jatuh_tempo < form.tanggal_pengajuan) { formError.value = 'Jatuh tempo tidak boleh sebelum tanggal pengajuan.'; return; }
   loading.save = true;
   try {
     const response = await createEmployeeAdvance({ ...form, nominal: String(form.nominal), keperluan: form.keperluan.trim() });
-    createOpen.value = false;
-    if (approvalQueue.value) await router.push('/finance/employee-advances');
-    feedback.value = response.data?.message || 'Pengajuan sudah tersimpan.';
+    createOpen.value = false; feedback.value = response.data?.message || 'Pengajuan sudah tersimpan.';
     filters.company = String(form.id_perusahaan); filters.branch = String(form.id_cabang);
     filters.status = ''; filters.from = form.tanggal_pengajuan; filters.to = form.tanggal_pengajuan;
     await loadRows();
@@ -116,16 +108,10 @@ async function decide(decision) {
   finally { loading.decision = false; }
 }
 
-watch(approvalQueue, () => {
-  filters.status = ''; filters.from = ''; filters.to = '';
-  detailOpen.value = false; detailSequence++;
-  loadRows();
-});
 watch(() => form.id_perusahaan, () => { if (!formBranches.value.some(row => row.value === String(form.id_cabang))) form.id_cabang = ''; });
-watch(() => [createOpen.value, form.id_perusahaan, form.id_cabang], loadEmployees);
+watch(() => [form.id_perusahaan, form.id_cabang], loadEmployees);
 watch(() => filters.company, () => { if (!filterBranches.value.some(row => row.value === String(filters.branch))) filters.branch = ''; });
 onMounted(async () => {
-  if (approvalQueue.value) { filters.from = ''; filters.to = ''; }
   try {
     const [companyResponse, branchResponse] = await Promise.all([getCompanies(), getBranches()]);
     companyRows.value = normalizeList(unwrapResponse(companyResponse)); branchRows.value = normalizeList(unwrapResponse(branchResponse));
@@ -140,15 +126,10 @@ onMounted(async () => {
     <PageHeader title="Kasbon Karyawan" description="Pengajuan dan approval kasbon karyawan. Terpisah dari kasbon klaim promo.">
       <button v-if="canCreate" class="rounded-xl bg-brand-600 px-4 py-3 font-bold text-white" @click="openCreate">Ajukan Kasbon</button>
     </PageHeader>
-    <nav class="flex flex-wrap gap-3" aria-label="Kasbon Karyawan">
-      <button class="rounded-xl border px-4 py-2 font-semibold" :class="!approvalQueue ? 'bg-brand-600 text-white' : ''" :aria-current="!approvalQueue ? 'page' : undefined" @click="router.push('/finance/employee-advances')">Daftar Pengajuan</button>
-      <button v-if="canApprove" class="rounded-xl border px-4 py-2 font-semibold" :class="approvalQueue ? 'bg-brand-600 text-white' : ''" :aria-current="approvalQueue ? 'page' : undefined" @click="router.push('/finance/employee-advances/approval')">Menunggu Approval</button>
-    </nav>
-    <p v-if="approvalQueue" class="text-sm text-slate-500">Antrean seluruh pengajuan yang belum diputuskan. Klik pengajuan untuk melihat rincian, menyetujui, atau menolak dengan alasan.</p>
     <section class="panel grid gap-4 p-5 md:grid-cols-3 xl:grid-cols-6">
       <AppSearchSelect v-model="filters.company" label="Perusahaan" :options="companies" placeholder="Semua perusahaan" />
       <AppSearchSelect v-model="filters.branch" label="Cabang" :options="filterBranches" placeholder="Semua cabang" />
-      <AppSearchSelect v-if="!approvalQueue" v-model="filters.status" label="Status" :options="statusOptions" placeholder="Semua status" />
+      <AppSearchSelect v-model="filters.status" label="Status" :options="statusOptions" placeholder="Semua status" />
       <label class="field-label">Dari tanggal<input v-model="filters.from" type="date" class="field-control mt-1" /></label>
       <label class="field-label">Sampai tanggal<input v-model="filters.to" type="date" class="field-control mt-1" /></label>
       <button class="self-end rounded-xl bg-brand-600 px-4 py-3 font-bold text-white disabled:opacity-50" :disabled="loading.list" @click="loadRows()">Tampilkan</button>

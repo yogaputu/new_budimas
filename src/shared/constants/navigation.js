@@ -175,7 +175,6 @@ const rawNavigationSections = [
       { label: 'Finalisasi Setoran', to: '/finance/deposit-finalization', icon: 'FS', permission: 'finance.recap.view' },
       { label: 'Pengeluaran Kasir', to: '/finance/cashier-expenses', icon: 'PK', permission: 'finance.recap.view' },
       { label: 'Kasbon Karyawan', to: '/finance/employee-advances', icon: 'KKY', permission: 'finance.employee-advances.view', menuPermission: 'finance.employee-advances.view', permissionAliases: ['finance.employee-advances.create', 'finance.employee-advances.approve'] },
-      { label: 'Approval Kasbon Karyawan', to: '/finance/employee-advances/approval', icon: 'AKK', permission: 'finance.employee-advances.approve', menuPermission: 'finance.employee-advances.approve' },
       { label: 'Laporan Kasir', to: '/finance/cashier-reports', icon: 'LK', permission: 'finance.recap.view' }
     ]
   },

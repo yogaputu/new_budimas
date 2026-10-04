@@ -288,7 +288,6 @@ const routes = [
       { path: 'distribution/driver-expenses', name: 'distribution-driver-expenses', component: () => import('@/modules/distribution/pages/DriverExpensesPage.vue'), meta: { permission: 'distribution.schedules.view' } },
       { path: 'finance/coa', name: 'finance-coa', component: () => import('@/modules/finance/pages/CoaPage.vue'), meta: { permission: 'finance.recap.view' } },
       { path: 'finance/employee-advances', name: 'finance-employee-advances', component: () => import('@/modules/finance/pages/EmployeeAdvancePage.vue'), meta: { permission: 'finance.employee-advances.view' } },
-      { path: 'finance/employee-advances/approval', name: 'finance-employee-advances-approval', component: () => import('@/modules/finance/pages/EmployeeAdvancePage.vue'), meta: { permission: 'finance.employee-advances.approve', approvalQueue: true } },
       { path: 'finance/opening-balance', name: 'finance-opening-balance', component: () => import('@/modules/finance/pages/OpeningBalancePage.vue'), meta: { permission: 'finance.recap.view' } },
       { path: 'finance/inventaris', name: 'finance-inventaris', component: () => import('@/modules/finance/pages/InventoryAssetsPage.vue'), meta: { permission: 'finance.recap.view', pageTitle: 'Inventaris', pageDescription: 'Kelola aset tetap dan jadwal penyusutan fiskal.' } },
       { path: 'finance/journal-settings', name: 'finance-journal-settings', component: () => import('@/modules/finance/pages/ManualJournalPage.vue'), meta: { permission: 'finance.recap.view' } },

@@ -1,0 +1,350 @@
+From b1e4f3dfba4ec9e3475fd418050dab3b1a1703c7 Mon Sep 17 00:00:00 2001
+From: yoga putu pradana <yogaputupradana@gmail.com>
+Date: Sun, 4 Oct 2026 08:28:53 +0000
+Subject: [PATCH] Add Mobile Sales LPH receipt claims and cash handover
+ workflow
+
+---
+ docs/receipt-workflow.md           |  30 ++++++++
+ src/router/index.js                |   1 +
+ src/utils/receiptWorkflow.js       |  35 ++++++++++
+ src/views/Dashboard.vue            |   4 ++
+ src/views/LphPage.vue              |   9 ++-
+ src/views/Payment.vue              |   1 +
+ src/views/ReceiptLphPage.vue       | 106 +++++++++++++++++++++++++++++
+ tests/browser/receipt-workflow.mjs |  46 +++++++++++++
+ tests/receiptWorkflow.test.mjs     |  11 +++
+ 9 files changed, 241 insertions(+), 2 deletions(-)
+ create mode 100644 docs/receipt-workflow.md
+ create mode 100644 src/utils/receiptWorkflow.js
+ create mode 100644 src/views/ReceiptLphPage.vue
+ create mode 100644 tests/browser/receipt-workflow.mjs
+ create mode 100644 tests/receiptWorkflow.test.mjs
+
+diff --git a/docs/receipt-workflow.md b/docs/receipt-workflow.md
+new file mode 100644
+index 0000000..14118fb
+--- /dev/null
++++ b/docs/receipt-workflow.md
+@@ -0,0 +1,30 @@
++# LPH dan klaim pembayaran Mobile Sales
++
++Menu Dashboard **LPH & Klaim Pembayaran** (`/lph-kuitansi`) menggunakan endpoint `/api/mobile/workflow`. Backend harus sudah memuat migrasi `20261004_payment_receipt_workflow.sql` dan route baru. Finance mengaktifkan perusahaan, memetakan COA, lalu membuat LPH baru dengan alur **Kuitansi & Giro**. LPH versi1 tetap memakai menu LPH/Pembayaran sebelumnya.
++
++Sales mencocokkan seluruh faktur sebelum menerima LPH, lalu mencatat klaim Tunai, Transfer, atau Giro. Giro memerlukan nomor, bank dan jatuh tempo. Klaim bisa dihapus selama LPH Aktif. Nominal dibatasi sisa piutang dan seluruh klaim faktur tersebut. Identitas Sales berasal dari token sesuai resolver backend.
++
++Klaim belum mengurangi piutang dan tidak menjadi riwayat pembayaran final pada menu lama. Finance melakukan rekonsiliasi dan finalisasi kuitansi. Saat pengembalian LPH, Sales mengisi bagian cash yang ditransfer; sisa cash menjadi setoran Pending untuk Kasir. Setelah return, klaim tidak dapat diubah.
++
++Workflow ini harus online. Penulisan baru tidak masuk SQLite/antrean `/api/payment/save` yang digunakan pembayaran lama. Tombol dikunci selama permintaan; kegagalan jaringan mempertahankan kunci UUID untuk retry klaim dengan payload yang sama. Perubahan form menghasilkan kunci baru. Jika transaksi berhasil tetapi reload gagal, halaman meminta muat ulang untuk menghindari penggunaan saldo lama.
++
++## Update aplikasi
++
++```sh
++git pull --ff-only origin main
++npm ci
++npm run build
++npx cap sync android
++```
++
++Kemudian build APK/AAB melalui Android Studio dan install/distribusikan versi baru. APK yang sudah terpasang tidak berubah hanya karena repo/API diperbarui. Untuk iOS, gunakan `npx cap sync ios` dan build melalui Xcode di Mac. Penandatanganan dan build native belum diuji di cloud ini.
++
++Konfigurasi API mengikuti `VITE_API_URL` yang sudah tersedia di `.env`; pastikan tujuan yang dipakai aplikasi memuat backend baru (respons endpoint tanpa token401, bukan404). Jangan memasukkan token/key ke repository.
++
++## Verifikasi
++
++- `node --test tests/*.test.mjs`: tes LPH lama dan validasi klaim, ID detail penerimaan, cash split, batas nominal dan giro.
++- `npm run build`: build Vue/Vite.
++- `PLAYWRIGHT_MODULE=/path/to/playwright-core/index.mjs CHROMIUM_PATH=/path/to/chromium node tests/browser/receipt-workflow.mjs`: workflow simulasi pada viewport390px, seluruh API dimock; tidak mengirim transaksi bisnis. Server dev lokal port5176 diperlukan; override `FRONTEND_TEST_ORIGIN` untuk port lain.
++
++Uji penerimaan setelah deploy: Sales menerima LPH baru, menambah klaim, return; Kasir menyetujui cash; Supervisor berbeda memfinalisasi kuitansi melalui web Finance. LPH dan transaksi versi1 tidak perlu dikonversi.
+diff --git a/src/router/index.js b/src/router/index.js
+index ec52fe3..569e443 100755
+--- a/src/router/index.js
++++ b/src/router/index.js
+@@ -167,6 +167,7 @@ const routes = [
+     component: PaymentHistory,
+     meta: { requiresAuth: true }
+   },
++  { path: '/lph-kuitansi', name: 'ReceiptLph', component: () => import('@/views/ReceiptLphPage.vue'), meta: { requiresAuth: true } },
+   {
+     path: '/lph',
+     name: 'Lph',
+diff --git a/src/utils/receiptWorkflow.js b/src/utils/receiptWorkflow.js
+new file mode 100644
+index 0000000..2561f19
+--- /dev/null
++++ b/src/utils/receiptWorkflow.js
+@@ -0,0 +1,35 @@
++export const workflowVersion = row => Number(row?.payment_workflow_version || 1);
++export function checkedDetailIds(detail, checkedInvoices) {
++  const invoices = detail?.invoices || [];
++  if (!invoices.length || !invoices.every(i => checkedInvoices.includes(i.id))) throw new Error('Cocokkan seluruh faktur terlebih dahulu.');
++  const ids = (detail.checked_details || []).filter(d => checkedInvoices.includes(d.id_faktur)).map(d => d.id);
++  if (!ids.length) throw new Error('Rincian penerimaan belum tersedia. Muat ulang LPH.');
++  return ids;
++}
++export function amountCents(value) {
++  if (!/^\d+(\.\d{1,2})?$/.test(String(value))) throw new Error('Nominal harus angka dengan maksimal dua desimal.');
++  const [whole, fraction = ''] = String(value).split('.');
++  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
++  if (!Number.isSafeInteger(cents)) throw new Error('Nominal terlalu besar.');
++  return cents;
++}
++export function cashHandover(claims, transfer) {
++  const total = claims.filter(c => c.method === 'CASH').reduce((sum, c) => sum + amountCents(c.amount), 0);
++  const converted = amountCents(transfer);
++  if (converted > total) throw new Error('Cash yang ditransfer melebihi klaim tunai.');
++  return { cash_transfer: converted / 100, cash_to_cashier: (total - converted) / 100 };
++}
++export function claimPayload(form, detail, clientKey) {
++  const invoice = detail.invoices.find(i => String(i.id) === String(form.id_faktur));
++  if (!invoice || detail.status_dokumen !== 'AKTIF') throw new Error('Pilih faktur pada LPH aktif.');
++  if (!['CASH', 'TRANSFER', 'GIRO'].includes(form.method)) throw new Error('Pilih metode klaim.');
++  const amount = amountCents(form.amount);
++  const used = detail.claims.filter(c => c.id_faktur === invoice.id).reduce((sum, c) => sum + amountCents(c.amount), 0);
++  if (!amount || amount + used > amountCents(invoice.remaining)) throw new Error('Klaim melebihi sisa tagihan yang belum diklaim.');
++  if (form.method === 'GIRO' && (!form.giro_number.trim() || !form.bank.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(form.due_date))) throw new Error('Lengkapi nomor giro, bank, dan jatuh tempo.');
++  return { id_faktur: invoice.id, method: form.method, amount: amount / 100, client_key: clientKey, giro_number: form.method === 'GIRO' ? form.giro_number.trim() : '', bank: form.method === 'GIRO' ? form.bank.trim() : '', due_date: form.method === 'GIRO' ? form.due_date : null };
++}
++export function workflowError(error) {
++  const data = error?.response?.data;
++  return data?.message || data?.result?.[0]?.message || error?.message || 'Permintaan gagal. Muat ulang sebelum mencoba lagi.';
++}
+diff --git a/src/views/Dashboard.vue b/src/views/Dashboard.vue
+index 8a24af2..7d7e446 100755
+--- a/src/views/Dashboard.vue
++++ b/src/views/Dashboard.vue
+@@ -167,6 +167,10 @@
+             </div>
+             <span>Riwayat</span>
+           </div>
++          <div class="sub-item" @click="router.push('/lph-kuitansi')">
++            <div class="si-icon b-blue"><font-awesome-icon icon="clipboard-check" /></div>
++            <span>LPH & Klaim Pembayaran</span>
++          </div>
+           <div class="sub-item" @click="router.push('/lph')">
+             <div class="si-icon b-blue">
+               <font-awesome-icon icon="clipboard-check" />
+diff --git a/src/views/LphPage.vue b/src/views/LphPage.vue
+index 2797da7..a8ac079 100644
+--- a/src/views/LphPage.vue
++++ b/src/views/LphPage.vue
+@@ -14,6 +14,7 @@
+       </button>
+     </header>
+ 
++    <button class="accept-action" type="button" @click="router.push('/lph-kuitansi')">LPH & Klaim Pembayaran (Kuitansi)</button>
+     <section class="guide-card">
+       <div class="guide-step">
+         <span>1</span>
+@@ -185,8 +186,12 @@ const loadLph = async () => {
+   loading.value = true;
+   errorMessage.value = '';
+   try {
+-    const response = await api.get('/api/lph');
+-    rows.value = normalizeRows(response.data);
++    const [response, workflow] = await Promise.all([
++      api.get('/api/lph'),
++      api.get('/api/mobile/workflow/lphs').catch(error => { if (error?.response?.status === 404) return { data:{ data:[] } }; throw error; })
++    ]);
++    const receiptIds = new Set((workflow.data?.data || []).map(row => Number(row.id)));
++    rows.value = normalizeRows(response.data).filter(row => Number(row.payment_workflow_version || 1) !== 2 && !receiptIds.has(row.id_lph));
+   } catch (error) {
+     rows.value = [];
+     errorMessage.value = error?.response?.data?.message || error?.message || 'Daftar LPH belum dapat dimuat.';
+diff --git a/src/views/Payment.vue b/src/views/Payment.vue
+index 4437112..cd557bb 100755
+--- a/src/views/Payment.vue
++++ b/src/views/Payment.vue
+@@ -14,6 +14,7 @@
+       </div>
+ 
+       <main class="scroll-area">
++        <div class="lph-empty-hint"><p>Untuk LPH Kuitansi, catat klaim di menu baru.</p><button type="button" @click="router.push('/lph-kuitansi')">LPH & Klaim Pembayaran</button></div>
+         <div v-if="loadingTagihan" class="state-container">
+           <div class="loader-enterprise"></div>
+           <p>{{ isOffline ? 'Memuat cache tagihan...' : 'Memuat tagihan...' }}</p>
+diff --git a/src/views/ReceiptLphPage.vue b/src/views/ReceiptLphPage.vue
+new file mode 100644
+index 0000000..a19350d
+--- /dev/null
++++ b/src/views/ReceiptLphPage.vue
+@@ -0,0 +1,106 @@
++<script setup>
++import { computed, onMounted, reactive, ref, watch } from 'vue';
++import { useRouter } from 'vue-router';
++import api from '@/api/axios';
++import { useConnectivityStore } from '@/stores/connectivity';
++import { checkedDetailIds, cashHandover, claimPayload, workflowError } from '@/utils/receiptWorkflow';
++const router = useRouter(), network = useConnectivityStore();
++const rows = ref([]), detail = ref(null), busy = ref(false), error = ref(''), success = ref(''), checked = ref([]), transfer = ref('0'), returning = ref(false);
++const form = reactive({ id_faktur:'', method:'CASH', amount:'', giro_number:'', bank:'', due_date:'' });
++const claimKey = ref(null), claimFingerprint = ref(null);
++const labels = { MENUNGGU_PENERIMAAN:'Menunggu diterima', AKTIF:'Aktif', DIKEMBALIKAN:'Dikembalikan', DITUTUP:'Ditutup', CASH:'Tunai', TRANSFER:'Transfer', GIRO:'Giro' };
++const money = value => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR' }).format(Number(value || 0));
++const date = value => value ? new Date(value).toLocaleDateString('id-ID') : '—';
++const split = computed(() => { try { return cashHandover(detail.value?.claims || [], transfer.value); } catch { return null; } });
++const allChecked = computed(() => detail.value?.invoices?.length && detail.value.invoices.every(i => checked.value.includes(i.id)));
++const remainingClaim = computed(() => { const invoice = detail.value?.invoices.find(i => String(i.id) === String(form.id_faktur)); return invoice ? Number(invoice.remaining) - detail.value.claims.filter(c => c.id_faktur === invoice.id).reduce((s,c) => s + Number(c.amount),0) : 0; });
++watch(() => JSON.stringify(form), () => { claimKey.value = null; claimFingerprint.value = null; });
++async function fetchDetail(id) { detail.value = (await api.get(`/api/mobile/workflow/lphs/${id}`)).data.data; }
++async function load() {
++  if (busy.value) return;
++  busy.value = true; error.value = '';
++  try { rows.value = (await api.get('/api/mobile/workflow/lphs')).data.data; }
++  catch(e) { rows.value = []; error.value = workflowError(e); }
++  finally { busy.value = false; }
++}
++async function open(row) {
++  if (busy.value) return;
++  busy.value = true; error.value = ''; success.value = ''; checked.value = []; returning.value = false; transfer.value = '0'; detail.value = null;
++  Object.assign(form,{ id_faktur:'', method:'CASH', amount:'', giro_number:'', bank:'', due_date:'' });
++  try { await fetchDetail(row.id); }
++  catch(e) { error.value = workflowError(e); }
++  finally { busy.value = false; }
++}
++async function mutate(fn, message) {
++  if (busy.value) return;
++  if (!network.isOnline) { error.value = 'Hubungkan internet terlebih dahulu. Klaim ini tidak dimasukkan ke antrean pembayaran offline.'; return; }
++  busy.value = true; error.value = ''; success.value = '';
++  try {
++    await fn(); success.value = message;
++    try { await fetchDetail(detail.value.id); rows.value = (await api.get('/api/mobile/workflow/lphs')).data.data; }
++    catch { detail.value = null; error.value = 'Transaksi berhasil, tetapi rincian terbaru belum termuat. Muat ulang daftar.'; }
++  } catch(e) { error.value = workflowError(e); }
++  finally { busy.value = false; }
++}
++function accept() {
++  try { const ids = checkedDetailIds(detail.value,checked.value); mutate(() => api.post(`/api/mobile/workflow/lphs/${detail.value.id}/accept`,{ checked_detail_ids:ids }), 'LPH diterima. Klaim pembayaran dapat dicatat.'); }
++  catch(e) { error.value = workflowError(e); }
++}
++function saveClaim() {
++  try {
++    const fingerprint = JSON.stringify(form);
++    if (!claimKey.value || claimFingerprint.value !== fingerprint) { claimKey.value = crypto.randomUUID(); claimFingerprint.value = fingerprint; }
++    const payload = claimPayload(form,detail.value,claimKey.value);
++    mutate(async () => { await api.post(`/api/mobile/workflow/lphs/${detail.value.id}/claims`,payload); form.amount = ''; claimKey.value = null; }, 'Klaim tercatat. Piutang berubah setelah Finance memfinalisasi kuitansi.');
++  } catch(e) { error.value = workflowError(e); }
++}
++function removeClaim(claim) {
++  if (window.confirm('Hapus klaim ini?')) mutate(() => api.delete(`/api/mobile/workflow/claims/${claim.id}`),'Klaim dihapus.');
++}
++function submitReturn() {
++  try { const data = cashHandover(detail.value.claims,transfer.value); mutate(() => api.post(`/api/mobile/workflow/lphs/${detail.value.id}/return`,{ cash_transfer:data.cash_transfer }), 'LPH dikembalikan. Sisa cash menunggu approval Kasir.'); returning.value = false; }
++  catch(e) { error.value = workflowError(e); }
++}
++onMounted(load);
++</script>
++
++<template>
++  <main class="receipt-lph">
++    <header><button @click="router.back()" :disabled="busy">‹ Kembali</button><h1>LPH & Klaim Pembayaran</h1><button @click="load" :disabled="busy">Muat ulang</button></header>
++    <p>Klaim tunai, transfer, dan giro dicatat untuk rekonsiliasi Finance. Klaim belum mengurangi piutang.</p>
++    <p v-if="!network.isOnline" class="warning">Anda offline. Hubungkan internet untuk memproses LPH dan klaim.</p>
++    <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="success" role="status" class="success">{{ success }}</p>
++    <p v-if="busy" role="status">Memproses…</p>
++    <section v-if="!detail" class="cards">
++      <button v-for="row in rows" :key="row.id" class="card" :disabled="busy" @click="open(row)"><b>{{ row.kode_lph }}</b><span>{{ labels[row.status_dokumen] || row.status_dokumen }}</span><small>{{ date(row.tanggal_lph) }}</small></button>
++      <p v-if="!rows.length && !busy">Belum ada LPH Kuitansi untuk akun Anda. Finance harus membuat LPH baru dengan alur Kuitansi & Giro.</p>
++      <button @click="router.push('/lph')">Buka LPH sebelumnya</button>
++    </section>
++    <section v-else class="card">
++      <button :disabled="busy" @click="detail = null">‹ Daftar LPH</button>
++      <h2>{{ detail.kode_lph }}</h2><p>{{ labels[detail.status_dokumen] || detail.status_dokumen }}</p>
++      <fieldset :disabled="busy"><legend>Rincian faktur</legend>
++        <label v-for="invoice in detail.invoices" :key="invoice.id" class="invoice"><input v-if="detail.status_dokumen === 'MENUNGGU_PENERIMAAN'" v-model="checked" type="checkbox" :value="invoice.id"/><span><b>{{ invoice.no_faktur }}</b><br/>{{ invoice.nama_customer }}<br/>Sisa piutang: {{ money(invoice.remaining) }}</span></label>
++      </fieldset>
++      <button v-if="detail.status_dokumen === 'MENUNGGU_PENERIMAAN'" :disabled="busy || !network.isOnline || !allChecked" @click="accept">Terima LPH</button>
++      <form v-if="detail.status_dokumen === 'AKTIF' && !returning" @submit.prevent="saveClaim">
++        <h3>Catat klaim pembayaran</h3><fieldset :disabled="busy || !network.isOnline">
++          <label>Faktur<select v-model="form.id_faktur" required><option value="">Pilih faktur</option><option v-for="i in detail.invoices" :key="i.id" :value="i.id">{{ i.no_faktur }} — {{ i.nama_customer }}</option></select></label>
++          <p>Sisa yang belum diklaim: {{ money(remainingClaim) }}</p>
++          <label>Metode<select v-model="form.method"><option value="CASH">Tunai</option><option value="TRANSFER">Transfer</option><option value="GIRO">Giro</option></select></label>
++          <label>Nominal (Rp)<input v-model="form.amount" type="number" min="0.01" step="0.01" inputmode="decimal" required/></label>
++          <template v-if="form.method === 'GIRO'"><label>Nomor giro<input v-model="form.giro_number" required maxlength="160"/></label><label>Bank<input v-model="form.bank" required maxlength="160"/></label><label>Jatuh tempo<input v-model="form.due_date" type="date" required/></label></template>
++          <button type="submit">Simpan Klaim</button>
++        </fieldset>
++      </form>
++      <h3>Klaim tercatat</h3><article v-for="claim in detail.claims" :key="claim.id" class="invoice"><span>{{ detail.invoices.find(i => i.id === claim.id_faktur)?.no_faktur }} · {{ labels[claim.method] }}<br/><b>{{ money(claim.amount) }}</b><template v-if="claim.method === 'GIRO'"><br/>{{ claim.giro_number }} · {{ claim.bank }} · {{ date(claim.due_date) }}</template></span><button v-if="detail.status_dokumen === 'AKTIF'" :disabled="busy || !network.isOnline" @click="removeClaim(claim)">Hapus</button></article>
++      <button v-if="detail.status_dokumen === 'AKTIF' && !returning" :disabled="busy || !network.isOnline" @click="returning = true">Kembalikan LPH</button>
++      <form v-if="returning && detail.status_dokumen === 'AKTIF'" @submit.prevent="submitReturn"><h3>Konfirmasi pengembalian LPH</h3><fieldset :disabled="busy || !network.isOnline"><label>Bagian cash yang ditransfer (Rp)<input v-model="transfer" type="number" min="0" step="0.01" inputmode="decimal" required/></label><p v-if="split">Cash diserahkan ke Kasir: <b>{{ money(split.cash_to_cashier) }}</b></p><p v-else class="error">Nominal transfer harus valid dan tidak melebihi klaim tunai.</p><p>Sesudah dikembalikan, klaim tidak dapat diubah. Sisa cash dibuat sebagai setoran menunggu approval Kasir.</p><button :disabled="!split" type="submit">Konfirmasi Pengembalian</button><button type="button" @click="returning = false">Batal</button></fieldset></form>
++      <p v-if="detail.handover">Cash ditransfer: {{ money(detail.handover.cash_transfer) }} · Cash ke Kasir: {{ money(detail.handover.cash_to_cashier) }}</p>
++    </section>
++  </main>
++</template>
++
++<style scoped>
++.receipt-lph,.receipt-lph *{box-sizing:border-box;min-width:0;overflow-wrap:anywhere}.receipt-lph{max-width:720px;margin:auto;padding:18px 14px 90px;color:var(--app-body-text,#172b4d);text-align:left}header{display:flex;flex-wrap:wrap;align-items:center;gap:12px}h1{font-size:1.3rem;flex:1}h2{font-size:1.15rem}.cards{display:grid;gap:12px}.card{display:block;text-align:left;width:100%;border:1px solid #94a3b8;border-radius:14px;padding:16px;margin:14px 0;background:var(--app-surface,#fff)}.card>span,.card>small{display:block;margin-top:8px}button{padding:12px;border:1px solid #94a3b8;border-radius:10px;background:var(--app-surface,#fff);color:inherit;cursor:pointer}button:disabled{opacity:.5;cursor:default}fieldset{border:0;padding:0;margin:14px 0}label{display:block;margin:12px 0}input:not([type=checkbox]),select{display:block;width:100%;box-sizing:border-box;padding:12px;margin-top:7px;border:1px solid #94a3b8;border-radius:9px;background:var(--app-surface,#fff);color:inherit;font:inherit}.invoice{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #cbd5e1;padding:14px 0}.invoice input{min-width:20px;min-height:20px}.error,.warning{background:#fff2e8;color:#9a3412;padding:12px;border-radius:9px}.success{background:#dcfce7;color:#166534;padding:12px;border-radius:9px}form{margin-top:24px}form button{margin:6px 6px 6px 0}h3{margin-top:24px}legend{font-weight:bold}
++</style>
+diff --git a/tests/browser/receipt-workflow.mjs b/tests/browser/receipt-workflow.mjs
+new file mode 100644
+index 0000000..f83b767
+--- /dev/null
++++ b/tests/browser/receipt-workflow.mjs
+@@ -0,0 +1,46 @@
++import assert from 'node:assert/strict';
++const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
++const origin = process.env.FRONTEND_TEST_ORIGIN || 'http://127.0.0.1:5176';
++assert(['localhost','127.0.0.1'].includes(new URL(origin).hostname));
++const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--no-sandbox']});
++try {
++ const page = await browser.newPage({viewport:{width:390,height:844}}), errors=[], writes=[];
++ page.on('pageerror',e=>errors.push(e.message));
++ await page.addInitScript(()=>{localStorage.setItem('CapacitorStorage.auth_token','mock-only');localStorage.setItem('CapacitorStorage.user_data',JSON.stringify({id:3,id_user:3,id_sales:1,nama:'Sales Test'}));});
++ const row={id:1,kode_lph:'LPH-TEST',status_dokumen:'MENUNGGU_PENERIMAAN',payment_workflow_version:2};
++ const detail={...row,invoices:[{id:7,no_faktur:'F-TEST',nama_customer:'Toko Test',remaining:'1000.00'}],checked_details:[{id:11,id_faktur:7},{id:12,id_faktur:7}],claims:[],handover:null};
++ await page.route('**/*',async route=>{
++   const u=new URL(route.request().url()), method=route.request().method();
++   if(u.pathname.startsWith('/api/')) {
++    let data=[];
++    if(u.pathname.endsWith('/workflow/lphs'))data=[row];
++    if(u.pathname.endsWith('/workflow/lphs/1'))data=detail;
++    if(method==='POST') {
++     const payload=route.request().postDataJSON();writes.push({path:u.pathname,payload});
++     if(u.pathname.endsWith('/accept')) {assert.deepEqual(payload.checked_detail_ids,[11,12]);row.status_dokumen=detail.status_dokumen='AKTIF';}
++     if(u.pathname.endsWith('/claims')) {assert.equal(payload.amount,1000);detail.claims.push({id:1,id_faktur:7,...payload});}
++     if(u.pathname.endsWith('/return')) {assert.equal(payload.cash_transfer,250);row.status_dokumen=detail.status_dokumen='DIKEMBALIKAN';detail.handover={cash_transfer:250,cash_to_cashier:750};}
++    }
++    return route.fulfill({json:{data}});
++   }
++   if(u.origin!==new URL(origin).origin)return route.abort();
++   return route.continue();
++ });
++ await page.goto(origin+'/lph-kuitansi');
++ await page.getByRole('button',{name:/LPH-TEST/}).click();
++ assert.equal(await page.getByRole('button',{name:'Terima LPH',exact:true}).isDisabled(),true);
++ await page.locator('input[type=checkbox]').check();
++ await page.getByRole('button',{name:'Terima LPH',exact:true}).click();
++ await page.getByLabel('Faktur',{exact:false}).selectOption('7');
++ await page.getByLabel('Nominal (Rp)',{exact:true}).fill('1000');
++ await page.getByRole('button',{name:'Simpan Klaim',exact:true}).click();
++ await page.getByRole('status').filter({hasText:'Klaim tercatat'}).waitFor();
++ await page.getByRole('button',{name:'Kembalikan LPH',exact:true}).click();
++ await page.getByLabel('Bagian cash yang ditransfer (Rp)',{exact:true}).fill('250');
++ await page.getByRole('button',{name:'Konfirmasi Pengembalian',exact:true}).click();
++ await page.getByRole('status').filter({hasText:'LPH dikembalikan'}).waitFor();
++ assert.equal(writes.length,3);assert.deepEqual(errors,[]);
++ // Chromium can round fractional layout bounds outward by one pixel.
++ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth + 1));
++ console.log('PASS mobile accept → claim → return, checked detail IDs, exact cash split and narrow viewport');
++} finally {await browser.close();}
+diff --git a/tests/receiptWorkflow.test.mjs b/tests/receiptWorkflow.test.mjs
+new file mode 100644
+index 0000000..b8886fb
+--- /dev/null
++++ b/tests/receiptWorkflow.test.mjs
+@@ -0,0 +1,11 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { checkedDetailIds, cashHandover, claimPayload, amountCents, workflowVersion, workflowError } from '../src/utils/receiptWorkflow.js';
++const detail = {status_dokumen:'AKTIF',invoices:[{id:7,remaining:'1000.00'}],claims:[{id_faktur:7,method:'CASH',amount:'250.25'}],checked_details:[{id:11,id_faktur:7},{id:12,id_faktur:7}]};
++const form = {id_faktur:7,method:'CASH',amount:'749.75',giro_number:'',bank:'',due_date:''};
++test('acceptance checks parent invoices and sends every printed detail ID',()=>{assert.deepEqual(checkedDetailIds(detail,[7]),[11,12]);assert.throws(()=>checkedDetailIds(detail,[]));});
++test('claim capped by remaining invoice less existing claims',()=>{assert.equal(claimPayload(form,detail,'uuid').amount,749.75);assert.throws(()=>claimPayload({...form,amount:750},detail,'uuid'));assert.throws(()=>claimPayload({...form,id_faktur:8},detail,'uuid'));});
++test('claim requires active document and valid positive precise money',()=>{assert.throws(()=>claimPayload(form,{...detail,status_dokumen:'DIKEMBALIKAN'},'uuid'));for(const amount of ['0','-1','NaN','1.001']) assert.throws(()=>claimPayload({...form,amount},detail,'uuid'));assert.equal(amountCents('0.29'),29);});
++test('giro metadata required; cash never retains hidden giro data',()=>{assert.throws(()=>claimPayload({...form,method:'GIRO'},detail,'uuid'));assert.equal(claimPayload({...form,giro_number:'stale'},detail,'uuid').giro_number,'');assert.equal(claimPayload({...form,method:'GIRO',giro_number:'BG1',bank:'Bank',due_date:'2026-10-31'},detail,'uuid').bank,'Bank');});
++test('cash split excludes transfer/giro and stays exact to cents',()=>{assert.deepEqual(cashHandover([...detail.claims,{method:'GIRO',amount:999}], '0.29'),{cash_transfer:.29,cash_to_cashier:249.96});assert.throws(()=>cashHandover(detail.claims,'251'));});
++test('legacy workflow remains version1 and API errors remain visible',()=>{assert.equal(workflowVersion({}),1);assert.equal(workflowVersion({payment_workflow_version:2}),2);assert.equal(workflowError({response:{data:{result:[{message:'LPH sudah ditutup'}]}}}),'LPH sudah ditutup');});
+-- 
+2.52.0
+

@@ -55,9 +55,9 @@ onMounted(() => run(async () => { const data = unwrapResponse(await api.get('/ap
       <p v-if="document.task_statuses?.includes('REVISION_REQUIRED')" class="font-semibold text-amber-700">Ditahan: selesaikan Revisi Faktur ERP. Sesuaikan qty dengan picked atau pertahankan qty untuk stok susulan. Nota seluruhnya 0 tetap ditahan.</p>
       <article v-for="group in groups" :key="group.key" class="overflow-x-auto rounded-xl border p-3">
         <h3 class="font-bold">{{ group.title }}</h3><p class="text-sm">Order {{ group.required }} PCS · Picked {{ group.picked }} PCS · Kurang {{ Math.max(0, group.required-group.picked) }} PCS</p>
-        <table class="mt-3 w-full text-left text-sm"><thead><tr><th>Nota</th><th>Barang</th><th>Order / Picked</th><th>Rak / Batch</th><th>Ambil (PCS)</th><th>Aksi</th></tr></thead>
+        <table class="mt-3 w-full text-left text-sm"><thead><tr><th>Nota</th><th>Barang</th><th>Stok Ready</th><th>Order / Picked</th><th>Rak / Batch</th><th>Ambil (PCS)</th><th>Aksi</th></tr></thead>
           <tbody><tr v-for="row in group.rows" :key="row.wms_task_detail_id" class="border-t">
-            <td class="p-2">{{ row.nota || row.no_order }}</td><td class="p-2">{{ row.product_code }}<br>{{ row.product_name }}</td><td class="p-2">{{ row.required_quantity }} / {{ row.picked_quantity }}</td>
+            <td class="p-2">{{ row.nota || row.no_order }}</td><td class="p-2">{{ row.product_code }}<br>{{ row.product_name }}</td><td class="p-2">{{ row.stok_ready ?? "-" }} PCS</td><td class="p-2">{{ row.required_quantity }} / {{ row.picked_quantity }}</td>
             <td class="p-2"><input v-model="row.rack" class="field min-w-32" :disabled="!editable || busy" :aria-label="`Rak ${row.product_code}`" />{{ row.batch || '-' }}</td>
             <td class="p-2"><input v-model="row.qty" class="field w-24" type="number" min="1" step="1" :max="row.required_quantity-row.picked_quantity" :disabled="!editable || busy" :aria-label="`Qty ${row.product_code}`" /></td>
             <td><button class="rounded-lg border px-3 py-2 disabled:opacity-40" :disabled="busy || !editable || !row.rack || !Number.isInteger(Number(row.qty)) || Number(row.qty)<=0 || Number(row.qty)>row.required_quantity-row.picked_quantity" @click="scan(row)">Pick nota ini</button></td>

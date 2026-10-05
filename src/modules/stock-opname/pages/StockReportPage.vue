@@ -92,20 +92,17 @@ const summary = computed(() => {
 });
 
 const columns = [
-  { key: 'tanggal_update', label: 'Tanggal' },
-  { key: 'nama_cabang', label: 'Cabang' },
   { key: 'nama_perusahaan', label: 'Perusahaan' },
+  { key: 'nama_cabang', label: 'Cabang' },
   { key: 'nama_principal', label: 'Principal' },
   { key: 'kode_sku', label: 'Kode SKU' },
   { key: 'nama_produk', label: 'Produk' },
-  { key: 'jumlah_ready', label: 'Ready' },
-  { key: 'jumlah_rak_tetap', label: 'Rak Tetap (WMS)' },
-  { key: 'selisih_rak_tetap', label: 'Selisih Rak' },
-  { key: 'jumlah_titipan', label: 'Rak Titipan' },
+  { key: 'jumlah_ready', label: 'Stok Ready' },
   { key: 'jumlah_good', label: 'Good' },
   { key: 'jumlah_bad', label: 'Bad' },
   { key: 'jumlah_incoming', label: 'In Transit' },
-  { key: 'uom', label: 'Satuan' }
+  { key: 'uom', label: 'Satuan' },
+  { key: 'last_update', label: 'Last Update' }
 ];
 
 function numberLabel(value) {
@@ -158,7 +155,10 @@ async function loadReport() {
       id_principal: filters.principalId || undefined,
       all_branches: canAccessAllBranches.value && !filters.branchId ? 'true' : undefined
     });
-    stockRows.value = normalizeList(unwrapResponse(response));
+    stockRows.value = normalizeList(unwrapResponse(response)).map((row) => ({
+      ...row,
+      last_update: [row.tanggal_update, row.waktu_update].filter(Boolean).join(' ') || '-'
+    }));
     feedback.value = `Laporan stock berhasil dimuat: ${stockRows.value.length.toLocaleString('id-ID')} baris.`;
   } catch (error) {
     errorMessage.value = normalizeError(error, 'Laporan stock belum bisa dimuat.');
@@ -179,29 +179,7 @@ function resetFilters() {
 function exportReport() {
   exportRowsToCsv(
     `laporan-stock-${toLocalDateInputValue()}.csv`,
-    [
-      { label: 'Tanggal', key: 'tanggal_update' },
-      { label: 'Cabang', key: 'nama_cabang' },
-      { label: 'Perusahaan', key: 'nama_perusahaan' },
-      { label: 'Principal', key: 'nama_principal' },
-      { label: 'Kode SKU', key: 'kode_sku' },
-      { label: 'Produk', key: 'nama_produk' },
-      { label: 'Ready', key: 'jumlah_ready' },
-      { label: 'Rak Tetap (WMS)', key: 'jumlah_rak_tetap' },
-      { label: 'Selisih Rak', key: 'selisih_rak_tetap' },
-      { label: 'Rak Titipan', key: 'jumlah_titipan' },
-      { label: 'Good', key: 'jumlah_good' },
-      { label: 'Bad', key: 'jumlah_bad' },
-      { label: 'Booked', key: 'jumlah_booked' },
-      { label: 'Delivery', key: 'jumlah_delivery' },
-      { label: 'Incoming', key: 'jumlah_incoming' },
-      { label: 'Gudang', key: 'jumlah_gudang' },
-      { label: 'Canvas', key: 'jumlah_canvas' },
-      { label: 'Picked', key: 'jumlah_picked' },
-      { label: 'Transfer Out', key: 'transfer_out' },
-      { label: 'Transfer In', key: 'transfer_in' },
-      { label: 'Satuan', key: 'uom' }
-    ],
+    columns.map(({ label, key }) => ({ label, key })),
     filteredRows.value
   );
 }
@@ -232,7 +210,7 @@ onMounted(async () => {
   <div class="space-y-5">
     <PageHeader
       title="Laporan Stok Gudang"
-      description="Ready mengikuti stok transaksi cabang (sama dengan Sales Order dan Request Canvas); Rak Tetap (WMS) ditampilkan untuk audit fisik."
+      description="Stok Ready adalah stok tersedia untuk transaksi setelah reservasi. In Transit belum tersedia untuk transaksi atau belum masuk rak tetap."
     />
 
     <section class="panel p-4">

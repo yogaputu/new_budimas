@@ -279,19 +279,7 @@ const salesOptions = computed(() =>
   ]
 );
 
-const statusOptions = [
-  { value: '0', label: 'Draft' },
-  { value: '1', label: 'Booked' },
-  { value: '2', label: 'Scheduled' },
-  { value: '3', label: 'Picked' },
-  { value: '4', label: 'Shipping' },
-  { value: '5', label: 'Need Revision' },
-  { value: '6', label: 'Delivered' },
-  { value: '9', label: 'Reschedule' },
-  { value: '10', label: 'Rescheduled' },
-  { value: '11', label: 'Reshipping' },
-  { value: '-1', label: 'Denied' }
-];
+const statusOptions = ref([]);
 
 const taxStatusOptions = [
   { value: 'pkp', label: 'PKP' },
@@ -315,7 +303,7 @@ const filterFields = computed(() => [
   { key: 'companyId', label: 'Perusahaan', type: 'search-select', options: companyOptions.value, placeholder: 'Pilih perusahaan', emptyText: 'Perusahaan belum tersedia.', disabled: shouldLockBusinessScope.value && !!fallbackCompanyId.value },
   { key: 'branchId', label: 'Cabang', type: 'search-select', options: branchOptions.value, placeholder: filters.companyId ? 'Pilih cabang' : 'Pilih perusahaan dahulu', emptyText: filters.companyId ? 'Cabang belum tersedia.' : 'Pilih perusahaan dahulu.', disabled: !filters.companyId || (!isSuperUser(auth) && !!fallbackBranchId.value) },
   { key: 'salesUserId', label: 'Sales', type: 'search-select', options: salesOptions.value, placeholder: filters.branchId ? 'Pilih sales' : 'Pilih cabang dahulu', emptyText: filters.branchId ? 'Sales belum tersedia.' : 'Pilih cabang dahulu.', disabled: !filters.branchId || (canUseLoginScope.value && !!fallbackUserId.value) },
-  { key: 'status', label: 'Status', type: 'select', options: statusOptions },
+  { key: 'status', label: 'Status', type: 'select', options: statusOptions.value },
   { key: 'taxStatus', label: 'Status Pajak / PKP', type: 'select', options: taxStatusOptions },
   { key: 'dateFrom', label: 'Tanggal Nota Dari', type: 'date' },
   { key: 'dateTo', label: 'Tanggal Nota Sampai', type: 'date' },
@@ -875,7 +863,8 @@ async function loadOrders(page = pagination.page) {
       user_id: filters.salesUserId || (canUseLoginScope.value ? fallbackUserId.value : undefined),
       id_cabang: filters.branchId || (shouldLockBusinessScope.value ? fallbackBranchId.value : undefined),
       id_perusahaan: filters.companyId || undefined,
-      status: filters.status || undefined,
+      workflow_status: filters.status || undefined,
+      include_workflow_statuses: true,
       status_pajak: filters.taxStatus || undefined,
       date_from: filters.dateFrom || undefined,
       date_to: filters.dateTo || undefined,
@@ -886,6 +875,7 @@ async function loadOrders(page = pagination.page) {
 
     const payload = unwrapResponse(response) || {};
     if (requestId !== ordersRequestId || requestedFilterKey !== filterKey.value) return;
+    statusOptions.value = payload.status_options || [];
     const meta = payload?.pagination || {};
     items.value = normalizeList(payload);
     loadedFilterKey.value = requestedFilterKey;

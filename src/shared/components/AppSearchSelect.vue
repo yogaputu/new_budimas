@@ -50,6 +50,10 @@ const props = defineProps({
   maxVisibleOptions: {
     type: Number,
     default: 0
+  },
+  clearSearchOnOpen: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -165,6 +169,7 @@ function scheduleSearch(value = '') {
 
 function openDropdown() {
   if (controlDisabled.value) return;
+  if (!open.value && props.clearSearchOnOpen) search.value = '';
   open.value = true;
   if (props.remoteSearch) {
     scheduleSearch(search.value);
@@ -181,7 +186,7 @@ function toggle() {
   if (controlDisabled.value) return;
   open.value = !open.value;
   if (open.value) {
-    search.value = props.multiple ? '' : selectedLabel.value;
+    search.value = props.multiple || props.clearSearchOnOpen ? '' : selectedLabel.value;
     if (props.remoteSearch) {
       scheduleSearch(search.value);
     }

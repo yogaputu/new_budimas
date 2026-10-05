@@ -19,6 +19,11 @@ const allowed = p => auth.hasPermission(p);
 const list = ref([]), lphs = ref([]), funds = ref([]), companies = ref([]), branches = ref([]), sales = ref([]), accounts = ref([]), mutations = ref([]), credits = ref([]);
 const error = ref(''), success = ref(''), busy = ref(false), modal = ref(''), detail = ref(null), lp = ref(null), quote = ref(null);
 const form = reactive({}), settings = reactive({ company: '', enabled: false, max_fee: '2900', accounts: {} });
+const accountsLoading = ref(false), accountsError = ref('');
+let accountsSequence = 0;
+const accountOptions = computed(() => accounts.value
+  .filter(a => String(a.id_perusahaan) === String(settings.company) && a.is_active !== false)
+  .map(a => ({ value: String(a.id_coa), label: `${a.nomor_akun} — ${a.nama_akun}` })));
 const purposes = { CASH: 'Kas', BANK: 'Bank', GIRO: 'Piutang Giro', CLEARING: 'Dana Belum Teridentifikasi', RECEIVABLE: 'Piutang Usaha', ADVANCE: 'Uang Muka', RETURN: 'Retur', FEE: 'Biaya Lain' };
 const labels = { CASH: 'Tunai', TRANSFER: 'Non Tunai', GIRO: 'Giro', ADVANCE: 'Uang Muka', RETURN: 'Retur', PENDING: 'Menunggu approval', APPROVED: 'Disetujui', DRAFT: 'Draft', FINALIZED: 'Finalized', CANCEL_REQUESTED: 'Pengajuan batal', CANCELLED: 'Cancelled', REJECTED: 'Ditolak', NOT_CLEARED: 'Belum cair', CLEARED: 'Cair', BOUNCED: 'Ditolak bank' };
 const money = v => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(Number(v || 0));
@@ -116,12 +121,25 @@ async function openMobile(row) {
   finally { busy.value = false; }
 }
 async function configuration() {
-  try { await masters(); accounts.value = normalizeList(unwrapResponse(await getCoaCatalog())); }
+  try { await masters(); if (settings.company) await loadAccounts(settings.company); }
   catch(e) { error.value = normalizeError(e); }
+}
+async function loadAccounts(company) {
+  const sequence = ++accountsSequence;
+  accounts.value = []; accountsError.value = ''; accountsLoading.value = false;
+  if (!company || tab.value !== 'settings') return;
+  accountsLoading.value = true;
+  try {
+    const response = await getCoaCatalog({ id_perusahaan: company, is_active: 'true', 'no-paginate': 'true', field: 'nomor_akun', order: 'asc' });
+    if (sequence === accountsSequence) accounts.value = normalizeList(unwrapResponse(response));
+  } catch(e) {
+    if (sequence === accountsSequence) accountsError.value = normalizeError(e, 'Daftar COA belum bisa dimuat.');
+  } finally { if (sequence === accountsSequence) accountsLoading.value = false; }
 }
 watch(() => settings.company, company => {
   const found = list.value.find(r => String(r.id_perusahaan) === String(company));
   settings.enabled = found?.enabled || false; settings.max_fee = String(found?.max_fee ?? 2900); settings.accounts = { ...(found?.accounts || {}) };
+  loadAccounts(company);
 });
 watch(() => form.id_perusahaan, () => { if (!branchOptions.value.some(b => b.value === String(form.id_cabang))) form.id_cabang = ''; });
 watch(() => form.invoices, () => { quote.value = null; }, { deep:true });
@@ -157,7 +175,25 @@ onMounted(async () => { await refresh(); if (tab.value === 'settings') await con
       <tr v-for="row in list" :key="row.id" class="border-t border-slate-400/20"><td class="py-4">{{ row.number }}</td><td>{{ row.kode_lph }}</td><td>{{ shownDate(row.receipt_date) }}</td><td>{{ money(row.total) }}</td><td>{{ labels[row.status] }}</td><td><div class="flex flex-wrap gap-2"><button class="btn-secondary" :disabled="busy" @click="openDetail(row)">{{ canFinalize(row) ? 'Tinjau & Finalisasi' : 'Rincian' }}</button><button v-if="row.status === 'FINALIZED' && allowed('finance.receipts.cancel')" class="btn-secondary" :disabled="busy" @click="ask(row, 'cancel')">Ajukan Batal</button><button v-if="row.status === 'CANCELLED' && allowed('finance.receipts.create') && String(row.created_by) === actorId" class="btn-secondary" :disabled="busy" @click="newReceipt(row)">Edit Ulang</button></div></td></tr>
     </tbody></table><p v-if="!list.length && !busy" class="py-6">Belum ada kuitansi. Buat LPH versi Kuitansi, minta sales menerima dan mengembalikannya, lalu catat setoran.</p></div>
     <div v-if="tab === 'cancel'" class="panel space-y-4 p-5"><article v-for="row in list" :key="row.id" class="rounded-xl border border-slate-400/30 p-4"><b>{{ row.number }} · {{ labels[row.status] }}</b><p>{{ row.reason }}</p><p v-if="row.auto_giro" class="text-amber-600">Auto BG: giro ditolak bank</p><div class="mt-3 flex gap-2"><button v-if="row.status === 'DRAFT' && allowed('finance.receipts.cancel')" class="btn-primary" :disabled="busy" @click="action(() => workflowPost(`receipts/${row.id_receipt}/cancel`, { reason:row.reason }), 'Pembatalan diajukan ke supervisor.')">Ajukan ke SPV</button><template v-if="row.status === 'PENDING' && allowed('finance.receipts.cancel-approve') && String(row.created_by) !== actorId && String(row.requested_by) !== actorId"><button class="btn-primary" :disabled="busy" @click="ask(row,'cancel-approve')">Tinjau Pembatalan</button></template></div></article><p v-if="!list.length && !busy">Belum ada pengajuan pembatalan.</p></div>
-    <section v-if="tab === 'settings'" class="panel space-y-4 p-5"><p>Pilih COA perusahaan yang sesuai. Tidak ada kode akun yang dibuat atau diasumsikan otomatis. Aktivasi berlaku untuk LPH baru yang dipilih memakai alur Kuitansi.</p><AppSearchSelect v-model="settings.company" label="Perusahaan" :options="companyOptions"/><div class="grid gap-4 md:grid-cols-2"><AppSearchSelect v-for="(label, purpose) in purposes" :key="purpose" v-model="settings.accounts[purpose]" :label="label" :options="accounts.filter(a => String(a.id_perusahaan) === String(settings.company) && a.is_active !== false).map(a => ({value:String(a.id_coa),label:`${a.nomor_akun} — ${a.nama_akun}`}))"/></div><label class="block">Batas Biaya Lain per faktur (Rp)<input v-model="settings.max_fee" type="number" min="0" step="0.01" class="field-control"/></label><label class="flex items-center gap-2"><input v-model="settings.enabled" type="checkbox"/>Aktifkan alur kuitansi untuk perusahaan ini</label><button class="btn-primary" :disabled="busy || !settings.company" @click="action(() => workflowPut('settings', { id_perusahaan:settings.company,accounts:settings.accounts,enabled:settings.enabled,max_fee:settings.max_fee }), 'Pengaturan tersimpan.')">Simpan Pengaturan</button></section>
+    <section v-if="tab === 'settings'" class="panel space-y-4 p-5">
+      <p>Pilih COA perusahaan yang sesuai. Tidak ada kode akun yang dibuat atau diasumsikan otomatis. Aktivasi berlaku untuk LPH baru yang dipilih memakai alur Kuitansi.</p>
+      <AppSearchSelect v-model="settings.company" label="Perusahaan" :options="companyOptions"/>
+      <p v-if="settings.company && !accountsError" class="text-sm" role="status">{{ accountsLoading ? 'Memuat akun COA…' : `${accountOptions.length} akun COA aktif tersedia. Cari berdasarkan nomor atau nama akun; gulir daftar untuk melihat hasil lainnya.` }}</p>
+      <div v-if="accountsError" role="alert" class="flex items-center gap-3 text-sm text-rose-600">
+        <span>{{ accountsError }}</span>
+        <button type="button" class="btn-secondary" :disabled="accountsLoading" @click="loadAccounts(settings.company)">Coba lagi</button>
+      </div>
+      <div class="grid gap-4 md:grid-cols-2">
+        <AppSearchSelect v-for="(label, purpose) in purposes" :key="`${settings.company}-${purpose}`"
+          v-model="settings.accounts[purpose]" :label="label" :options="accountOptions"
+          placeholder="Cari nomor atau nama akun COA" :clear-search-on-open="true"
+          :loading="accountsLoading" :disabled="!settings.company || !!accountsError"
+          empty-text="Tidak ada akun COA aktif yang cocok."/>
+      </div>
+      <label class="block">Batas Biaya Lain per faktur (Rp)<input v-model="settings.max_fee" type="number" min="0" step="0.01" class="field-control"/></label>
+      <label class="flex items-center gap-2"><input v-model="settings.enabled" type="checkbox"/>Aktifkan alur kuitansi untuk perusahaan ini</label>
+      <button class="btn-primary" :disabled="busy || !settings.company || accountsLoading || !!accountsError" @click="action(() => workflowPut('settings', { id_perusahaan:settings.company,accounts:settings.accounts,enabled:settings.enabled,max_fee:settings.max_fee }), 'Pengaturan tersimpan.')">Simpan Pengaturan</button>
+    </section>
     <section v-if="tab === 'journals'" class="panel space-y-4 p-5"><article v-for="row in list" :key="row.id_jurnal" class="rounded-xl border border-slate-400/30 p-4"><h3 class="font-bold">{{ row.reference }}</h3><p>{{ row.keterangan }}</p><table class="mt-3 w-full text-left text-sm"><thead><tr><th>Akun</th><th>Debit</th><th>Kredit</th></tr></thead><tbody><tr v-for="line in row.lines" :key="line.id_jurnal_detail"><td>{{ line.kode_jurnal }} {{ line.nama_akun }}</td><td>{{ money(line.debit) }}</td><td>{{ money(line.kredit) }}</td></tr></tbody></table></article><p v-if="!list.length && !busy">Belum ada jurnal workflow.</p></section>
     <section v-if="tab === 'mobile'" class="panel space-y-4 p-5"><p>LPH milik akun Sales yang login. Klaim tidak mengurangi piutang sebelum Finance memfinalisasi kuitansi.</p><button v-for="row in list" :key="row.id" class="block w-full rounded-xl border border-slate-400/30 p-4 text-left" :disabled="busy" @click="openMobile(row)">{{ row.kode_lph }} · {{ row.status_dokumen }}</button><p v-if="!list.length && !busy">Belum ada LPH versi Kuitansi untuk sales ini.</p></section>
 

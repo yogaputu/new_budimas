@@ -681,8 +681,8 @@ function goToPage(page) {
   load();
 }
 
-async function loadCustomersIfNeeded() {
-  if (customers.value.length || optionLoading.customers) return;
+async function loadCustomersIfNeeded(refresh = false) {
+  if ((!refresh && customers.value.length) || optionLoading.customers) return;
   optionLoading.customers = true;
 
   try {
@@ -765,11 +765,11 @@ async function loadPriceTypesIfNeeded() {
   }
 }
 
-async function loadMainFormOptions() {
+async function loadMainFormOptions(refreshCustomers = false) {
   await Promise.all([
     loadBranchesIfNeeded(),
     loadCompaniesIfNeeded(),
-    loadCustomersIfNeeded(),
+    loadCustomersIfNeeded(refreshCustomers),
     loadPrincipalsIfNeeded(),
     loadSalesIfNeeded(),
     loadUsersIfNeeded(),
@@ -1036,8 +1036,10 @@ function openCreate() {
   form.kode = generatePlafonCodePrefix();
 
   modalOpen.value = true;
-  loadMainFormOptions().then(() => {
+  loadMainFormOptions(true).then(() => {
     syncFormCompanyFromBranch(true);
+  }).catch((err) => {
+    actionError.value = normalizeError(err, 'Data referensi plafon belum bisa dimuat.');
   });
 }
 
@@ -1077,7 +1079,7 @@ function openEdit(row) {
 
   modalOpen.value = true;
 
-  loadMainFormOptions()
+  loadMainFormOptions(true)
     .then(async () => {
       const rowCustomer = findCustomerForRow(row);
       const rowSales = findSalesForRow(row);
@@ -1804,6 +1806,7 @@ onMounted(async () => {
             label="Customer"
             placeholder="Pilih customer"
             :options="customerOptions"
+            :loading="optionLoading.customers"
             :display-value="mode === 'edit' ? selectedCustomerDisplay : ''"
             :disabled="!form.id_cabang || !form.id_perusahaan"
             :empty-text="optionLoading.customers ? 'Memuat customer...' : 'Customer belum tersedia.'"

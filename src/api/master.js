@@ -480,6 +480,9 @@ export function getPlafons(params) {
       order: params?.order || 'desc',
       field: params?.field || 'id',
       filters: search,
+      id_cabang: params?.id_cabang || undefined,
+      id_perusahaan: params?.id_perusahaan || undefined,
+      id_principal: params?.id_principal || undefined,
       columns: JSON.stringify([
         'plafon.id as id',
         'plafon.id_customer as id_customer',

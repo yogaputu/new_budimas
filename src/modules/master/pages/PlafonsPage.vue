@@ -21,6 +21,7 @@ import {
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import {
   getLoginBranchId,
+  getLoginBranchIds,
   getRowBranchId,
   getRowBranchIds,
   getRowCompanyId,
@@ -491,14 +492,7 @@ const priceTypeOptions = computed(() =>
 );
 
 const tableRows = computed(() =>
-  scopeRowsByLoginBranch(items.value, authStore)
-    .filter((item) => !filters.id_cabang || String(getRowBranchId(item)) === String(filters.id_cabang))
-    .filter((item) => {
-      if (!filters.id_perusahaan) return true;
-      const principal = principals.value.find((principalItem) => String(principalItem.id) === String(item.id_principal));
-      return String(getRowCompanyId(principal)) === String(filters.id_perusahaan);
-    })
-    .filter((item) => !filters.id_principal || String(item.id_principal) === String(filters.id_principal))
+  items.value
     .map((item, index) => ({
       ...item,
       no: ((pagination.page - 1) * pagination.limit) + index + 1,
@@ -644,6 +638,9 @@ async function load() {
   try {
     const response = await getPlafons({
       search: filters.search.trim(),
+      id_cabang: filters.id_cabang || (!isSuperUser(authStore) ? getLoginBranchIds(authStore.user).join(',') : ''),
+      id_perusahaan: filters.id_perusahaan,
+      id_principal: filters.id_principal,
       page: pagination.page,
       limit: pagination.limit
     });
@@ -1445,6 +1442,7 @@ watch(
   () => filters.id_cabang,
   (value, previousValue) => {
     if (value === previousValue) return;
+    pagination.page = 1;
     filters.id_perusahaan = '';
     filters.id_principal = '';
     syncFilterCompanyFromBranch();
@@ -1455,6 +1453,7 @@ watch(
   () => filters.id_perusahaan,
   (value, previousValue) => {
     if (value === previousValue) return;
+    pagination.page = 1;
     filters.id_principal = '';
   }
 );
@@ -1692,7 +1691,7 @@ onMounted(async () => {
 
         <button
           class="rounded-2xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700"
-          @click="load"
+          @click="goToPage(1)"
         >
           Cari
         </button>

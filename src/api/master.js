@@ -137,8 +137,23 @@ export function getCustomers(params) {
   return api.get('/api/extra/getCustomer', { params });
 }
 
-export function getAllCustomers(params) {
-  return getBaseTableAll('customer', params);
+export async function getAllCustomers(params) {
+  // The generic /all endpoint stops at 5,000 rows. New customer IDs can
+  // fall beyond that limit, so collect every page in a stable ID order.
+  const rows = [];
+  let response;
+  for (let page = 0; ; page += 1) {
+    response = await api.get('/api/base/customer/paginate', {
+      params: { ...params, page, limit: 500, order_by: 'id', order: 'asc' }
+    });
+    const payload = response.data?.data ?? response.data;
+    if (!Array.isArray(payload?.pages)) {
+      throw new Error('Respons daftar customer tidak valid. Periksa API master customer.');
+    }
+    rows.push(...payload.pages);
+    if (rows.length >= Number(payload.total_data) || payload.pages.length < 500) break;
+  }
+  return { ...response, data: rows };
 }
 
 export function getCustomersTable(params) {

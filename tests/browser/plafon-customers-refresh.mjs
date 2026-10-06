@@ -17,17 +17,23 @@ try {
       if (url.pathname.includes('detail-login') || url.pathname.includes('/auth/')) data = { user, permissions: ['*'], menus: [] };
       else if (url.pathname.includes('getCabang')) data = [{ id: 1, kode: 'SLO', nama: 'Solo', id_perusahaan: 1 }];
       else if (url.pathname.includes('getPerusahaan')) data = [{ id: 1, kode: 'BMM', nama: 'Perusahaan', id_cabang_list: '1' }];
-      else if (url.pathname === '/api/base/customer/all') {
-        customerLoads++;
-        data = [{ id: 1, kode: 'OLD', nama: 'Customer lama', id_cabang: 1 }];
-        if (customerLoads > 1) data.push({ id: 2, kode: 'NEW', nama: 'Customer baru', id_cabang: 1 }, { id: 3, kode: 'OTHER', nama: 'Cabang lain', id_cabang: 2 });
+      else if (url.pathname === '/api/base/customer/paginate') {
+        const pageIndex = Number(url.searchParams.get('page'));
+        assert.equal(url.searchParams.get('order_by'), 'id');
+        if (pageIndex === 0) customerLoads++;
+        const customers = Array.from({ length: 5001 }, (_, i) => ({ id: i + 1, kode: 'OLD' + i, nama: 'Customer lama ' + i, id_cabang: 2 }));
+        if (customerLoads > 1) customers.push({ id: 5002, kode: 'NEW', nama: 'Customer baru', id_cabang: 2, id_cabang_list: '2,1' });
+        const offset = pageIndex * 500;
+        data = { pages: customers.slice(offset, offset + 500), total_data: customers.length };
       }
       return route.fulfill({ json: { data } });
     }
     if (url.origin !== 'http://127.0.0.1:5173') return route.abort();
     return route.continue();
   });
+  const initialLastPage = page.waitForResponse(r => r.url().includes('/customer/paginate') && new URL(r.url()).searchParams.get('page') === '10');
   await page.goto('http://127.0.0.1:5173/master/plafons');
+  await initialLastPage;
   await page.getByRole('heading', { name: 'Master Plafon', exact: true }).waitFor();
   await page.getByRole('button', { name: '+ Plafon', exact: true }).click();
   const branch = page.getByPlaceholder('Pilih cabang', { exact: true }).last();
@@ -39,10 +45,11 @@ try {
   await customer.fill('Customer baru');
   await page.getByRole('button', { name: 'NEW - Customer baru', exact: true }).waitFor();
   assert.ok(customerLoads >= 2, 'Opening form must refresh customers loaded on page mount');
-  await customer.fill('Cabang lain');
-  assert.equal(await page.getByRole('button', { name: 'OTHER - Cabang lain', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'NEW - Customer baru', exact: true }).click();
+  await customer.fill('Customer lama');
+  assert.equal(await page.getByRole('button', { name: /^OLD/ }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: new customer appears without page reload; other branch stays excluded.');
+  console.log('PASS: customer beyond 5,000 appears after refresh via secondary branch; other branches stay excluded.');
 } finally {
   await browser.close();
 }

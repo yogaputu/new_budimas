@@ -367,7 +367,7 @@ const selectedPrincipalRaw = computed(() =>
 
 const customerOptions = computed(() => {
   const options = scopeRowsByLoginBranch(customers.value, authStore)
-    .filter((item) => !form.id_cabang || String(getRowBranchId(item)) === String(form.id_cabang))
+    .filter((item) => !form.id_cabang || getRowBranchIds(item).includes(String(form.id_cabang)))
     .map((item) => ({
       value: String(item.id),
       label: `${item.kode || '-'} - ${item.nama || 'Customer'}`
@@ -451,7 +451,7 @@ const selectedUser = computed(() =>
 );
 
 const salesOptions = computed(() => {
-  const selectedCustomerCabang = selectedCustomer.value?.id_cabang || form.id_cabang;
+  const selectedCustomerCabang = form.id_cabang || selectedCustomer.value?.id_cabang;
   const scopedSalesRows = scopeSalesRowsByLogin(salesRows.value, authStore);
 
   const sourceRows = selectedCustomerCabang
@@ -584,7 +584,9 @@ const branchStatus = computed(() => {
     };
   }
 
-  const valid = String(selectedCustomer.value.id_cabang || '') === String(selectedSales.value.id_cabang || '');
+  const salesBranch = String(selectedSales.value.id_cabang || '');
+  const valid = getRowBranchIds(selectedCustomer.value).includes(salesBranch) &&
+    (!form.id_cabang || String(form.id_cabang) === salesBranch);
 
   return valid
     ? { type: 'success', text: 'Cabang customer dan sales cocok.' }
@@ -1097,7 +1099,7 @@ function openEdit(row) {
         form.id_sales = syntheticSalesValue;
       }
 
-      if (!form.id_cabang || rowCustomer?.id_cabang) {
+      if (!form.id_cabang) {
         const customer = rowCustomer || customers.value.find((item) => String(item.id) === String(form.id_customer));
         form.id_cabang = normalizeId(customer?.id_cabang);
       }
@@ -1513,7 +1515,7 @@ watch(
         form.id_tipe_harga = String(selectedCustomer.value.id_tipe_harga);
       }
 
-      const customerCabang = String(selectedCustomer.value.id_cabang || '');
+      const customerCabang = String(form.id_cabang || selectedCustomer.value.id_cabang || '');
 
       if (customerCabang && selectedSales.value && String(selectedSales.value.id_cabang || '') !== customerCabang) {
         form.id_sales = '';

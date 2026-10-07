@@ -23,8 +23,12 @@ const authStore = useAuthStore();
 const filters = reactive({
   id_cabang: '',
   id_perusahaan: '',
-  sales_order_id: ''
+  sales_order_id: '',
+  search: ''
 });
+
+const revisionCursors = ref([null]);
+const revisionPagination = ref({ has_more: false, next_cursor: null });
 
 const form = reactive({
   nama_fakturist: ''
@@ -259,7 +263,7 @@ function getInvoiceSalesOrderIds(row) {
 
 function resolveInvoiceDetailRequest(row) {
   const ids = getInvoiceSalesOrderIds(row);
-  const params = {};
+  const params = { revision_context: 1, include_batch_invoice: 1, id_faktur: row?.id_faktur || undefined };
 
   if (row?.id_order_batch && ids.length) {
     params.id_order_batch = row.id_order_batch;
@@ -480,7 +484,8 @@ function sortRevisionRoutes(rows) {
   });
 }
 
-async function loadRoutes() {
+async function loadRoutes(keepPage = false) {
+  if (keepPage !== true) revisionCursors.value = [null];
   if (!filters.id_cabang) {
     errorMessage.value = 'Pilih cabang terlebih dahulu.';
     return;
@@ -499,9 +504,15 @@ async function loadRoutes() {
   try {
     const response = await getRevisionRoutes({
       id_cabang: filters.id_cabang,
+      id_perusahaan: filters.id_perusahaan || undefined,
+      search: filters.search || undefined,
+      cursor: revisionCursors.value.at(-1) || undefined,
+      limit: 50,
       sales_order_id: filters.sales_order_id || undefined
     });
-    routeRows.value = sortRevisionRoutes(normalizeList(unwrapResponse(response)));
+    const payload = unwrapResponse(response);
+    revisionPagination.value = payload?.pagination || { has_more: false, next_cursor: null };
+    routeRows.value = sortRevisionRoutes(normalizeList(payload?.routes || payload));
     if (!routeRows.value.length) {
       feedback.value = 'Belum ada faktur yang perlu revisi pada cabang ini.';
     } else if (filters.sales_order_id) {
@@ -512,6 +523,18 @@ async function loadRoutes() {
   } finally {
     loading.routes = false;
   }
+}
+
+async function nextRevisionPage() {
+  if (!revisionPagination.value.has_more || loading.routes) return;
+  revisionCursors.value.push(revisionPagination.value.next_cursor);
+  await loadRoutes(true);
+}
+
+async function previousRevisionPage() {
+  if (revisionCursors.value.length <= 1 || loading.routes) return;
+  revisionCursors.value.pop();
+  await loadRoutes(true);
 }
 
 async function selectRoute(row) {
@@ -527,6 +550,8 @@ async function selectRoute(row) {
   try {
     const response = await getRevisionInvoices({
       id_cabang: filters.id_cabang,
+      id_perusahaan: filters.id_perusahaan || undefined,
+      invoice_ids: row.id_faktur || undefined,
       id_rute: row.id_rute,
       id_armada: row.id_armada,
       id_driver: row.id_driver,
@@ -756,6 +781,21 @@ watch(
         <button class="self-end rounded-xl bg-amber-600 px-4 py-3 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60" :disabled="!canSubmit" @click="submitRevision">
           {{ loading.submit ? 'Memproses...' : 'Submit Revisi Faktur' }}
         </button>
+      </div>
+      <label class="mt-4 block text-sm text-slate-600">
+        Cari nomor faktur, nomor order, kode atau nama customer
+        <input v-model="filters.search" class="mt-1 w-full rounded-xl border border-slate-200 px-4 py-3" placeholder="Cari di seluruh faktur revisi" @keyup.enter="loadRoutes()" />
+      </label>
+      <p v-if="filters.sales_order_id" class="mt-2 text-sm text-amber-700">
+        Difilter dari order #{{ filters.sales_order_id }}.
+        <button class="underline" @click="filters.sales_order_id = ''; loadRoutes()">Tampilkan semua revisi</button>
+      </p>
+      <div class="mt-3 flex items-center justify-between gap-3 text-sm">
+        <span>Halaman {{ revisionCursors.length }} · maksimal 50 faktur, dikelompokkan menurut rute</span>
+        <div class="flex gap-3">
+          <button :disabled="loading.routes || revisionCursors.length <= 1" class="disabled:opacity-40" @click="previousRevisionPage">Sebelumnya</button>
+          <button :disabled="loading.routes || !revisionPagination.has_more" class="disabled:opacity-40" @click="nextRevisionPage">Berikutnya</button>
+        </div>
       </div>
     </section>
 

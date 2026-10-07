@@ -1,4 +1,5 @@
 <script setup>
+import { returStatusOptions, returStatusLabel } from '../returStatus';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getBranches, getCompanies, getPrincipals, getSales } from '@/api/master';
@@ -121,11 +122,7 @@ const salesOptions = computed(() =>
     }))
 );
 
-const statusOptions = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'on_process', label: 'On Proses' },
-  { value: 'canceled', label: 'Batal' }
-];
+const statusOptions = returStatusOptions;
 
 const filterFields = computed(() => [
   { key: 'companyId', label: 'Perusahaan', type: 'search-select', options: companyOptions.value, placeholder: 'Semua perusahaan', disabled: shouldLockBusinessScope.value && !!fallbackCompanyId.value },
@@ -276,14 +273,7 @@ function resolveNextStep(item) {
 }
 
 function resolveReturBusinessStatus(item) {
-  const status = String(item?.status_request ?? '');
-  if (status === '9') return 'Batal';
-  if (status === '0') return 'Pending';
-  if (status === '1') return 'KPR Dicetak';
-  if (status === '2') return 'Menunggu QC Gudang';
-  if (status === '4') return 'QC Gudang Selesai';
-  if (status === '3') return 'Credit Note';
-  return item?.status_request_label || '-';
+  return returStatusLabel(item);
 }
 
 function normalizeDetailRow(item) {
@@ -428,7 +418,8 @@ async function loadReturRows(preserveRequestId = null) {
       user_id: filters.salesUserId || (canUseLoginScope.value ? fallbackUserId.value : undefined),
       id_cabang: filters.branchId || (shouldLockBusinessScope.value ? fallbackBranchId.value : undefined),
       id_perusahaan: filters.companyId || undefined,
-      status_group: filters.status || undefined,
+      status: filters.status || undefined,
+      status_group: filters.status ? undefined : 'all',
       date_from: filters.dateFrom || undefined,
       date_to: filters.dateTo || undefined,
       search: filters.search || undefined

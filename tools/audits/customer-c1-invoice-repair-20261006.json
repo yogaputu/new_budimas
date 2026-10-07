@@ -1,0 +1,236 @@
+{
+  "status": "COMMITTED",
+  "committed_at": "2026-10-06T03:00:35.665857+00:00",
+  "backup": "/www/backup/customer-c1-invoice-20261006.i4tncu5z",
+  "before_sha256": "3e6263ce4c8de1d3f49eef71230c79245612443d6bbb8b3215502c02d6b0dc20",
+  "invoice_id": 66059040,
+  "invoice_total": 2265522,
+  "changes": [
+    {
+      "table": "faktur",
+      "id": 66059040,
+      "before": {
+        "total_penjualan": 1100022,
+        "dpp": 1100000,
+        "pajak": 22,
+        "subtotal_penjualan": 1100000
+      },
+      "after": {
+        "total_penjualan": 2265522,
+        "dpp": 2150000,
+        "pajak": 115522,
+        "subtotal_penjualan": 2150000
+      }
+    },
+    {
+      "table": "sales_order",
+      "id": 66062181,
+      "before": {
+        "total_order": 1158530.23
+      },
+      "after": {
+        "total_order": 1100022
+      }
+    },
+    {
+      "table": "sales_order",
+      "id": 66062182,
+      "before": {
+        "total_order": 1100000
+      },
+      "after": {
+        "total_order": 1165500
+      }
+    },
+    {
+      "table": "plafon",
+      "id": 173127,
+      "before": {
+        "sisa_bon": 99772240.56
+      },
+      "after": {
+        "sisa_bon": 99433007.56
+      }
+    },
+    {
+      "table": "plafon",
+      "id": 173129,
+      "before": {
+        "sisa_bon": 111465705.53999999
+      },
+      "after": {
+        "sisa_bon": 97377076.65
+      }
+    },
+    {
+      "table": "plafon",
+      "id": 192927,
+      "before": {
+        "sisa_bon": 72740834
+      },
+      "after": {
+        "sisa_bon": 70418580
+      }
+    }
+  ],
+  "credit_summary": [
+    {
+      "plafon_id": 173127,
+      "principal_id": 5,
+      "limit": 100000000,
+      "before": 99772240.56,
+      "after": 99433007.56,
+      "receivable": 0,
+      "open_order_reservation": 566992.44,
+      "final_receipts": 339233,
+      "order_count": 5
+    },
+    {
+      "plafon_id": 173129,
+      "principal_id": 232,
+      "limit": 100000000,
+      "before": 111465705.53999999,
+      "after": 97377076.65,
+      "receivable": 2273273.35,
+      "open_order_reservation": 349650,
+      "final_receipts": 17063158,
+      "order_count": 20
+    },
+    {
+      "plafon_id": 192927,
+      "principal_id": 33,
+      "limit": 100000000,
+      "before": 72740834,
+      "after": 70418580,
+      "receivable": 21149194,
+      "open_order_reservation": 8432226,
+      "final_receipts": 3300077,
+      "order_count": 40
+    },
+    {
+      "plafon_id": 192928,
+      "principal_id": 70,
+      "limit": 100000000,
+      "before": 100000000,
+      "after": 100000000,
+      "receivable": 0,
+      "open_order_reservation": 0,
+      "final_receipts": 0,
+      "order_count": 0
+    }
+  ],
+  "company_receivable": 23422467.35,
+  "updated_rows": 6,
+  "customer": {
+    "id": 89330,
+    "kode": "C1",
+    "nama": "Customer 1 (Test)",
+    "id_cabang": 5,
+    "id_perusahaan": 1
+  },
+  "user_confirmation": "Two principals in one order/invoice; no revision or return; total should be the previously proposed detail sum around Rp2 million; wholly unpaid.",
+  "verification": [
+    {
+      "check": "database_after_commit",
+      "updated_rows": 6,
+      "only_planned_fields_changed": true,
+      "payments_unchanged": true
+    },
+    {
+      "check": "lph_candidate_api",
+      "row_count": 1,
+      "invoice": {
+        "id_faktur": 66059040,
+        "no_faktur": "NPBMMSLO-2609000010",
+        "total_penjualan": 2265522,
+        "sisa_pembayaran": 2265522,
+        "nominal_retur": 0,
+        "kode_cn": "",
+        "tanggal_jatuh_tempo": "2026-10-11",
+        "lph_source": "GABUNGAN"
+      }
+    },
+    {
+      "check": "sales_order_context_api",
+      "plafon_id": 173127,
+      "values": {
+        "Plafon": 100000000,
+        "SisaPlafon": 99433007.56,
+        "Piutang": 23422467.35,
+        "PlafonTerm": 24
+      }
+    },
+    {
+      "check": "sales_order_context_api",
+      "plafon_id": 173129,
+      "values": {
+        "Plafon": 100000000,
+        "SisaPlafon": 97377076.65,
+        "Piutang": 23422467.35,
+        "PlafonTerm": 24
+      }
+    },
+    {
+      "check": "sales_order_context_api",
+      "plafon_id": 192927,
+      "values": {
+        "Plafon": 100000000,
+        "SisaPlafon": 70418580,
+        "Piutang": 23422467.35,
+        "PlafonTerm": 24
+      }
+    },
+    {
+      "check": "sales_order_context_api",
+      "plafon_id": 192928,
+      "values": {
+        "Plafon": 100000000,
+        "SisaPlafon": 100000000,
+        "Piutang": 23422467.35,
+        "PlafonTerm": 24
+      }
+    },
+    {
+      "check": "combined_invoice_links",
+      "rows": [
+        {
+          "no_faktur": "NPBMMSLO-2609000010",
+          "total_penjualan": 2265522,
+          "total_dana_diterima": 0,
+          "status_faktur": 2,
+          "principal": "Principal 2 (Test)",
+          "no_order": "SO-20260914-134431",
+          "total_order": 1100022,
+          "principal_invoice_total": 1100022
+        },
+        {
+          "no_faktur": "NPBMMSLO-2609000010",
+          "total_penjualan": 2265522,
+          "total_dana_diterima": 0,
+          "status_faktur": 2,
+          "principal": "Principal 1 (Test)",
+          "no_order": "SO-20260914-134431",
+          "total_order": 1165500,
+          "principal_invoice_total": 1165500
+        }
+      ]
+    }
+  ],
+  "unit_tests_passed": 19,
+  "repeat_dry_run_changes": 0,
+  "preserved": [
+    "Invoice/payment statuses",
+    "Every receipt and credit-note record",
+    "Invoice principal detail amounts",
+    "Historical draft and promotion snapshots",
+    "Stock",
+    "Previously repaired due dates",
+    "Other customers"
+  ],
+  "scope_notes": [
+    "LPH candidate is one parent invoice and now carries both principals' full outstanding. No LPH document created; target has no stored LPH links.",
+    "Only operational data and cached credit balances repaired. Application runtime and APKs were not changed.",
+    "Prior ERP-vs-Mobile receivable report query mismatch and LPH list pagination issue are not resolved by this data repair.",
+    "Limited legacy journal reference lookup found no matching invoice entry; no journal entries were changed."
+  ]
+}

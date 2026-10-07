@@ -63,6 +63,8 @@ const detailColumns = [
   { key: 'nama_akun', label: 'Akun' },
   { key: 'jenis_transaksi', label: 'Jenis Transaksi' },
   { key: 'keterangan', label: 'Keterangan' },
+  { key: 'no_faktur', label: 'Faktur' },
+  { key: 'sumber_dana', label: 'Sumber Dana' },
   {
     key: 'debit_label',
     label: 'Debit',

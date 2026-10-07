@@ -1,6 +1,7 @@
 // Mocked browser regression; every API request is intercepted.
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import assert from 'node:assert/strict';
+const origin=process.env.TEST_BASE_URL || 'http://127.0.0.1:5173';
 (async()=>{
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--no-sandbox']});
 try {
@@ -18,12 +19,12 @@ await p.route('**/*',async route=>{
  else if(url.pathname.includes('list-orders')) {requests.push(url);data={items:[{id:1,status_order:3,no_order:'SO1',workflow_status:'CKC',workflow_status_label:'Menunggu checker'}],status_options:[{value:'DRF',label:'DRF · Draft kiriman'},{value:'CKC',label:'CKC · Menunggu checker'}],pagination:{page:1,per_page:50,total:1,total_pages:1},summary:{total_orders:1}};}
  return route.fulfill({json:{data}});
  }
- if(url.origin!=='http://127.0.0.1:5173')return route.abort();return route.continue();
+ if(url.origin!==origin)return route.abort();return route.continue();
 });
-await p.goto('http://127.0.0.1:5173/stock-opname/report');await p.getByRole('cell',{name:'SKU1',exact:true}).waitFor();
+await p.goto(origin+'/stock-opname/report');await p.getByRole('cell',{name:'SKU1',exact:true}).waitFor();
 assert.deepEqual(await p.locator('thead th').allTextContents(),['Perusahaan','Cabang','Principal','Kode SKU','Produk','Stok Ready','Good','Bad','In Transit','Satuan','Last Update']);
 await p.getByRole('cell',{name:'2026-10-05 15:30:00',exact:true}).waitFor();
-await p.goto('http://127.0.0.1:5173/sales-order');await p.getByRole('cell',{name:'CKC · Menunggu checker',exact:true}).waitFor();
+await p.goto(origin+'/sales-order');await p.getByRole('cell',{name:'CKC · Menunggu checker',exact:true}).waitFor();
 const select=p.locator('select').filter({has:p.locator('option[value="CKC"]')});
 assert.equal(await select.count(),1);assert.equal(await select.locator('option[value="PCK"]').count(),0);
 await select.selectOption('CKC');await Promise.all([p.waitForResponse(r=>r.url().includes('list-orders') && new URL(r.url()).searchParams.get('workflow_status')==='CKC'),p.getByRole('button',{name:'Terapkan',exact:true}).click()]);

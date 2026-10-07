@@ -1,0 +1,159 @@
+{
+  "release": "erp-revision-20261007",
+  "status": "DEPLOYED_AND_VERIFIED",
+  "stock_authority": "Laporan Stok Gudang, confirmed by user. Display READY once per product/branch; retain real rack/batch quantities and show mapping difference against GOOD. Do not overwrite ERP with legacy rack balances or invent locations.",
+  "self_approval": "Allowed with explicit finance.receipts.approve or m.finance.kw.approve. Cancellation maker/requester separation remains unchanged.",
+  "changes": [
+    "Exact return status options and shared concise table labels; all includes canceled returns.",
+    "Canonical sales.id from id_sales, deduplicated options, search and scoped branch selection.",
+    "Separate /finance/bank-input; non-cash list shows Debit only with no create/import/edit/delete controls.",
+    "Correct sales identity makes approved manual cash available to matching LPH; pending approval and ownership restrictions remain.",
+    "Menu/action permission bridge in UI and API, independent CRUD/Approve and per-kind deposit writes; no role-name bypass.",
+    "Placement summary reads the stock report, one row per SKU/branch; physical rack details separate, 30-second active-page refresh, seed stock no longer sums three views."
+  ],
+  "tests": {
+    "backend": 480,
+    "frontend_unit": 64,
+    "browser_scripts": [
+      "tests/browser/october7-revisions.mjs",
+      "tests/browser/payment-demo-alignment.mjs",
+      "tests/browser/receipt-source-partial.mjs"
+    ],
+    "production_build": "passed",
+    "git_diff_check": "passed"
+  },
+  "build_directory": "/tmp/budimas-oct7-deploy.oUvFv3/erp",
+  "stock_aggregation_note": "Live preflight found multiple stok rows for one SKU/branch. Placement sums READY and GOOD exactly as the report and counts repeated physical-rack totals once. No balances or physical bin/batch records are changed.",
+  "schema_migration_required": false,
+  "production_data_changed": true,
+  "apk_changed": false,
+  "deployment": {
+    "completed_at": "2026-10-07T03:40:53.789685+00:00",
+    "server": "58.147.185.142",
+    "backup_directory": "/www/backup/budimas-oct7-release.YOVunC",
+    "database_backup_bytes": 1672719824,
+    "database_backup_sha256": "00686142a121818fbfa1f361830539414f3aaadf5c72b77b72592c4147964681",
+    "database_backup_catalog_verified": true,
+    "release_sha256": "646af40ab0df27fb6e76a45e2ab4439994e394ac88a5c13deb0e4024c647df5f",
+    "api_runtime_files": 5,
+    "frontend_files_per_webroot": 197,
+    "public_file_hash_checks": 394,
+    "origins": ["https://erp.budimas.swakarya.my.id", "https://erp.budimas.swakarya.my.id:9092"],
+    "live_api_checks": 18,
+    "it_admin_and_supervisor_view_and_approve_permission": "passed; finalize requests deliberately rejected for missing confirmation before any business write",
+    "sales_without_approve": "403 as expected",
+    "manual_cash_preview": "passed: LPH 110, invoice 79158999, source 11, allocation 100.25; no receipt saved",
+    "anonymous_auth_and_android_webview_cors": "passed",
+    "protected_configs_and_apk": "unchanged",
+    "schema_migrations": 0,
+    "financial_records_and_stock": "unchanged by deployment; only five id_sales corrections and five explicit maintenance audit entries",
+    "test_business_mutations": 0
+  },
+  "verified_data_correction": {
+    "status": "COMPLETED",
+    "note": "Five exact manual sources corrected from the old selector's users.id=772 to selected sales.id=334 (Sales 1 (Test)). Fresh before-images, scope/origin/allocation checks, row locks and audits preserved. Amounts, statuses, clearing, allocations and journals unchanged. No stock balances or locations changed.",
+    "audit_ids": [33, 34, 35, 36, 37],
+    "old_sales_fk": 772,
+    "selected_user_id": 772,
+    "correct_sales_fk": 334,
+    "funds": [
+      {
+        "id": 8,
+        "reference": "BG00001",
+        "kind": "GIRO"
+      },
+      {
+        "id": 9,
+        "reference": "TF00001",
+        "kind": "TRANSFER"
+      },
+      {
+        "id": 10,
+        "reference": "TF00002",
+        "kind": "TRANSFER"
+      },
+      {
+        "id": 11,
+        "reference": "CS00001",
+        "kind": "CASH"
+      },
+      {
+        "id": 12,
+        "reference": "TF00003",
+        "kind": "TRANSFER"
+      }
+    ]
+  },
+  "production_baselines": {
+    "apps/lib/finance_access.py": "269bf3e14738c49c8490702f723dd462b83e32375ed6139c3d8c959cbc9bfe0c",
+    "apps/routes/payment_workflow.py": "b333ff6c060dd6b81635592c6a71a8070c1cae22bdeee06ce7415f45e52b7a03",
+    "apps/services/FinanceWorkflow/service.py": "e25fbb00d8f6a9544d8d24e592a6d0b02df3f45fc4097370f5686ede06eab6ef",
+    "apps/routes/wms_mock.py": "f8bfc3cc302b55195e3f019a922090860ed4e3ea84ed7d52a166cc60204ce90d"
+  },
+  "source_files": [
+    {
+      "path": "/Users/macairm2/www/API/apps/lib/payment_permissions.py",
+      "sha256": "555444118c1aa1e1534b109a949b1d93a53c4cdf7e94d6c851081e3cd75a72c3"
+    },
+    {
+      "path": "/Users/macairm2/www/API/apps/lib/finance_access.py",
+      "sha256": "c894cfe3175db6c036af5ccb88c217fdffda9a8480e62a8899c3a8ba17a23c2b"
+    },
+    {
+      "path": "/Users/macairm2/www/API/apps/routes/payment_workflow.py",
+      "sha256": "2bf45f13cb686a56c7228606ad85d0e269dea546fb2a585b33840f74f9517101"
+    },
+    {
+      "path": "/Users/macairm2/www/API/apps/services/FinanceWorkflow/service.py",
+      "sha256": "c43e45a0ba8b97299df22c45f112e2948f0d190724972eba7a7b4ca8e804a802"
+    },
+    {
+      "path": "/Users/macairm2/www/API/apps/routes/wms_mock.py",
+      "sha256": "62024dac5a0a7bc6a3cb86a7449d6fd2c339997b431eb95e5ce17b3a280fb8e9"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/utils/paymentPermissions.js",
+      "sha256": "cbb411fa5ab16111e6b9ceeab7f5472fb5d9c485bbed3325e6e43015801f2d6c"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/app/stores/auth.js",
+      "sha256": "4d0b8514b5534162bf880b7e91a3879590d3e0e3ab588e0785b4a841c063aadc"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/app/router/index.js",
+      "sha256": "5d63c6d81e883766efe2ca77986c121353551392baabe777a6c4091f9b7bae94"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/shared/constants/navigation.js",
+      "sha256": "61e79464263432cfcef8450a7781e22845c9ab551396165538258bf6a08a4a27"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/shared/components/AppSearchSelect.vue",
+      "sha256": "6737b5084f6c66d6b0232d39c107531beaff2799a82f02d5797abe7ee257be2a"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/finance/depositSales.js",
+      "sha256": "e298564f0dd6261fdde5032e0fcbf3f87df24620dfd49da05a6301bd24e64ccf"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/finance/pages/ReceiptWorkflowPage.vue",
+      "sha256": "29f9272166151380f7200c9d97a1e1c1bf16ea31772b05a35f25780444e21ad2"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/sales-order/returStatus.js",
+      "sha256": "f93ecdc676b330edc6d4cee9b13edf7492774c2c2417c6bcf5d42deb818e7487"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/sales-order/pages/SalesReturListPage.vue",
+      "sha256": "dbf2357b6bc8b8bd1c5a6d7156ed6078247ffed9d4023bedb3346e7974fca9c4"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/wms/placementBalances.js",
+      "sha256": "1a2d61ece5814b782d2fef17063eb37138cd986d0b33516ab65d91c1ee730b36"
+    },
+    {
+      "path": "/Users/macairm2/www/new_budimas/src/modules/wms/pages/WmsDashboardPage.vue",
+      "sha256": "bd7e0f28a21df3bff43485d9641ff08704d6c4f0c6ef025e51d0764b2d2ca9e1"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { clearAuthSession, getAuthSession, setAuthSession } from '@/utils/sessio
 import { unwrapResponse } from '@/utils/api';
 import { navigationSections } from '@/shared/constants/navigation';
 import { roleCanAccessPermission } from '@/utils/roleAccess';
+import { paymentPermission } from '@/utils/paymentPermissions';
 
 function normalizeLoginData(payload) {
   return {
@@ -156,6 +157,8 @@ export const useAuthStore = defineStore('auth', {
       if (!permission) {
         return true;
       }
+      const paymentAccess = paymentPermission(this.permissions || [], permission);
+      if (paymentAccess !== null) return paymentAccess;
 
       const aliases = {
         'master.roles.view': [

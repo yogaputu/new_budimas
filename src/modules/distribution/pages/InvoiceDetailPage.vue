@@ -870,6 +870,8 @@ function buildShippingPayload() {
   const subtotal = detailProduk.reduce((total, item) => total + normalizeNumber(item.subtotal), 0);
   const diskonNota = detailProduk.reduce((total, item) => total + normalizeNumber(item.total_diskon), 0);
   const pajak = detailProduk.reduce((total, item) => total + normalizeNumber(item.ppn), 0);
+  const isCombinedInvoice = Boolean(invoiceHeader.value?.id_order_batch || selectedInvoice.value.id_order_batch)
+    || parseIds(selectedInvoice.value.id_sales_order).length > 1;
 
   return {
     id_rute: selectedRoute.value.id_rute,
@@ -887,12 +889,16 @@ function buildShippingPayload() {
           ...(selectedInvoice.value || {}),
           ...(invoiceHeader.value || {})
         },
-        rincian_pembayaran: {
-          subtotal,
-          diskon_nota: diskonNota,
-          pajak,
-          total_penjualan: subtotal - diskonNota + pajak
-        },
+        // Combined invoice amounts come from all approved principal details
+        // on the server, never from a potentially partial shipping table.
+        ...(isCombinedInvoice ? {} : {
+          rincian_pembayaran: {
+            subtotal,
+            diskon_nota: diskonNota,
+            pajak,
+            total_penjualan: subtotal - diskonNota + pajak
+          }
+        }),
         detail_produk: detailProduk
       }
     ]

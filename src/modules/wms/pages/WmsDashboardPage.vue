@@ -48,6 +48,8 @@ import {
   updateWmsRack
 } from '@/api/wms';
 import { getPrincipals, getProducts } from '@/api/master';
+import { getStockReport } from '@/api/stockOpname';
+import { placementBalances } from '../placementBalances';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import AppFormField from '@/shared/components/AppFormField.vue';
 import AppModal from '@/shared/components/AppModal.vue';
@@ -67,6 +69,10 @@ const rackModalOpen = ref(false);
 const principalGroupModalOpen = ref(false);
 const palletModalOpen = ref(false);
 const placementModalOpen = ref(false);
+const placementReport = ref([]);
+const placementSummary = computed(() => placementBalances(placementReport.value, placementRows.value, {
+  search:filters.placementSearch, rack:filters.placementRack, status:filters.placementStatus,
+}));
 const incomingPalletModalOpen = ref(false);
 const transferConfirmOpen = ref(false);
 const scannerOpen = ref(false);
@@ -884,6 +890,17 @@ const placementColumns = [
   { key: 'expired_date', label: 'Expired' },
   { key: 'status', label: 'Status', render: (row) => statusBadge(row.status) },
   { key: 'source_type', label: 'Sumber' }
+];
+const placementBalanceColumns = [
+  {key:'nama_cabang',label:'Cabang'},
+  {key:'kode_sku',label:'Kode SKU'},
+  {key:'nama_produk',label:'Produk'},
+  {key:'quantity',label:'Jumlah (Stok Ready)',render:r=>`${numberLabel(r.qty_pcs)} ${r.uom || 'PCS'}`},
+  {key:'qty_pcs',label:'Total PCS',render:r=>numberLabel(r.qty_pcs)},
+  {key:'jumlah_good',label:'GOOD',render:r=>numberLabel(r.jumlah_good)},
+  {key:'mapped_pcs',label:'Terdata di Rak',render:r=>numberLabel(r.mapped_pcs)},
+  {key:'mapping_gap',label:'Selisih Pemetaan',render:r=>numberLabel(r.mapping_gap)},
+  {key:'mapping_status',label:'Status Pemetaan'},
 ];
 
 const transactionColumns = [
@@ -3105,26 +3122,32 @@ function editPlacement(row) {
   setFeedback(`Penempatan ${row.kode_barang} di ${row.kode_rak} siap diedit.`);
 }
 
-async function loadPlacements() {
+let placementLoadSequence = 0;
+async function loadPlacements(silent = false) {
+  const sequence = ++placementLoadSequence;
   loading.placements = true;
   try {
-    const response = await getWmsPlacements({
+    const [response, report] = await Promise.all([getWmsPlacements({
       search: filters.placementSearch || undefined,
       kode_rak: filters.placementRack || undefined,
       status: filters.placementStatus || undefined,
       id_cabang: rackBranchId(),
       limit: 5000,
-    });
+    }), getStockReport({id_cabang:rackBranchId()})]);
+    if (sequence !== placementLoadSequence) return;
     placementRows.value = payloadRows(response);
+    placementReport.value = payloadRows(report);
     if (!placementRows.value.some((row) => String(row.id) === String(selectedPlacementId.value))) {
       selectedPlacementId.value = '';
     }
-    setFeedback(`Penempatan barang memuat ${placementRows.value.length.toLocaleString('id-ID')} baris.`);
+    if (silent !== true) setFeedback(`Penempatan barang memuat ${placementRows.value.length.toLocaleString('id-ID')} baris.`);
   } catch (error) {
+    if (sequence !== placementLoadSequence || silent === true) return;
     placementRows.value = [];
+    placementReport.value = [];
     setError(error, 'Penempatan barang belum bisa dimuat.');
   } finally {
-    loading.placements = false;
+    if (sequence === placementLoadSequence) loading.placements = false;
   }
 }
 
@@ -3465,6 +3488,7 @@ async function loadQuarantine() {
       expired_date: rowExpired(row),
       qty_good_input: Number(row.qty_pcs || 0),
       qty_bad_input: 0,
+      no_expiry_input: false,
       target_rack_input: row.target_rack || '',
       target_rack_options: [],
       target_rack_loading: false,
@@ -3495,7 +3519,12 @@ async function submitQuarantineQc(row) {
       target_rack: row.target_rack_input,
       batch_number: rowBatch(row),
       expired_date: rowExpired(row),
-      qc_name: filters.qcName
+      qc_name: filters.qcName,
+      ...(['MANUAL_REQUIRED', 'MULTIPLE'].includes(row.lot_status) ? {
+        lot_confirmed: true,
+        no_expiry: row.no_expiry_input,
+        expired_date: row.no_expiry_input ? null : rowExpired(row)
+      } : {})
     });
     const result = unwrapResponse(response) || {};
     setFeedback(result.message || `QC ${row.kode_barang} selesai.`);
@@ -4059,9 +4088,14 @@ async function refreshAll() {
 }
 
 let incidentRefreshTimer;
+watch(activeTab, tab => { if (tab === 'placements' && !loading.placements) loadPlacements(); });
 onMounted(() => {
   refreshAll();
-  incidentRefreshTimer = setInterval(() => { if (!document.hidden) loadPickingIncidents(true); }, 30000);
+  incidentRefreshTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadPickingIncidents(true);
+    if (activeTab.value === 'placements' && !placementModalOpen.value && !loading.placements) loadPlacements(true);
+  }, 30000);
 });
 onBeforeUnmount(() => clearInterval(incidentRefreshTimer));
 onBeforeUnmount(stopQrScanner);
@@ -4395,6 +4429,11 @@ onBeforeUnmount(stopQrScanner);
             </div>
           </div>
 
+          <h3 class="font-semibold">Saldo Penempatan — Acuan Laporan Stok Gudang</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah dan Total PCS memakai STOK READY dari laporan, satu kali per produk/cabang. Filter rak memilih produk, bukan membagi saldo produk ke rak. Selisih pemetaan membandingkan GOOD dengan total rak Tetap/Lorong; tidak mengubah saldo laporan atau mengarang batch/lokasi. Saldo dimuat ulang tiap 30 detik saat halaman aktif.</p>
+          <AppTable :rows="placementSummary" :columns="placementBalanceColumns" :loading="loading.placements" row-key="id" empty-message="Saldo laporan belum tersedia untuk filter ini." />
+          <h3 class="font-semibold">Rincian Lokasi & Batch</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah di bawah adalah catatan fisik masing-masing rak, bukan saldo transaksi. Klik baris untuk memperbaiki pemetaan berdasarkan barang sebenarnya. Selisih positif berarti lokasi belum lengkap; negatif berarti catatan rak melebihi GOOD. Data ini tidak menimpa Laporan Stok Gudang.</p>
           <AppTable :rows="placementRows" :columns="placementColumns" :loading="loading.placements" :clickable-rows="true" row-key="id" :selected-key="selectedPlacementId" empty-message="Penempatan barang belum tersedia." @row-click="editPlacement" />
         </section>
 
@@ -4654,6 +4693,13 @@ onBeforeUnmount(stopQrScanner);
                   <h3 class="mt-1 text-lg font-bold text-slate-950 dark:text-white">{{ row.kode_barang }} · {{ row.nama_barang }}</h3>
                   <p class="mt-1 text-sm text-slate-500">Total {{ numberLabel(row.qty_pcs) }} PCS · {{ numberLabel(row.qty_ct) }} CT + {{ numberLabel(row.qty_pc) }} PC</p>
                   <p class="mt-1 text-sm text-slate-500">Batch: {{ row.batch_number || '-' }} · Expired: {{ row.expired_date || '-' }}</p>
+                  <div v-if="['MANUAL_REQUIRED', 'MULTIPLE'].includes(row.lot_status)" class="mt-3 space-y-2">
+                    <p class="text-sm text-amber-600">Cocokkan batch/expired fisik barang. Pisahkan detail retur jika berisi beberapa lot.</p>
+                    <p v-for="lot in row.lot_options || []" :key="`${lot.batch_number}-${lot.expired_date}`" class="text-xs text-slate-500">Lot asal: {{ lot.batch_number || '-' }} · {{ lot.expired_date || '-' }}</p>
+                    <AppFormField v-model="row.batch_number" label="Batch fisik barang" />
+                    <AppFormField v-model="row.expired_date" type="date" label="Expired" :readonly="row.no_expiry_input" />
+                    <label class="flex items-center gap-2 text-sm"><input v-model="row.no_expiry_input" type="checkbox" />Produk tanpa expired (sudah diperiksa)</label>
+                  </div>
                 </div>
                 <AppFormField v-model="row.qty_good_input" type="number" label="GOOD (PCS)" />
                 <AppFormField v-model="row.qty_bad_input" type="number" label="BAD (PCS)" />

@@ -1,0 +1,2104 @@
+{
+  "date": "2026-10-05",
+  "customer": {
+    "id": 89330,
+    "kode": "C1",
+    "nama": "Customer 1 (Test)",
+    "id_cabang": 5,
+    "cabang": "SOLO",
+    "id_perusahaan": 1
+  },
+  "scope": "Read-only production verification of stock consistency and customer credit/receivables/payment terms.",
+  "business_mutations": 0,
+  "application_source_changes": 0,
+  "physical_device_qa": false,
+  "point_1": {
+    "status": "MATCH_FOR_CHECKED_TEST_PRODUCTS",
+    "browser_report_verified": true,
+    "products": [
+      {
+        "sku": "P2P1",
+        "erp_ready": 370,
+        "mobile_sales_ready": 370,
+        "wms_picking_query_ready": 370,
+        "driver_manifest_query_ready": 370
+      },
+      {
+        "sku": "P2P2",
+        "erp_ready": 370,
+        "mobile_sales_ready": 370,
+        "wms_picking_query_ready": 370,
+        "driver_manifest_query_ready": 370
+      }
+    ],
+    "notes": "ERP checked in logged-in Chrome and read-only HTTP. Sales checked with existing owning sales session, including real visit 828824. WMS/Driver checked using exact deployed SELECT statements under READ ONLY to avoid legacy GET backfill side effects. Not a physical inventory recount."
+  },
+  "point_2": {
+    "status": "NOT_FULLY_ALIGNED",
+    "principal_2": {
+      "limit": 100000000,
+      "remaining_limit": 72740834,
+      "term_days": 24,
+      "visit_id": 828824,
+      "visit_api_http": 200
+    },
+    "lph_due_dates": {
+      "lph_ids": [
+        110,
+        111
+      ],
+      "order_date": "2026-10-05",
+      "term_days": 24,
+      "expected": "2026-10-29",
+      "api_actual": "2026-10-29",
+      "stored_order_due_null": true
+    },
+    "issues": [
+      {
+        "type": "MASTER_REMAINING_CREDIT_EXCEEDS_LIMIT",
+        "principal": "Principal 1 (Test)",
+        "plafon_id": 173129,
+        "limit": 100000000,
+        "remaining": 111465705.54,
+        "note": "Mobile matches master; originating ledger/data issue not corrected."
+      },
+      {
+        "type": "CUSTOMER_COMPANY_RECEIVABLE_MISMATCH",
+        "erp": 30197774.16,
+        "mobile": 22256967.35,
+        "difference": 7940806.81,
+        "principal_2_filtered_erp": 20003032,
+        "note": "Filtered Principal 2 amount is not directly comparable to the mobile all-company customer figure. Even with the same company scope, ERP includes rejected/undelivered orders, omits parent invoices, and deducts unfinalized mirrored payments. Minor legacy decimal differences also exist."
+      },
+      {
+        "type": "LPH_LIST_PAGE_OFFSET",
+        "frontend_page": 1,
+        "api_first_page": 0,
+        "search": "TTGBMM/202610/0002",
+        "page_1_result_count": 0,
+        "page_0_result_count": 1,
+        "note": "Verified through browser and both API requests. Due-date API is correct but normal list UI skips the first 50 records."
+      },
+      {
+        "type": "LEGACY_RECEIVABLE_DUE_DATES_BLANK",
+        "note": "Observed '-' on ERP customer receivable details. Existing SO due dates are null; this menu does not use the LPH due-date fallback."
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "check": "mobile_order_context",
+      "data": {
+        "id": 173127,
+        "principal": "ENERGIZER",
+        "limit_bon": 100000000,
+        "sisa_bon": 99772240.56,
+        "tempo": 24,
+        "top": 0,
+        "api": {
+          "Plafon": 100000000,
+          "SisaPlafon": 99772240.56,
+          "Piutang": 22256967.35,
+          "piutang_scope": "customer_company",
+          "PlafonTerm": 24
+        }
+      }
+    },
+    {
+      "check": "stock_comparison",
+      "data": {
+        "principal": "ENERGIZER",
+        "erp_rows": 118,
+        "mobile_rows": 100,
+        "compared": 17,
+        "mismatches": [],
+        "unmatched": [
+          {
+            "id": 22565,
+            "keys": [
+              "Brand",
+              "CustomerProductRule",
+              "HargaE",
+              "IsForbiddenOrder",
+              "IsRequiredOrder",
+              "KategoriCustomer",
+              "KategoriCustomerToko",
+              "KategoriIzin",
+              "Kode",
+              "Konversi2",
+              "Konversi3",
+              "Nama",
+              "NamaBrand",
+              "NamaPTAsli",
+              "NamaUnit",
+              "RuleLabel",
+              "RuleNotes",
+              "RuleType",
+              "Satuan",
+              "StokAkhir",
+              "StokWmsReady",
+              "Suggestion",
+              "TipeCustomer",
+              "Uom1Label",
+              "Uom2Label",
+              "Uom3Label",
+              "harga_produk",
+              "hasUom1",
+              "hasUom2",
+              "hasUom3",
+              "has_uom_1",
+              "has_uom_2",
+              "has_uom_3",
+              "id_ppn",
+              "id_produk",
+              "kategori_customer",
+              "kategori_customer_toko",
+              "kategori_izin",
+              "konversi_2",
+              "konversi_3",
+              "nama_principal",
+              "nama_produk",
+              "nama_unit",
+              "ppn",
+              "ppn_rate",
+              "satuan",
+              "sku",
+              "stok_akhir",
+              "suggestion",
+              "tipe_customer",
+              "uom1_label",
+              "uom2_label",
+              "uom3_label"
+            ]
+          },
+          {
+            "id": 27012,
+            "keys": [
+              "Brand",
+              "CustomerProductRule",
+              "HargaE",
+              "IsForbiddenOrder",
+              "IsRequiredOrder",
+              "KategoriCustomer",
+              "KategoriCustomerToko",
+              "KategoriIzin",
+              "Kode",
+              "Konversi2",
+              "Konversi3",
+              "Nama",
+              "NamaBrand",
+              "NamaPTAsli",
+              "NamaUnit",
+              "RuleLabel",
+              "RuleNotes",
+              "RuleType",
+              "Satuan",
+              "StokAkhir",
+              "StokWmsReady",
+              "Suggestion",
+              "TipeCustomer",
+              "Uom1Label",
+              "Uom2Label",
+              "Uom3Label",
+              "harga_produk",
+              "hasUom1",
+              "hasUom2",
+              "hasUom3",
+              "has_uom_1",
+              "has_uom_2",
+              "has_uom_3",
+              "id_ppn",
+              "id_produk",
+              "kategori_customer",
+              "kategori_customer_toko",
+              "kategori_izin",
+              "konversi_2",
+              "konversi_3",
+              "nama_principal",
+              "nama_produk",
+              "nama_unit",
+              "ppn",
+              "ppn_rate",
+              "satuan",
+              "sku",
+              "stok_akhir",
+              "suggestion",
+              "tipe_customer",
+              "uom1_label",
+              "uom2_label",
+              "uom3_label"
+            ]
+          },
+          {
+            "id": 22564,
+            "keys": [
+              "Brand",
+              "CustomerProductRule",
+              "HargaE",
+              "IsForbiddenOrder",
+              "IsRequiredOrder",
+              "KategoriCustomer",
+              "KategoriCustomerToko",
+              "KategoriIzin",
+              "Kode",
+              "Konversi2",
+              "Konversi3",
+              "Nama",
+              "NamaBrand",
+              "NamaPTAsli",
+              "NamaUnit",
+              "RuleLabel",
+              "RuleNotes",
+              "RuleType",
+              "Satuan",
+              "StokAkhir",
+              "StokWmsReady",
+              "Suggestion",
+              "TipeCustomer",
+              "Uom1Label",
+              "Uom2Label",
+              "Uom3Label",
+              "harga_produk",
+              "hasUom1",
+              "hasUom2",
+              "hasUom3",
+              "has_uom_1",
+              "has_uom_2",
+              "has_uom_3",
+              "id_ppn",
+              "id_produk",
+              "kategori_customer",
+              "kategori_customer_toko",
+              "kategori_izin",
+              "konversi_2",
+              "konversi_3",
+              "nama_principal",
+              "nama_produk",
+              "nama_unit",
+              "ppn",
+              "ppn_rate",
+              "satuan",
+              "sku",
+              "stok_akhir",
+              "suggestion",
+              "tipe_customer",
+              "uom1_label",
+              "uom2_label",
+              "uom3_label"
+            ]
+          }
+        ],
+        "samples": [
+          {
+            "id_produk": 521,
+            "sku": "CABP402",
+            "produk": "1012BP1X20 960",
+            "erp_ready": 0,
+            "sales_ready": 0,
+            "sales_legacy_stock": 0,
+            "uom": "PC",
+            "good": 1826,
+            "booked": -1336,
+            "in_transit": 10380
+          },
+          {
+            "id_produk": 510,
+            "sku": "CAMP064",
+            "produk": "1015 AA SW 04 085 AS 576RB ID",
+            "erp_ready": 1000,
+            "sales_ready": 1000,
+            "sales_legacy_stock": 0,
+            "uom": "PC",
+            "good": 1000,
+            "booked": 1,
+            "in_transit": 144
+          },
+          {
+            "id_produk": 482,
+            "sku": "CA2A054",
+            "produk": "1015 BP 20",
+            "erp_ready": 0,
+            "sales_ready": 0,
+            "sales_legacy_stock": 0,
+            "uom": "PC",
+            "good": 1390,
+            "booked": 1374,
+            "in_transit": 3931
+          },
+          {
+            "id_produk": 5397,
+            "sku": "CA2A054R",
+            "produk": "1015 BP 20 REPACK",
+            "erp_ready": 1000,
+            "sales_ready": 1000,
+            "sales_legacy_stock": 0,
+            "uom": "PC",
+            "good": 1000,
+            "booked": 0,
+            "in_transit": 0
+          },
+          {
+            "id_produk": 484,
+            "sku": "CAMP061",
+            "produk": "1015 BP 4",
+            "erp_ready": 0,
+            "sales_ready": 0,
+            "sales_legacy_stock": 0,
+            "uom": "PK",
+            "good": 17259,
+            "booked": -15802,
+            "in_transit": 24426
+          }
+        ]
+      }
+    },
+    {
+      "check": "mobile_order_context",
+      "data": {
+        "id": 173129,
+        "principal": "Principal 1 (Test)",
+        "limit_bon": 100000000,
+        "sisa_bon": 111465705.53999999,
+        "tempo": 24,
+        "top": 24,
+        "api": {
+          "Plafon": 100000000,
+          "SisaPlafon": 111465705.53999999,
+          "Piutang": 22256967.35,
+          "piutang_scope": "customer_company",
+          "PlafonTerm": 24
+        }
+      }
+    },
+    {
+      "check": "stock_comparison",
+      "data": {
+        "principal": "Principal 1 (Test)",
+        "erp_rows": 2,
+        "mobile_rows": 2,
+        "compared": 2,
+        "mismatches": [],
+        "unmatched": [],
+        "samples": [
+          {
+            "id_produk": 27687,
+            "sku": "P1P1",
+            "produk": "P1 - Produk 1",
+            "erp_ready": 2025,
+            "sales_ready": 2025,
+            "sales_legacy_stock": 0,
+            "uom": "Pieces",
+            "good": 2025,
+            "booked": 15,
+            "in_transit": 2000
+          },
+          {
+            "id_produk": 49048,
+            "sku": "P1P2",
+            "produk": "P1 - Produk 2",
+            "erp_ready": 2025,
+            "sales_ready": 2025,
+            "sales_legacy_stock": 0,
+            "uom": "Pieces",
+            "good": 2025,
+            "booked": 15,
+            "in_transit": 505
+          }
+        ]
+      }
+    },
+    {
+      "check": "mobile_order_context",
+      "data": {
+        "id": 192927,
+        "principal": "Principal 2 (Test)",
+        "limit_bon": 100000000,
+        "sisa_bon": 72740834,
+        "tempo": 24,
+        "top": 0,
+        "api": {
+          "Plafon": 100000000,
+          "SisaPlafon": 72740834,
+          "Piutang": 22256967.35,
+          "piutang_scope": "customer_company",
+          "PlafonTerm": 24
+        }
+      }
+    },
+    {
+      "check": "stock_comparison",
+      "data": {
+        "principal": "Principal 2 (Test)",
+        "erp_rows": 2,
+        "mobile_rows": 2,
+        "compared": 2,
+        "mismatches": [],
+        "unmatched": [],
+        "samples": [
+          {
+            "id_produk": 1487,
+            "sku": "P2P1",
+            "produk": "P2 - Produk 1",
+            "erp_ready": 370,
+            "sales_ready": 370,
+            "sales_legacy_stock": 0,
+            "uom": "Pieces",
+            "good": 370,
+            "booked": 245,
+            "in_transit": 550
+          },
+          {
+            "id_produk": 1493,
+            "sku": "P2P2",
+            "produk": "P2 - Produk 2",
+            "erp_ready": 370,
+            "sales_ready": 370,
+            "sales_legacy_stock": 0,
+            "uom": "Pieces",
+            "good": 370,
+            "booked": 260,
+            "in_transit": 0
+          }
+        ]
+      }
+    },
+    {
+      "check": "mobile_order_context",
+      "data": {
+        "id": 192928,
+        "principal": "PT GODREJ CONSUMER PRODUCTS INDONESIA",
+        "limit_bon": 100000000,
+        "sisa_bon": 100000000,
+        "tempo": 24,
+        "top": 0,
+        "api": {
+          "Plafon": 100000000,
+          "SisaPlafon": 100000000,
+          "Piutang": 22256967.35,
+          "piutang_scope": "customer_company",
+          "PlafonTerm": 24
+        }
+      }
+    },
+    {
+      "check": "stock_comparison",
+      "data": {
+        "principal": "PT GODREJ CONSUMER PRODUCTS INDONESIA",
+        "erp_rows": 0,
+        "mobile_rows": 0,
+        "compared": 0,
+        "mismatches": [],
+        "unmatched": [],
+        "samples": []
+      }
+    },
+    {
+      "check": "erp_receivable",
+      "data": {
+        "id_principal": null,
+        "body": {
+          "result": [
+            {
+              "faktur_belum_lunas": 43,
+              "id_cabang": 5,
+              "id_customer": 89330,
+              "id_perusahaan": 1,
+              "jumlah_faktur": 73,
+              "kode_cabang": "SLO",
+              "kode_customer": "C1",
+              "kode_perusahaan": "BMM",
+              "nama_cabang": "SOLO",
+              "nama_customer": "Customer 1 (Test)",
+              "nama_perusahaan": "PT Budimas Makmur Mulia",
+              "principal_list": "ENERGIZER, Principal 1 (Test), Principal 2 (Test)",
+              "saldo_piutang": 30197774.16,
+              "tanggal_faktur_tertua": "Fri, 26 Jun 2026 00:00:00 GMT",
+              "total_bayar": 29363413.35,
+              "total_cn": 98501.4,
+              "total_retur": 0,
+              "total_tagihan": 59659688.91
+            }
+          ],
+          "summary": {
+            "total_bayar": 29363413.35,
+            "total_cn": 98501.4,
+            "total_customer": 1,
+            "total_saldo_piutang": 30197774.16,
+            "total_tagihan": 59659688.91
+          }
+        }
+      }
+    },
+    {
+      "check": "erp_receivable",
+      "data": {
+        "id_principal": 33,
+        "body": {
+          "result": [
+            {
+              "faktur_belum_lunas": 28,
+              "id_cabang": 5,
+              "id_customer": 89330,
+              "id_perusahaan": 1,
+              "jumlah_faktur": 40,
+              "kode_cabang": "SLO",
+              "kode_customer": "C1",
+              "kode_perusahaan": "BMM",
+              "nama_cabang": "SOLO",
+              "nama_customer": "Customer 1 (Test)",
+              "nama_perusahaan": "PT Budimas Makmur Mulia",
+              "principal_list": "Principal 2 (Test)",
+              "saldo_piutang": 20003032,
+              "tanggal_faktur_tertua": null,
+              "total_bayar": 11961021,
+              "total_cn": 0,
+              "total_retur": 0,
+              "total_tagihan": 31964053
+            }
+          ],
+          "summary": {
+            "total_bayar": 11961021,
+            "total_cn": 0,
+            "total_customer": 1,
+            "total_saldo_piutang": 20003032,
+            "total_tagihan": 31964053
+          }
+        }
+      }
+    },
+    {
+      "check": "erp_receivable",
+      "data": {
+        "id_principal": 232,
+        "body": {
+          "result": [
+            {
+              "faktur_belum_lunas": 13,
+              "id_cabang": 5,
+              "id_customer": 89330,
+              "id_perusahaan": 1,
+              "jumlah_faktur": 28,
+              "kode_cabang": "SLO",
+              "kode_customer": "C1",
+              "kode_perusahaan": "BMM",
+              "nama_cabang": "SOLO",
+              "nama_customer": "Customer 1 (Test)",
+              "nama_perusahaan": "PT Budimas Makmur Mulia",
+              "principal_list": "Principal 1 (Test)",
+              "saldo_piutang": 9627749.72,
+              "tanggal_faktur_tertua": "Fri, 26 Jun 2026 00:00:00 GMT",
+              "total_bayar": 17063159.35,
+              "total_cn": 98501.4,
+              "total_retur": 0,
+              "total_tagihan": 26789410.470000003
+            }
+          ],
+          "summary": {
+            "total_bayar": 17063159.35,
+            "total_cn": 98501.4,
+            "total_customer": 1,
+            "total_saldo_piutang": 9627749.72,
+            "total_tagihan": 26789410.470000003
+          }
+        }
+      }
+    },
+    {
+      "check": "erp_receivable",
+      "data": {
+        "id_principal": 5,
+        "body": {
+          "result": [
+            {
+              "faktur_belum_lunas": 2,
+              "id_cabang": 5,
+              "id_customer": 89330,
+              "id_perusahaan": 1,
+              "jumlah_faktur": 5,
+              "kode_cabang": "SLO",
+              "kode_customer": "C1",
+              "kode_perusahaan": "BMM",
+              "nama_cabang": "SOLO",
+              "nama_customer": "Customer 1 (Test)",
+              "nama_perusahaan": "PT Budimas Makmur Mulia",
+              "principal_list": "ENERGIZER",
+              "saldo_piutang": 566992.44,
+              "tanggal_faktur_tertua": null,
+              "total_bayar": 339233,
+              "total_cn": 0,
+              "total_retur": 0,
+              "total_tagihan": 906225.44
+            }
+          ],
+          "summary": {
+            "total_bayar": 339233,
+            "total_cn": 0,
+            "total_customer": 1,
+            "total_saldo_piutang": 566992.44,
+            "total_tagihan": 906225.44
+          }
+        }
+      }
+    },
+    {
+      "check": "erp_receivable",
+      "data": {
+        "id_principal": 70,
+        "body": {
+          "result": [],
+          "summary": {
+            "total_bayar": 0,
+            "total_cn": 0,
+            "total_customer": 0,
+            "total_saldo_piutang": 0,
+            "total_tagihan": 0
+          }
+        }
+      }
+    },
+    {
+      "check": "customer_lphs",
+      "data": [
+        {
+          "id": 111,
+          "kode_lph": "TTGBMM/202610/0002",
+          "status_dokumen": "DIKEMBALIKAN",
+          "tanggal_lph": "2026-10-05 00:00:00"
+        },
+        {
+          "id": 110,
+          "kode_lph": "TTGBMM/202610/0001",
+          "status_dokumen": "DIKEMBALIKAN",
+          "tanggal_lph": "2026-10-05 00:00:00"
+        },
+        {
+          "id": 107,
+          "kode_lph": "TTGBMM/202609/0003",
+          "status_dokumen": "DIKEMBALIKAN",
+          "tanggal_lph": "2026-09-29 00:00:00"
+        }
+      ]
+    },
+    {
+      "check": "lph_due_dates",
+      "data": {
+        "kode_lph": "TTGBMM/202610/0002",
+        "details": [
+          {
+            "id_faktur": 79159001,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2610000006",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-29",
+            "sisa_pembayaran": 1098900
+          },
+          {
+            "id_faktur": 79159002,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2610000007",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-29",
+            "sisa_pembayaran": 122100
+          },
+          {
+            "id_faktur": 79159003,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2610000008",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-29",
+            "sisa_pembayaran": 610500
+          }
+        ]
+      }
+    },
+    {
+      "check": "lph_due_dates",
+      "data": {
+        "kode_lph": "TTGBMM/202610/0001",
+        "details": [
+          {
+            "id_faktur": 79158999,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2610000004",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-29",
+            "sisa_pembayaran": 1343100
+          },
+          {
+            "id_faktur": 79159000,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2610000005",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-29",
+            "sisa_pembayaran": 1343100
+          }
+        ]
+      }
+    },
+    {
+      "check": "lph_due_dates",
+      "data": {
+        "kode_lph": "TTGBMM/202609/0003",
+        "details": [
+          {
+            "id_faktur": 76242496,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2609000012",
+            "tanggal_faktur": null,
+            "tanggal_jatuh_tempo": "2026-10-16",
+            "sisa_pembayaran": 1142856
+          },
+          {
+            "id_faktur": 76242500,
+            "id_sales_order": null,
+            "kode_customer": "C1",
+            "no_faktur": "NPBMMSLO-2609000017",
+            "tanggal_faktur": "2026-09-23",
+            "tanggal_jatuh_tempo": "2026-10-17",
+            "sisa_pembayaran": 1210022
+          }
+        ]
+      }
+    },
+    {
+      "check": "recent_order_products",
+      "data": [
+        {
+          "id_produk": 483,
+          "kode_sku": "CA2A069",
+          "nama": "915 AA-4 PERAK",
+          "id_principal": 5
+        },
+        {
+          "id_produk": 1487,
+          "kode_sku": "P2P1",
+          "nama": "P2 - Produk 1",
+          "id_principal": 33
+        },
+        {
+          "id_produk": 1493,
+          "kode_sku": "P2P2",
+          "nama": "P2 - Produk 2",
+          "id_principal": 33
+        },
+        {
+          "id_produk": 27687,
+          "kode_sku": "P1P1",
+          "nama": "P1 - Produk 1",
+          "id_principal": 232
+        },
+        {
+          "id_produk": 49048,
+          "kode_sku": "P1P2",
+          "nama": "P1 - Produk 2",
+          "id_principal": 232
+        }
+      ]
+    },
+    {
+      "check": "wms_stock_select",
+      "data": {
+        "task": {
+          "id": 4987,
+          "no_order": "SO-20261005124920-334-772",
+          "status": "DELIVERED"
+        },
+        "rows": [
+          {
+            "id_produk": 1487,
+            "product_code": "P2P1",
+            "product_name": "P2 - Produk 1",
+            "stok_ready": 370,
+            "available_quantity": 370,
+            "required_quantity": 25,
+            "picked_quantity": 25
+          },
+          {
+            "id_produk": 1493,
+            "product_code": "P2P2",
+            "product_name": "P2 - Produk 2",
+            "stok_ready": 370,
+            "available_quantity": 370,
+            "required_quantity": 25,
+            "picked_quantity": 25
+          }
+        ]
+      }
+    },
+    {
+      "check": "wms_stock_select",
+      "data": {
+        "task": {
+          "id": 4986,
+          "no_order": "SO-20261005124901-334-772",
+          "status": "DELIVERED"
+        },
+        "rows": [
+          {
+            "id_produk": 1487,
+            "product_code": "P2P1",
+            "product_name": "P2 - Produk 1",
+            "stok_ready": 370,
+            "available_quantity": 370,
+            "required_quantity": 5,
+            "picked_quantity": 5
+          },
+          {
+            "id_produk": 1493,
+            "product_code": "P2P2",
+            "product_name": "P2 - Produk 2",
+            "stok_ready": 370,
+            "available_quantity": 370,
+            "required_quantity": 5,
+            "picked_quantity": 5
+          }
+        ]
+      }
+    },
+    {
+      "check": "driver_stock_select",
+      "data": {
+        "manifest": {
+          "id": 31,
+          "no_manifest": "MNF-20261005134453-04c70e1b",
+          "status": "DELIVERED",
+          "actor_id": 771
+        },
+        "rows": [
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "50",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "50",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "5",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "5",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "25",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "25",
+            "id_cabang": 5
+          }
+        ]
+      }
+    },
+    {
+      "check": "driver_stock_select",
+      "data": {
+        "manifest": {
+          "id": 30,
+          "no_manifest": "MNF-20261005093851-b4c8a087",
+          "status": "QC_COMPLETE",
+          "actor_id": 771
+        },
+        "rows": [
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "5",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "5",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "55",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "55",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1487,
+            "kode_barang": "P2P1",
+            "nama_barang": "P2 - Produk 1",
+            "stok_ready": 370,
+            "qty_pcs": "55",
+            "id_cabang": 5
+          },
+          {
+            "id_produk": 1493,
+            "kode_barang": "P2P2",
+            "nama_barang": "P2 - Produk 2",
+            "stok_ready": 370,
+            "qty_pcs": "55",
+            "id_cabang": 5
+          }
+        ]
+      }
+    }
+  ],
+  "reconciliation": [
+    {
+      "check": "receivable_reconciliation",
+      "data": {
+        "erp_invoice_count": 73,
+        "mobile_invoice_count": 48,
+        "erp_total": 30197774.16,
+        "mobile_total": 22256967.35,
+        "differences": [
+          {
+            "id": 2,
+            "erp_minus_mobile": 568997.1,
+            "erp": {
+              "id": 2,
+              "no_faktur": null,
+              "total_penjualan": 568997.1,
+              "nominal_retur": null,
+              "id_sales_order": 2,
+              "no_order": "SO-20260625-001122",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 568997.1
+            },
+            "mobile": null
+          },
+          {
+            "id": 5,
+            "erp_minus_mobile": -0.6,
+            "erp": {
+              "id": 5,
+              "no_faktur": "NPBMMSLO-2606000007",
+              "total_penjualan": 393278,
+              "nominal_retur": null,
+              "id_sales_order": 5,
+              "no_order": "SO-20260625-001224",
+              "status_order": 6,
+              "id_principal": 232,
+              "paid": 294776.6,
+              "voucher": 98501.4,
+              "outstanding": 2.9103830456733704e-11
+            },
+            "mobile": {
+              "id": 5,
+              "no_faktur": "NPBMMSLO-2606000007",
+              "id_sales_order": 5,
+              "id_order_batch": null,
+              "total_penjualan": 393278,
+              "nominal_retur": null,
+              "paid": 294776,
+              "voucher": 98501.4,
+              "advance": "0",
+              "outstanding": 0.6000000000058208
+            }
+          },
+          {
+            "id": 7,
+            "erp_minus_mobile": -0.45,
+            "erp": {
+              "id": 7,
+              "no_faktur": "NPBMMSLO-2606000008",
+              "total_penjualan": 718497.45,
+              "nominal_retur": null,
+              "id_sales_order": 7,
+              "no_order": "SO-20260625-131435",
+              "status_order": 6,
+              "id_principal": 232,
+              "paid": 718497.45,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 7,
+              "no_faktur": "NPBMMSLO-2606000008",
+              "id_sales_order": 7,
+              "id_order_batch": null,
+              "total_penjualan": 718497.45,
+              "nominal_retur": null,
+              "paid": 718497,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 0.44999999995343387
+            }
+          },
+          {
+            "id": 49476,
+            "erp_minus_mobile": -0.3,
+            "erp": {
+              "id": 49476,
+              "no_faktur": "PJBMMSLO-2606000007",
+              "total_penjualan": 478998.3,
+              "nominal_retur": null,
+              "id_sales_order": 52615,
+              "no_order": "SO-20260617-144354",
+              "status_order": 6,
+              "id_principal": 232,
+              "paid": 478998.3,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 49476,
+              "no_faktur": "PJBMMSLO-2606000007",
+              "id_sales_order": 52615,
+              "id_order_batch": null,
+              "total_penjualan": 478998.3,
+              "nominal_retur": null,
+              "paid": 478998,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 0.29999999998835847
+            }
+          },
+          {
+            "id": 49477,
+            "erp_minus_mobile": 476898.18,
+            "erp": {
+              "id": 49477,
+              "no_faktur": null,
+              "total_penjualan": 476898.18,
+              "nominal_retur": null,
+              "id_sales_order": 52616,
+              "no_order": "SO-20260617-224754",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 476898.18
+            },
+            "mobile": null
+          },
+          {
+            "id": 49481,
+            "erp_minus_mobile": 478998.3,
+            "erp": {
+              "id": 49481,
+              "no_faktur": null,
+              "total_penjualan": 478998.3,
+              "nominal_retur": null,
+              "id_sales_order": 52620,
+              "no_order": "SO-20260626-015278",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 478998.3
+            },
+            "mobile": null
+          },
+          {
+            "id": 49482,
+            "erp_minus_mobile": 5837978.4,
+            "erp": {
+              "id": 49482,
+              "no_faktur": null,
+              "total_penjualan": 5837978.4,
+              "nominal_retur": null,
+              "id_sales_order": 52621,
+              "no_order": "SO-20260628-194920",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 5837978.4
+            },
+            "mobile": null
+          },
+          {
+            "id": 49483,
+            "erp_minus_mobile": 478998.3,
+            "erp": {
+              "id": 49483,
+              "no_faktur": null,
+              "total_penjualan": 478998.3,
+              "nominal_retur": null,
+              "id_sales_order": 52622,
+              "no_order": "SO-20260628-020420",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 478998.3
+            },
+            "mobile": null
+          },
+          {
+            "id": 49484,
+            "erp_minus_mobile": 512097.39,
+            "erp": {
+              "id": 49484,
+              "no_faktur": null,
+              "total_penjualan": 512097.39,
+              "nominal_retur": null,
+              "id_sales_order": 52623,
+              "no_order": "SO-20260628-020852",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 512097.39
+            },
+            "mobile": null
+          },
+          {
+            "id": 49486,
+            "erp_minus_mobile": 478998.3,
+            "erp": {
+              "id": 49486,
+              "no_faktur": null,
+              "total_penjualan": 478998.3,
+              "nominal_retur": null,
+              "id_sales_order": 52625,
+              "no_order": "SO-20260703-163148",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 478998.3
+            },
+            "mobile": null
+          },
+          {
+            "id": 49488,
+            "erp_minus_mobile": 47899.83,
+            "erp": {
+              "id": 49488,
+              "no_faktur": null,
+              "total_penjualan": 47899.83,
+              "nominal_retur": null,
+              "id_sales_order": 52627,
+              "no_order": "SO-20260708-009259",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 47899.83
+            },
+            "mobile": null
+          },
+          {
+            "id": 49489,
+            "erp_minus_mobile": 70636.4,
+            "erp": {
+              "id": 49489,
+              "no_faktur": null,
+              "total_penjualan": 70636.4,
+              "nominal_retur": null,
+              "id_sales_order": 52628,
+              "no_order": "SO-20260708091656-632-1072",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 70636.4
+            },
+            "mobile": null
+          },
+          {
+            "id": 49491,
+            "erp_minus_mobile": 134998.2,
+            "erp": {
+              "id": 49491,
+              "no_faktur": null,
+              "total_penjualan": 134998.2,
+              "nominal_retur": null,
+              "id_sales_order": 52630,
+              "no_order": "SO-20260708-009312",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 134998.2
+            },
+            "mobile": null
+          },
+          {
+            "id": 49494,
+            "erp_minus_mobile": 191599.32,
+            "erp": {
+              "id": 49494,
+              "no_faktur": null,
+              "total_penjualan": 191599.32,
+              "nominal_retur": null,
+              "id_sales_order": 52633,
+              "no_order": "SO-20260708-113711",
+              "status_order": -1,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 191599.32
+            },
+            "mobile": null
+          },
+          {
+            "id": 28554399,
+            "erp_minus_mobile": 610500,
+            "erp": {
+              "id": 28554399,
+              "no_faktur": null,
+              "total_penjualan": 610500,
+              "nominal_retur": null,
+              "id_sales_order": 28557539,
+              "no_order": "SO-20260812135649-334-772",
+              "status_order": -1,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 610500
+            },
+            "mobile": null
+          },
+          {
+            "id": 32854887,
+            "erp_minus_mobile": 610500,
+            "erp": {
+              "id": 32854887,
+              "no_faktur": null,
+              "total_penjualan": 610500,
+              "nominal_retur": null,
+              "id_sales_order": 32858027,
+              "no_order": "SO-20260815-093936",
+              "status_order": -1,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 610500
+            },
+            "mobile": null
+          },
+          {
+            "id": 35726135,
+            "erp_minus_mobile": -3410022,
+            "erp": {
+              "id": 35726135,
+              "no_faktur": "NPBMMSLO-2609000001",
+              "total_penjualan": 3410022,
+              "nominal_retur": null,
+              "id_sales_order": 35729275,
+              "no_order": "SO-20260819-154439",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 3410022,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 35726135,
+              "no_faktur": "NPBMMSLO-2609000001",
+              "id_sales_order": 35729275,
+              "id_order_batch": null,
+              "total_penjualan": 3410022,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 3410022
+            }
+          },
+          {
+            "id": 41478809,
+            "erp_minus_mobile": 610500,
+            "erp": {
+              "id": 41478809,
+              "no_faktur": "NPBMMSLO-2609000011",
+              "total_penjualan": 610500,
+              "nominal_retur": null,
+              "id_sales_order": 41481949,
+              "no_order": "SO-20260825-013728",
+              "status_order": 3,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 610500
+            },
+            "mobile": null
+          },
+          {
+            "id": 45801914,
+            "erp_minus_mobile": 549450,
+            "erp": {
+              "id": 45801914,
+              "no_faktur": "NPBMMSLO-2609000004",
+              "total_penjualan": 549450,
+              "nominal_retur": null,
+              "id_sales_order": 45805054,
+              "no_order": "SO-20260828-102521",
+              "status_order": 4,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 549450
+            },
+            "mobile": null
+          },
+          {
+            "id": 54467150,
+            "erp_minus_mobile": 1142856,
+            "erp": {
+              "id": 54467150,
+              "no_faktur": "NPBMMSLO-2609000002",
+              "total_penjualan": 1142856,
+              "nominal_retur": null,
+              "id_sales_order": 54470290,
+              "no_order": "SO-20260904-095850",
+              "status_order": 4,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 1142856
+            },
+            "mobile": null
+          },
+          {
+            "id": 54467151,
+            "erp_minus_mobile": 561660,
+            "erp": {
+              "id": 54467151,
+              "no_faktur": "NPBMMSLO-2609000003",
+              "total_penjualan": 561660,
+              "nominal_retur": null,
+              "id_sales_order": 54470291,
+              "no_order": "SO-20260904-105926",
+              "status_order": 4,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 561660
+            },
+            "mobile": null
+          },
+          {
+            "id": 58808431,
+            "erp_minus_mobile": -122100,
+            "erp": {
+              "id": 58808431,
+              "no_faktur": "NPBMMSLO-2609000005",
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "id_sales_order": 58811571,
+              "no_order": "SO-20260908095959-334-772",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 122100,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 58808431,
+              "no_faktur": "NPBMMSLO-2609000005",
+              "id_sales_order": 58811571,
+              "id_order_batch": null,
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 122100
+            }
+          },
+          {
+            "id": 60257009,
+            "erp_minus_mobile": -122100,
+            "erp": {
+              "id": 60257009,
+              "no_faktur": "NPBMMSLO-2609000006",
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "id_sales_order": 60260149,
+              "no_order": "SO-20260909151514-334-772",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 122100,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 60257009,
+              "no_faktur": "NPBMMSLO-2609000006",
+              "id_sales_order": 60260149,
+              "id_order_batch": null,
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 122100
+            }
+          },
+          {
+            "id": 66059037,
+            "erp_minus_mobile": -1193250,
+            "erp": null,
+            "mobile": {
+              "id": 66059037,
+              "no_faktur": "NPBMMSLO-2609000009",
+              "id_sales_order": null,
+              "id_order_batch": 3,
+              "total_penjualan": 1193250,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1193250
+            }
+          },
+          {
+            "id": 66059038,
+            "erp_minus_mobile": -1098900,
+            "erp": {
+              "id": 66059038,
+              "no_faktur": "NPBMMSLO-2609000007",
+              "total_penjualan": 1098900,
+              "nominal_retur": null,
+              "id_sales_order": 66062179,
+              "no_order": "SO-20260914-104657",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 1098900,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 66059038,
+              "no_faktur": "NPBMMSLO-2609000007",
+              "id_sales_order": 66062179,
+              "id_order_batch": null,
+              "total_penjualan": 1098900,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1098900
+            }
+          },
+          {
+            "id": 66059039,
+            "erp_minus_mobile": -976800,
+            "erp": {
+              "id": 66059039,
+              "no_faktur": "NPBMMSLO-2609000008",
+              "total_penjualan": 976800,
+              "nominal_retur": null,
+              "id_sales_order": 66062180,
+              "no_order": "SO-20260914-105529",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 976800,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 66059039,
+              "no_faktur": "NPBMMSLO-2609000008",
+              "id_sales_order": 66062180,
+              "id_order_batch": null,
+              "total_penjualan": 976800,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 976800
+            }
+          },
+          {
+            "id": 66059040,
+            "erp_minus_mobile": -1100022,
+            "erp": null,
+            "mobile": {
+              "id": 66059040,
+              "no_faktur": "NPBMMSLO-2609000010",
+              "id_sales_order": null,
+              "id_order_batch": 4,
+              "total_penjualan": 1100022,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1100022
+            }
+          },
+          {
+            "id": 67511224,
+            "erp_minus_mobile": 1208790,
+            "erp": {
+              "id": 67511224,
+              "no_faktur": null,
+              "total_penjualan": 1208790,
+              "nominal_retur": null,
+              "id_sales_order": 67514366,
+              "no_order": "SO-20260915100055-334-772",
+              "status_order": 2,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 1208790
+            },
+            "mobile": null
+          },
+          {
+            "id": 76242495,
+            "erp_minus_mobile": 1208790,
+            "erp": {
+              "id": 76242495,
+              "no_faktur": "NPBMMSLO-2609000016",
+              "total_penjualan": 1208790,
+              "nominal_retur": null,
+              "id_sales_order": 76245637,
+              "no_order": "SO-20260922132424-334-772",
+              "status_order": 3,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 1208790
+            },
+            "mobile": null
+          },
+          {
+            "id": 76242496,
+            "erp_minus_mobile": -500000,
+            "erp": {
+              "id": 76242496,
+              "no_faktur": "NPBMMSLO-2609000012",
+              "total_penjualan": 1142856,
+              "nominal_retur": null,
+              "id_sales_order": 76245638,
+              "no_order": "SO-20260922132438-334-772",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 500000,
+              "voucher": 0,
+              "outstanding": 642856
+            },
+            "mobile": {
+              "id": 76242496,
+              "no_faktur": "NPBMMSLO-2609000012",
+              "id_sales_order": 76245638,
+              "id_order_batch": null,
+              "total_penjualan": 1142856,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1142856
+            }
+          },
+          {
+            "id": 76242497,
+            "erp_minus_mobile": -1075044,
+            "erp": null,
+            "mobile": {
+              "id": 76242497,
+              "no_faktur": "NPBMMSLO-2609000013",
+              "id_sales_order": null,
+              "id_order_batch": 5,
+              "total_penjualan": 1075044,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1075044
+            }
+          },
+          {
+            "id": 76242498,
+            "erp_minus_mobile": 161997.84,
+            "erp": {
+              "id": 76242498,
+              "no_faktur": "NPBMMSLO-2609000014",
+              "total_penjualan": 161997.84,
+              "nominal_retur": null,
+              "id_sales_order": 76245641,
+              "no_order": "SO-20260922-015737",
+              "status_order": 3,
+              "id_principal": 5,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 161997.84
+            },
+            "mobile": null
+          },
+          {
+            "id": 76242499,
+            "erp_minus_mobile": 404994.6,
+            "erp": {
+              "id": 76242499,
+              "no_faktur": "NPBMMSLO-2609000015",
+              "total_penjualan": 404994.6,
+              "nominal_retur": null,
+              "id_sales_order": 76245642,
+              "no_order": "SO-20260922-015759",
+              "status_order": 3,
+              "id_principal": 5,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 404994.6
+            },
+            "mobile": null
+          },
+          {
+            "id": 76242500,
+            "erp_minus_mobile": -1210022,
+            "erp": {
+              "id": 76242500,
+              "no_faktur": "NPBMMSLO-2609000017",
+              "total_penjualan": 1210022,
+              "nominal_retur": null,
+              "id_sales_order": 76245643,
+              "no_order": "SO-20260922165004-334-772",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 1210022,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 76242500,
+              "no_faktur": "NPBMMSLO-2609000017",
+              "id_sales_order": 76245643,
+              "id_order_batch": null,
+              "total_penjualan": 1210022,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1210022
+            }
+          },
+          {
+            "id": 79158990,
+            "erp_minus_mobile": -1221000,
+            "erp": {
+              "id": 79158990,
+              "no_faktur": "NPBMMSLO-2609000018",
+              "total_penjualan": 1221000,
+              "nominal_retur": null,
+              "id_sales_order": 79162133,
+              "no_order": "SO-20260924092544-334-772",
+              "status_order": 6,
+              "id_principal": 33,
+              "paid": 1221000,
+              "voucher": 0,
+              "outstanding": 0
+            },
+            "mobile": {
+              "id": 79158990,
+              "no_faktur": "NPBMMSLO-2609000018",
+              "id_sales_order": 79162133,
+              "id_order_batch": null,
+              "total_penjualan": 1221000,
+              "nominal_retur": null,
+              "paid": 0,
+              "voucher": 0,
+              "advance": "0",
+              "outstanding": 1221000
+            }
+          },
+          {
+            "id": 79158991,
+            "erp_minus_mobile": 1208790,
+            "erp": {
+              "id": 79158991,
+              "no_faktur": null,
+              "total_penjualan": 1208790,
+              "nominal_retur": null,
+              "id_sales_order": 79162134,
+              "no_order": "SO-20260924230147-334-772",
+              "status_order": 2,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 1208790
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158992,
+            "erp_minus_mobile": 1208790,
+            "erp": {
+              "id": 79158992,
+              "no_faktur": null,
+              "total_penjualan": 1208790,
+              "nominal_retur": null,
+              "id_sales_order": 79162135,
+              "no_order": "SO-20260925102904-334-772",
+              "status_order": 2,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 1208790
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158993,
+            "erp_minus_mobile": 122100,
+            "erp": {
+              "id": 79158993,
+              "no_faktur": null,
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "id_sales_order": 79162136,
+              "no_order": "SO-20260925103018-334-772",
+              "status_order": -1,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 122100
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158994,
+            "erp_minus_mobile": 244200,
+            "erp": {
+              "id": 79158994,
+              "no_faktur": "NPBMMSLO-2610000001",
+              "total_penjualan": 244200,
+              "nominal_retur": null,
+              "id_sales_order": 79162137,
+              "no_order": "SO-20261001-164324",
+              "status_order": 3,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 244200
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158995,
+            "erp_minus_mobile": 122100,
+            "erp": {
+              "id": 79158995,
+              "no_faktur": "NPBMMSLO-2610000002",
+              "total_penjualan": 122100,
+              "nominal_retur": null,
+              "id_sales_order": 79162138,
+              "no_order": "SO-20261001-172111",
+              "status_order": 3,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 122100
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158997,
+            "erp_minus_mobile": 366300,
+            "erp": {
+              "id": 79158997,
+              "no_faktur": null,
+              "total_penjualan": 366300,
+              "nominal_retur": null,
+              "id_sales_order": 79162140,
+              "no_order": "SO-20261002123340-334-772",
+              "status_order": 2,
+              "id_principal": 33,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 366300
+            },
+            "mobile": null
+          },
+          {
+            "id": 79158998,
+            "erp_minus_mobile": 349650,
+            "erp": {
+              "id": 79158998,
+              "no_faktur": null,
+              "total_penjualan": 349650,
+              "nominal_retur": null,
+              "id_sales_order": 79162141,
+              "no_order": "SO-20261002123434-334-772",
+              "status_order": 2,
+              "id_principal": 232,
+              "paid": 0,
+              "voucher": 0,
+              "outstanding": 349650
+            },
+            "mobile": null
+          }
+        ]
+      }
+    },
+    {
+      "check": "lph_order_due_basis",
+      "data": [
+        {
+          "id": 79158999,
+          "no_faktur": "NPBMMSLO-2610000004",
+          "no_order": "SO-20261005-092434",
+          "status_order": 6,
+          "id_principal": 33,
+          "tanggal_order": "2026-10-05",
+          "tanggal_faktur": null,
+          "stored_due": null,
+          "tempo": 24,
+          "top": 0,
+          "expected_due": "2026-10-29"
+        },
+        {
+          "id": 79159000,
+          "no_faktur": "NPBMMSLO-2610000005",
+          "no_order": "SO-20261005092816-334-772",
+          "status_order": 6,
+          "id_principal": 33,
+          "tanggal_order": "2026-10-05",
+          "tanggal_faktur": null,
+          "stored_due": null,
+          "tempo": 24,
+          "top": 0,
+          "expected_due": "2026-10-29"
+        },
+        {
+          "id": 79159001,
+          "no_faktur": "NPBMMSLO-2610000006",
+          "no_order": "SO-20261005124848-334-772",
+          "status_order": 6,
+          "id_principal": 33,
+          "tanggal_order": "2026-10-05",
+          "tanggal_faktur": null,
+          "stored_due": null,
+          "tempo": 24,
+          "top": 0,
+          "expected_due": "2026-10-29"
+        },
+        {
+          "id": 79159002,
+          "no_faktur": "NPBMMSLO-2610000007",
+          "no_order": "SO-20261005124901-334-772",
+          "status_order": 6,
+          "id_principal": 33,
+          "tanggal_order": "2026-10-05",
+          "tanggal_faktur": null,
+          "stored_due": null,
+          "tempo": 24,
+          "top": 0,
+          "expected_due": "2026-10-29"
+        },
+        {
+          "id": 79159003,
+          "no_faktur": "NPBMMSLO-2610000008",
+          "no_order": "SO-20261005124920-334-772",
+          "status_order": 6,
+          "id_principal": 33,
+          "tanggal_order": "2026-10-05",
+          "tanggal_faktur": null,
+          "stored_due": null,
+          "tempo": 24,
+          "top": 0,
+          "expected_due": "2026-10-29"
+        }
+      ]
+    },
+    {
+      "check": "stock_totals_test_principals",
+      "data": [
+        {
+          "id": 1487,
+          "kode_sku": "P2P1",
+          "jumlah_ready": 370,
+          "jumlah_good": 370,
+          "jumlah_booked": 245,
+          "jumlah_incoming": 550,
+          "jumlah_picked": 117,
+          "jumlah_delivery": -5
+        },
+        {
+          "id": 1493,
+          "kode_sku": "P2P2",
+          "jumlah_ready": 370,
+          "jumlah_good": 370,
+          "jumlah_booked": 260,
+          "jumlah_incoming": 0,
+          "jumlah_picked": 92,
+          "jumlah_delivery": 40
+        },
+        {
+          "id": 27687,
+          "kode_sku": "P1P1",
+          "jumlah_ready": 2025,
+          "jumlah_good": 2025,
+          "jumlah_booked": 15,
+          "jumlah_incoming": 2000,
+          "jumlah_picked": 15,
+          "jumlah_delivery": -30
+        },
+        {
+          "id": 49048,
+          "kode_sku": "P1P2",
+          "jumlah_ready": 2025,
+          "jumlah_good": 2025,
+          "jumlah_booked": 15,
+          "jumlah_incoming": 505,
+          "jumlah_picked": 15,
+          "jumlah_delivery": -30
+        }
+      ]
+    }
+  ],
+  "lph_list_page_1": [
+    {
+      "lph_scope": [
+        {
+          "id": 110,
+          "kode_lph": "TTGBMM/202610/0001",
+          "printer_id": 1,
+          "id_sales": 334,
+          "sales_user_id": 772,
+          "sales_user_branch": 5,
+          "printer_found": 1
+        },
+        {
+          "id": 111,
+          "kode_lph": "TTGBMM/202610/0002",
+          "printer_id": 1,
+          "id_sales": 334,
+          "sales_user_id": 772,
+          "sales_user_branch": 5,
+          "printer_found": 1
+        }
+      ]
+    },
+    {
+      "query": {
+        "id_cabang": 5,
+        "id_perusahaan": 1,
+        "filters": "TTGBMM/202610/0002",
+        "page": 1,
+        "limit": 50
+      },
+      "data": {
+        "pages": {
+          "result": [],
+          "status": 200
+        },
+        "total_data": 2
+      }
+    },
+    {
+      "query": {
+        "id_cabang": 5,
+        "id_perusahaan": 1,
+        "filters": "TTGBMM/202610",
+        "page": 1,
+        "limit": 50
+      },
+      "data": {
+        "pages": {
+          "result": [],
+          "status": 200
+        },
+        "total_data": 2
+      }
+    }
+  ],
+  "lph_list_page_0": [
+    {
+      "lph_scope": [
+        {
+          "id": 110,
+          "kode_lph": "TTGBMM/202610/0001",
+          "printer_id": 1,
+          "id_sales": 334,
+          "sales_user_id": 772,
+          "sales_user_branch": 5,
+          "printer_found": 1
+        },
+        {
+          "id": 111,
+          "kode_lph": "TTGBMM/202610/0002",
+          "printer_id": 1,
+          "id_sales": 334,
+          "sales_user_id": 772,
+          "sales_user_branch": 5,
+          "printer_found": 1
+        }
+      ]
+    },
+    {
+      "query": {
+        "id_cabang": 5,
+        "id_perusahaan": 1,
+        "filters": "TTGBMM/202610/0002",
+        "page": 0,
+        "limit": 50
+      },
+      "data": {
+        "pages": {
+          "result": [
+            {
+              "dikembalikan_oleh": 772,
+              "diterima_oleh": 772,
+              "id": 111,
+              "id_pencetak": 1,
+              "id_sales": 334,
+              "is_cp": 2,
+              "kode_lph": "TTGBMM/202610/0002",
+              "nama_pencetak": "IT Admin",
+              "nama_sales": "Sales 1 (Test)",
+              "row_num": 1,
+              "status_dokumen": "DIKEMBALIKAN",
+              "status_label": "Dikembalikan",
+              "tanggal_dikembalikan": "2026-10-05",
+              "tanggal_diterima": "2026-10-05",
+              "tanggal_lph": "2026-10-05 00:00:00"
+            }
+          ],
+          "status": 200
+        },
+        "total_data": 2
+      }
+    }
+  ],
+  "local_scripts": "/tmp/budimas-customer1-audit-20261005.2xS8RE"
+}

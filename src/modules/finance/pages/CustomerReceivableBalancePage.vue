@@ -145,6 +145,7 @@ function formatDate(value) {
 function formatPaymentStatus(value) {
   const status = String(value || '').toLowerCase();
   if (status === 'paid') return 'Lunas';
+  if (status === 'partial') return 'Dibayar Sebagian';
   if (status === 'unpaid') return 'Belum Bayar';
   return value || '-';
 }
@@ -245,7 +246,7 @@ onMounted(async () => {
   <section class="space-y-6">
     <PageHeader
       title="Piutang Customer"
-      description="Ringkasan saldo piutang per customer dari faktur, retur, pembayaran, dan Credit Note."
+      description="Saldo piutang dari faktur terkirim, retur, Credit Note, dan pembayaran yang telah disahkan."
     >
       <button class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white" @click="loadRows">Reload</button>
     </PageHeader>
@@ -266,6 +267,9 @@ onMounted(async () => {
       </div>
     </section>
 
+    <p class="text-sm text-slate-600 dark:text-slate-300">
+      Faktur gabungan dihitung satu kali. Filter Principal tetap menampilkan total nota utuh beserta seluruh principal pada nota tersebut.
+    </p>
     <p v-if="errorMessage" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ errorMessage }}</p>
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

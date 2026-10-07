@@ -1,0 +1,113 @@
+{
+  "status": "DEPLOYED_AND_VERIFIED",
+  "date": "2026-10-05",
+  "scope": "October 5 ERP/API alignment and Mobile Sales, WMS, Driver APK publication; Loading Armada UI deferred",
+  "production": {
+    "server": "58.147.185.142",
+    "ssh_port": 9999,
+    "published_at": "2026-10-05T12:55:43.039735+00:00",
+    "api_origin": "https://erp.budimas.swakarya.my.id:9092",
+    "frontend_roots": [
+      "/www/wwwroot/new_budimas",
+      "/www/wwwroot/new_budimas/dist"
+    ],
+    "backup_directory": "/www/backup/budimas-alignment-20261005.InIPKX",
+    "file_backup_sha256": "e5b389b2ddd8f7523dd09328c26d46c1b091cc3815202a17bf0ee01a743c53e9",
+    "api_runtime_files": [
+      "/www/wwwroot/API/apps/lib/customer_receivable.py",
+      "/www/wwwroot/API/apps/lib/invoice_revision.py",
+      "/www/wwwroot/API/apps/lib/quarantine_lot.py",
+      "/www/wwwroot/API/apps/lib/stock_ready.py",
+      "/www/wwwroot/API/apps/services/StockTransfer.py",
+      "/www/wwwroot/API/apps/services/Distribusi.py",
+      "/www/wwwroot/API/apps/routes/mobile_gateway.py",
+      "/www/wwwroot/API/apps/routes/wms_mock.py"
+    ],
+    "master_pid": 559494,
+    "uat_untouched": true,
+    "database_migration_required": false,
+    "database_migration_applied": false,
+    "business_test_mutations": 0,
+    "all_destination_hashes_verified": true,
+    "old_assets_and_versioned_apks_preserved": true,
+    "nginx_config_changed": false
+  },
+  "android": [
+    {
+      "app": "Mobile Sales",
+      "version_name": "1.0.7",
+      "version_code": 8,
+      "application_id": "com.budimas.app",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasMobile-v1.0.7-debug.apk",
+      "sha256": "4e75741d113001f73c6f54fe778f6c69614826b9ff66ecc998dd8ae00c8e1a34",
+      "bytes": 30025537,
+      "certificate_sha256": "147143724c4ed72bb863f9e2158a0e7d599265b6bdf38e2bdc0a67d71abb8725",
+      "certificate_matches_previous_distribution": true,
+      "build_type": "debug, matching existing distribution convention",
+      "api_origin": "https://erp.budimas.swakarya.my.id:9092"
+    },
+    {
+      "app": "WMS",
+      "version_name": "1.0.11",
+      "version_code": 12,
+      "application_id": "com.budimas.wms",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasWMS-v1.0.11-debug.apk",
+      "sha256": "ff81ce4fb4059aa6f3b0da609cdd9d249ebb052ad96153fc2ce2e7fc5d60244c",
+      "bytes": 3703024,
+      "certificate_sha256": "147143724c4ed72bb863f9e2158a0e7d599265b6bdf38e2bdc0a67d71abb8725",
+      "certificate_matches_previous_distribution": true,
+      "build_type": "debug, matching existing distribution convention",
+      "api_origin": "https://erp.budimas.swakarya.my.id:9092"
+    },
+    {
+      "app": "Driver Helper",
+      "version_name": "0.4.6",
+      "version_code": 10,
+      "application_id": "com.budimas.driverhelper",
+      "download": "https://erp.budimas.swakarya.my.id/downloads/BudimasDriver-v0.4.6-debug.apk",
+      "sha256": "9c01cae583eeefc9aacff715d6f1d831b9fccf900b5bd998535808f9daa24ea9",
+      "bytes": 4263184,
+      "certificate_sha256": "147143724c4ed72bb863f9e2158a0e7d599265b6bdf38e2bdc0a67d71abb8725",
+      "certificate_matches_previous_distribution": true,
+      "build_type": "debug, matching existing distribution convention",
+      "api_origin": "https://erp.budimas.swakarya.my.id:9092"
+    }
+  ],
+  "wms_loading_ui": {
+    "refresh_enabled": false,
+    "flag": "BuildConfig.ENABLE_LOADING_UI_REFRESH",
+    "default_gradle_property": "BUDIMAS_LOADING_UI_REFRESH=false",
+    "legacy_source": "/tmp/budimas-loading-ui-20261002.tcbtdr/before.tar.gz",
+    "notes": "Retains published 1.0.9 assignment dropdowns; refresh implementation remains available for a separate authorized release. QC, ready stock and checker updates included."
+  },
+  "driver_build_property": "-PBUDIMAS_DEBUG_API_BASE_URL=https://erp.budimas.swakarya.my.id:9092/api/",
+  "verification": {
+    "api_tests": {
+      "run": 410,
+      "passed": 386,
+      "skipped": 24,
+      "failed": 0
+    },
+    "erp_node_tests": 48,
+    "mobile_node_tests": 9,
+    "wms_unit_tests": 15,
+    "driver_native_tests": "No test sources; compilation and APK build successful",
+    "erp_build": "PASSED",
+    "all_android_builds": "PASSED",
+    "mocked_browser_tests": [
+      "ERP 11 stock columns, timestamp and dynamic status",
+      "Invoice revision pagination, search and exact invoice context",
+      "QC physical batch and expiry confirmation",
+      "Mobile Sales live terms and actual receivable"
+    ],
+    "production_readonly_checks": 9,
+    "public_file_sha256_checks": 201,
+    "public_api_health_both_ports": true,
+    "android_origin_cors": true,
+    "physical_device_qa": "Not performed",
+    "wms_schema_backfill_avoided_for_test": true
+  },
+  "artifacts": "/tmp/budimas-alignment-release-20261005.LWjNgc/",
+  "rollback": "Restore only changed application files from files-before.tar.gz and reload the verified production master. Old hashed assets/APKs remain available. Do not restore older database dumps over subsequent transactions.",
+  "installation": "Install APKs as updates without uninstalling or clearing app data."
+}

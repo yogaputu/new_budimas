@@ -1,0 +1,65 @@
+{
+  "status": "DEPLOYED_AND_VERIFIED",
+  "date": "2026-10-06",
+  "base_release": "payment-demo-alignment-20261006.json",
+  "scope": [
+    "Transfer and Giro sources may cross depositor sales; cash remains restricted to the LPH sales",
+    "Company, branch, customer binding, approval, incoming-bank and non-bounced-Giro validation preserved",
+    "Editable per-invoice allocation for all sources, including partial advance and return credit",
+    "Default allocation uses the invoice need, not the entire advance/credit note",
+    "Unspent funds remain available; existing row locks and active-allocation holds prevent overspending"
+  ],
+  "changed_sources": [
+    "/Users/macairm2/www/API/apps/services/FinanceWorkflow/service.py",
+    "/Users/macairm2/www/API/apps/test/test_payment_receipt_workflow.py",
+    "/Users/macairm2/www/API/docs/payment-receipt-workflow.md",
+    "/Users/macairm2/www/new_budimas/src/modules/finance/components/ReceiptEditor.vue",
+    "/Users/macairm2/www/new_budimas/src/modules/finance/receiptAllocation.js",
+    "/Users/macairm2/www/new_budimas/tests/receipt-allocation.test.mjs",
+    "/Users/macairm2/www/new_budimas/tests/browser/receipt-source-partial.mjs"
+  ],
+  "validation": {
+    "backend_full_suite": {"passed": 470, "failed": 0, "skipped": 0},
+    "database_tests": "Isolated local PostgreSQL 18, localhost:55432/budimas_workflow_tests; cluster stopped after tests",
+    "erp_unit_tests": {"passed": 59, "failed": 0},
+    "browser_source_and_production_build": "PASS: cross-sales transfer/uncleared Giro, ownership guards, editable partial return/advance, initial amount, exact request payload; all business APIs mocked",
+    "browser_previous_payment_regression": "PASS: split allocation, reconciliation, approval confirmation, bank import, giro clearing, cancellations, allocation audit and draft recovery; mocked APIs",
+    "concurrent_fund_tests": "PASS: cash, return and advance drafts cannot overspend a shared balance",
+    "erp_build": "PASS",
+    "diff_whitespace": "PASS",
+    "production_api_checks": {"passed": 7, "preview_only": true, "business_test_mutations": 0},
+    "production_api_cases": ["health", "cross_sales_transfer_preview", "transfer_overallocation_rejected", "cross_sales_giro_preview", "giro_overallocation_rejected", "partial_return_preview", "return_overallocation_rejected"],
+    "production_business_record_counts_unchanged": true,
+    "public_file_hash_checks": 198,
+    "https_443_and_9092_healthy": true,
+    "authentication_enforced": true,
+    "android_webview_cors": true
+  },
+  "production": {
+    "host": "58.147.185.142",
+    "api_files": 1,
+    "frontend_files": 197,
+    "backup_directory": "/www/backup/budimas-fund-allocation-20261006.xNzBX3",
+    "backup_sha256": "3c71a5b043e58d5daf99c01bdf951ca50c7e1939fe5c8a4eaf9a1317c08a6d25",
+    "release_sha256": "dc45f3dd381a8b94056bdca24cc022a42cc213fa8408e7023a6f94bd2d7836b3",
+    "api_service_sha256": "e25fbb00d8f6a9544d8d24e592a6d0b02df3f45fc4097370f5686ede06eab6ef",
+    "frontend_index_sha256": "b73e1294e65906112d6849e4485c5adc2af135a2cb2c9c00938b4903acab1f60",
+    "api_installed_utc": "2026-10-06T04:59:10.755578+00:00",
+    "api_verified_utc": "2026-10-06T04:59:19.181789+00:00",
+    "frontend_published_utc": "2026-10-06T04:59:33.672139+00:00",
+    "public_verified_utc": "2026-10-06T04:59:44.894Z",
+    "migrations": 0,
+    "configuration_and_apk_unchanged": true,
+    "uat_untouched": true,
+    "old_assets_retained": true,
+    "business_data_changed": false
+  },
+  "local_artifacts": "/tmp/budimas-fund-allocation-20261006.tY6KI5",
+  "notes": [
+    "Amounts edited here are receipt allocations, not the original face value of deposits, advances or credit notes.",
+    "No existing source was reassigned to a different sales; depositor attribution remains intact.",
+    "No receipt was created or finalized while verifying production; calculation-only preview was used.",
+    "No schema change, database migration or new APK is needed.",
+    "PostgreSQL guidance informed preservation of stable locking order and concurrent-allocation checks."
+  ]
+}

@@ -301,6 +301,8 @@ watch(
               <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Tanggal</th>
               <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Akun</th>
               <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Keterangan</th>
+              <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Faktur</th>
+              <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Sumber Dana</th>
               <th class="px-4 py-3 text-left font-medium uppercase tracking-wide text-slate-500">Modul</th>
               <th class="px-4 py-3 text-right font-medium uppercase tracking-wide text-slate-500">Debit</th>
               <th class="px-4 py-3 text-right font-medium uppercase tracking-wide text-slate-500">Kredit</th>
@@ -309,12 +311,12 @@ watch(
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-950">
             <tr v-if="loading.ledger">
-              <td colspan="7" class="px-4 py-10 text-center text-slate-500">
+              <td colspan="9" class="px-4 py-10 text-center text-slate-500">
                 Memuat data buku besar...
               </td>
             </tr>
             <tr v-else-if="!tableRows.length">
-              <td colspan="7" class="px-4 py-10 text-center text-slate-500">
+              <td colspan="9" class="px-4 py-10 text-center text-slate-500">
                 Belum ada detail buku besar untuk filter yang dipilih.
               </td>
             </tr>
@@ -330,6 +332,8 @@ watch(
                 <span v-else class="pl-4">{{ row.akun_label }}</span>
               </td>
               <td class="px-4 py-3 align-top">{{ row.isParent ? '' : row.keterangan_label }}</td>
+              <td class="px-4 py-3 align-top">{{ row.isParent ? '' : (row.no_faktur || '—') }}</td>
+              <td class="px-4 py-3 align-top">{{ row.isParent ? '' : (row.sumber_dana || '—') }}</td>
               <td class="px-4 py-3 align-top">{{ row.isParent ? '' : row.modul_label }}</td>
               <td class="px-4 py-3 text-right align-top">{{ row.debit_label }}</td>
               <td class="px-4 py-3 text-right align-top">{{ row.kredit_label }}</td>

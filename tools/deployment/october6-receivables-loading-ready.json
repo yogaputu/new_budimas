@@ -1,0 +1,69 @@
+{
+  "status": "BUILT_AND_VERIFIED_NOT_DEPLOYED",
+  "date": "2026-10-06",
+  "scope": [
+    "Combined invoice totals from all approved principal details at confirmation and shipping",
+    "Shared finalized customer/company receivable ledger for ERP reports and Mobile order context",
+    "Principal filter selects whole combined invoice and labels all its principals",
+    "LPH zero-based API paging with true count, ERP first-page fix and one paginator",
+    "WMS searchable full-master Loading pickers and calendar enabled by default"
+  ],
+  "api_files": [
+    "apps/lib/customer_receivable.py",
+    "apps/lib/invoice_totals.py",
+    "apps/lib/lph_paging.py",
+    "apps/services/Distribusi.py",
+    "apps/services/Pembayaran.py",
+    "apps/services/Akuntansi/lph.py"
+  ],
+  "erp_files": [
+    "src/modules/distribution/pages/InvoiceDetailPage.vue",
+    "src/modules/finance/pages/CustomerReceivableBalancePage.vue",
+    "src/modules/finance/pages/LphPage.vue"
+  ],
+  "erp_build": "/tmp/budimas-erp-oct6-final.UcygjX",
+  "wms": {
+    "apk": "/Users/macairm2/www/wms_android/app/build/outputs/apk/debug/app-debug.apk",
+    "application_id": "com.budimas.wms",
+    "version_name": "1.0.12",
+    "version_code": 13,
+    "loading_ui_refresh": true,
+    "sha256": "d6a09e8ad0cc4fd6db4cd4f5df2e80e542f4eb54f19f030a946166add6124bb6",
+    "certificate_sha256": "147143724c4ed72bb863f9e2158a0e7d599265b6bdf38e2bdc0a67d71abb8725",
+    "certificate_matches_previous_distribution": true,
+    "build_type": "debug, matching existing distribution",
+    "api_origin": "https://erp.budimas.swakarya.my.id:9092",
+    "uses_existing_complete_master_endpoint": "/api/loading/loading/options"
+  },
+  "validation": {
+    "backend_suite": { "run": 435, "skipped": 24, "failures": 0 },
+    "erp_node_tests": { "passed": 48 },
+    "erp_build": "PASS; existing large-chunk and Browserslist-age warnings",
+    "browser_mock_regression": "PASS: 125 LPH documents, 3 pages, one paginator, reload current page, combined principal filter detail",
+    "wms_unit_tests": { "passed": 16 },
+    "wms_native_ui_assertions": { "passed": 19, "api_fully_mocked": true, "master_rows_each": 305 },
+    "production_sql_read_only": {
+      "passed": 7,
+      "customer": "Customer 1 (Test)",
+      "customer_id": 89330,
+      "company_id": 1,
+      "erp_and_mobile_receivable": 23422467.35,
+      "invoice_id": 66059040,
+      "invoice_number": "NPBMMSLO-2609000010",
+      "invoice_total_and_outstanding": 2265522,
+      "invoice_final_payments": 0,
+      "principal_filters_checked": [33, 232],
+      "principal_label": "Principal 1 (Test), Principal 2 (Test)",
+      "elapsed_seconds_per_query": "0.049-0.111"
+    }
+  },
+  "production_files_changed": false,
+  "production_data_changed": false,
+  "database_migration_required": false,
+  "notes": [
+    "Previously repaired customer records were not modified again.",
+    "Existing unrelated dirty changes remain untouched; review deployment diff against current server before publishing.",
+    "Mobile Sales frontend has no new changes in this revision; its order context uses the shared API helper.",
+    "No production payment, shipping, LPH or loading transaction was submitted for testing."
+  ]
+}

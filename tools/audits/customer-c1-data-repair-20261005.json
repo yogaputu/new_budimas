@@ -1,0 +1,284 @@
+{
+  "status": "PARTIAL_DATA_REPAIR_APPLIED_AWAITING_INVOICE_CONFIRMATION",
+  "follow_up": {
+    "date": "2026-10-06",
+    "record": "customer-c1-invoice-repair-20261006.json",
+    "result": "User confirmed the two-principal invoice is wholly unpaid. Header restored to 2265522; C1 credit balances reconciled. Application report/pagination issues remain separate."
+  },
+  "customer": {
+    "id": 89330,
+    "kode": "C1",
+    "nama": "Customer 1 (Test)",
+    "branch_id": 5,
+    "company_id": 1
+  },
+  "user_request": "perbaiki datanya",
+  "committed_at": "2026-10-05T13:31:35.797781+00:00",
+  "backup": "/www/backup/customer-c1-due-dates-20261005.2miygqor",
+  "customer_id": 89330,
+  "updated_count": 36,
+  "updated": [
+    {
+      "id": 27125658,
+      "tanggal_jatuh_tempo": "2026-09-04"
+    },
+    {
+      "id": 28557537,
+      "tanggal_jatuh_tempo": "2026-09-05"
+    },
+    {
+      "id": 28557538,
+      "tanggal_jatuh_tempo": "2026-09-05"
+    },
+    {
+      "id": 28557540,
+      "tanggal_jatuh_tempo": "2026-09-05"
+    },
+    {
+      "id": 31423681,
+      "tanggal_jatuh_tempo": "2026-09-07"
+    },
+    {
+      "id": 41481949,
+      "tanggal_jatuh_tempo": "2026-09-18"
+    },
+    {
+      "id": 42921988,
+      "tanggal_jatuh_tempo": "2026-09-19"
+    },
+    {
+      "id": 44363056,
+      "tanggal_jatuh_tempo": "2026-09-20"
+    },
+    {
+      "id": 45805054,
+      "tanggal_jatuh_tempo": "2026-09-21"
+    },
+    {
+      "id": 53024170,
+      "tanggal_jatuh_tempo": "2026-09-27"
+    },
+    {
+      "id": 54470290,
+      "tanggal_jatuh_tempo": "2026-09-28"
+    },
+    {
+      "id": 54470291,
+      "tanggal_jatuh_tempo": "2026-09-28"
+    },
+    {
+      "id": 58811571,
+      "tanggal_jatuh_tempo": "2026-10-02"
+    },
+    {
+      "id": 60260149,
+      "tanggal_jatuh_tempo": "2026-10-03"
+    },
+    {
+      "id": 66062177,
+      "tanggal_jatuh_tempo": "2026-10-08"
+    },
+    {
+      "id": 66062178,
+      "tanggal_jatuh_tempo": "2026-10-08"
+    },
+    {
+      "id": 66062179,
+      "tanggal_jatuh_tempo": "2026-10-08"
+    },
+    {
+      "id": 66062180,
+      "tanggal_jatuh_tempo": "2026-10-08"
+    },
+    {
+      "id": 67514366,
+      "tanggal_jatuh_tempo": "2026-10-09"
+    },
+    {
+      "id": 76245637,
+      "tanggal_jatuh_tempo": "2026-10-16"
+    },
+    {
+      "id": 76245638,
+      "tanggal_jatuh_tempo": "2026-10-16"
+    },
+    {
+      "id": 76245641,
+      "tanggal_jatuh_tempo": "2026-10-16"
+    },
+    {
+      "id": 76245642,
+      "tanggal_jatuh_tempo": "2026-10-16"
+    },
+    {
+      "id": 79162133,
+      "tanggal_jatuh_tempo": "2026-10-18"
+    },
+    {
+      "id": 79162134,
+      "tanggal_jatuh_tempo": "2026-10-18"
+    },
+    {
+      "id": 79162135,
+      "tanggal_jatuh_tempo": "2026-10-19"
+    },
+    {
+      "id": 79162137,
+      "tanggal_jatuh_tempo": "2026-10-25"
+    },
+    {
+      "id": 79162138,
+      "tanggal_jatuh_tempo": "2026-10-25"
+    },
+    {
+      "id": 79162139,
+      "tanggal_jatuh_tempo": "2026-10-25"
+    },
+    {
+      "id": 79162140,
+      "tanggal_jatuh_tempo": "2026-10-26"
+    },
+    {
+      "id": 79162141,
+      "tanggal_jatuh_tempo": "2026-10-26"
+    },
+    {
+      "id": 79162142,
+      "tanggal_jatuh_tempo": "2026-10-29"
+    },
+    {
+      "id": 79162143,
+      "tanggal_jatuh_tempo": "2026-10-29"
+    },
+    {
+      "id": 79162144,
+      "tanggal_jatuh_tempo": "2026-10-29"
+    },
+    {
+      "id": 79162145,
+      "tanggal_jatuh_tempo": "2026-10-29"
+    },
+    {
+      "id": 79162146,
+      "tanggal_jatuh_tempo": "2026-10-29"
+    }
+  ],
+  "unchanged": [
+    "plafon balances",
+    "invoice/payment amounts and states",
+    "stock",
+    "other customers"
+  ],
+  "before_sha256": "268b69926b4b0877a5fc79c599ee410cee9a3bac93a64dc38501f0c2e5bcd705",
+  "rules": {
+    "column": "sales_order.tanggal_jatuh_tempo",
+    "only_if_null": true,
+    "term_days": 24,
+    "base": "tanggal_faktur, fallback tanggal_order",
+    "preserve_existing_dates": true
+  },
+  "verification": [
+    {
+      "check": "database_verification",
+      "updated_orders": 36,
+      "only_due_date_changed": true,
+      "plafons_unchanged": true
+    },
+    {
+      "check": "erp_customer_receivable_api",
+      "latest_invoices": [
+        {
+          "id_faktur": 79158999,
+          "no_faktur": "NPBMMSLO-2610000004",
+          "tanggal_jatuh_tempo": "Thu, 29 Oct 2026 00:00:00 GMT"
+        },
+        {
+          "id_faktur": 79159000,
+          "no_faktur": "NPBMMSLO-2610000005",
+          "tanggal_jatuh_tempo": "Thu, 29 Oct 2026 00:00:00 GMT"
+        },
+        {
+          "id_faktur": 79159001,
+          "no_faktur": "NPBMMSLO-2610000006",
+          "tanggal_jatuh_tempo": "Thu, 29 Oct 2026 00:00:00 GMT"
+        },
+        {
+          "id_faktur": 79159002,
+          "no_faktur": "NPBMMSLO-2610000007",
+          "tanggal_jatuh_tempo": "Thu, 29 Oct 2026 00:00:00 GMT"
+        },
+        {
+          "id_faktur": 79159003,
+          "no_faktur": "NPBMMSLO-2610000008",
+          "tanggal_jatuh_tempo": "Thu, 29 Oct 2026 00:00:00 GMT"
+        }
+      ]
+    },
+    {
+      "check": "lph_due_dates",
+      "id_lph": 110,
+      "rows": [
+        {
+          "no_faktur": "NPBMMSLO-2610000004",
+          "tanggal_jatuh_tempo": "2026-10-29"
+        },
+        {
+          "no_faktur": "NPBMMSLO-2610000005",
+          "tanggal_jatuh_tempo": "2026-10-29"
+        }
+      ]
+    },
+    {
+      "check": "lph_due_dates",
+      "id_lph": 111,
+      "rows": [
+        {
+          "no_faktur": "NPBMMSLO-2610000006",
+          "tanggal_jatuh_tempo": "2026-10-29"
+        },
+        {
+          "no_faktur": "NPBMMSLO-2610000007",
+          "tanggal_jatuh_tempo": "2026-10-29"
+        },
+        {
+          "no_faktur": "NPBMMSLO-2610000008",
+          "tanggal_jatuh_tempo": "2026-10-29"
+        }
+      ]
+    }
+  ],
+  "unit_tests": {
+    "passed": 7
+  },
+  "repeat_dry_run": {
+    "affected_order_count": 0
+  },
+  "outstanding_issues": [
+    {
+      "type": "confirmation_required",
+      "invoice_id": 66059040,
+      "no_faktur": "NPBMMSLO-2609000010",
+      "stored_invoice_total": 1100022,
+      "detail_total": 2265522,
+      "principal_details": [
+        {
+          "principal_id": 232,
+          "total": 1165500
+        },
+        {
+          "principal_id": 33,
+          "total": 1100022
+        }
+      ],
+      "note": "No financial amounts or credit balances changed; need authoritative approved invoice/revision amount before reconciliation."
+    },
+    {
+      "type": "application_logic",
+      "note": "ERP and Mobile receivable aggregation differs. Do not modify payment states or invoice amounts to force totals to match."
+    },
+    {
+      "type": "application_logic",
+      "note": "LPH list first-page indexing mismatch remains outside this narrowly scoped data repair."
+    }
+  ]
+}

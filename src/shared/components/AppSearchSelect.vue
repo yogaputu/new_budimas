@@ -125,7 +125,7 @@ const filteredOptions = computed(() => {
   return props.options.filter((option) => {
     const label = String(option.label || '');
     return label.toLowerCase().includes(keyword)
-      || normalizedSearchText(label).includes(normalizedKeyword);
+      || (normalizedKeyword.length > 0 && normalizedSearchText(label).includes(normalizedKeyword));
   });
 });
 const displayedOptions = computed(() => {

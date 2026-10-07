@@ -29,6 +29,7 @@ try {
     ['/finance/receipt-cancellation', 'Batal Kuitansi'],
     ['/finance/payment-workflow-journals', 'Jurnal Pembayaran'],
     ['/finance/payment-workflow-settings', 'Pengaturan Workflow Pembayaran'],
+    ['/finance/payment-fees', 'Master Biaya Lain'],
     ['/sales-order/receipt-lph', 'LPH & Pembayaran Sales']
   ];
   for (const [path, title] of pages) {
@@ -41,7 +42,7 @@ try {
     if (path === '/finance/receipt-cash') {
       await page.getByRole('button', { name: 'Tambah Setoran', exact: true }).click();
       await page.getByText('Nomor referensi / BG', { exact: true }).waitFor();
-      assert.equal(await page.locator('input[type="date"]').inputValue(), new Date().toLocaleDateString('en-CA'));
+      assert.equal(await page.getByLabel('Tanggal Penerimaan',{exact:true}).inputValue(), new Date().toLocaleDateString('en-CA'));
     }
     console.log('PASS', path);
   }

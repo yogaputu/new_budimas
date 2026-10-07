@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies, getSales } from '@/api/master';
 import { createLph, deleteLph, getLphCreateCandidates, getLphDetail, getLphList, reprintLph, updateLph } from '@/api/finance';
+import { workflowGet } from '@/api/paymentWorkflow';
 import { useAuthStore } from '@/stores/auth';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { getLoginBranchId, getLoginCompanyId, getLoginSalesId, getRowCompanyId, hasMultiBusinessScope, hasSupervisorSalesScope, isSuperUser, scopeSalesRowsByLogin, shouldLockToLoginSales } from '@/utils/accessScope';
@@ -35,9 +36,14 @@ const filters = reactive({
 });
 
 const companyRows = ref([]);
+const workflowOptions = ref([]);
+const workflowOptionsError = ref('');
+const preferredWorkflow = company => auth.hasPermission('finance.receipts.create') && workflowOptions.value.some(o=>o.enabled && String(o.id_perusahaan)===String(company)) ? '2' : '1';
 const branchRows = ref([]);
 const salesRows = ref([]);
 const rows = ref([]);
+const totalRows = ref(0);
+const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / Number(filters.limit || 50))));
 const detailRows = ref([]);
 const selectedRow = ref(null);
 const restoringState = ref(false);
@@ -396,6 +402,8 @@ async function loadOptions() {
     companyRows.value = normalizeList(unwrapResponse(companyResponse));
     branchRows.value = normalizeList(unwrapResponse(branchResponse));
     salesRows.value = normalizeList(unwrapResponse(salesResponse));
+    try { workflowOptions.value=normalizeList(unwrapResponse(await workflowGet('options')));workflowOptionsError.value=''; }
+    catch { workflowOptions.value=[];workflowOptionsError.value='Pengaturan alur Kuitansi belum dapat dimuat. Muat ulang sebelum memilih alur baru.'; }
     if (shouldLockBusinessScope.value && fallbackBranchId.value) {
       filters.id_cabang = String(fallbackBranchId.value);
     }
@@ -420,7 +428,7 @@ function openCreateModal() {
     tanggal_lph: today,
     tanggal_jatuh_tempo_sampai: '',
     is_cp: '2',
-    payment_workflow_version: '1',
+    payment_workflow_version: preferredWorkflow(filters.id_perusahaan || fallbackCompanyId.value),
     include_other_sales: false
   });
   createModalOpen.value = true;
@@ -622,7 +630,7 @@ async function handleDeleteLph() {
   }
 }
 
-async function loadRows() {
+async function loadRows(requestedPage = 1) {
   if (!filters.id_cabang) {
     errorMessage.value = 'Pilih cabang terlebih dahulu untuk memuat LPH.';
     return;
@@ -631,6 +639,8 @@ async function loadRows() {
   loading.list = true;
   errorMessage.value = '';
   feedback.value = '';
+  const page = Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1;
+  filters.limit = Math.min(200, Math.max(1, Math.trunc(Number(filters.limit) || 50)));
 
   try {
     const response = await getLphList({
@@ -639,10 +649,13 @@ async function loadRows() {
       tanggal_awal: filters.tanggal_awal || undefined,
       tanggal_akhir: filters.tanggal_akhir || undefined,
       filters: filters.search || undefined,
-      page: filters.page,
+      page: page - 1,
       limit: filters.limit
     });
-    rows.value = normalizePayloadList(unwrapResponse(response));
+    const payload = unwrapResponse(response) || {};
+    rows.value = normalizePayloadList(payload);
+    totalRows.value = Number(payload.total_data || 0);
+    filters.page = Number.isInteger(payload.page) ? payload.page + 1 : page;
     selectedRow.value = rows.value[0] || null;
     detailRows.value = [];
     if (selectedRow.value?.id) {
@@ -652,6 +665,7 @@ async function loadRows() {
     }
   } catch (error) {
     rows.value = [];
+    totalRows.value = 0;
     detailRows.value = [];
     selectedRow.value = null;
     errorMessage.value = normalizeError(error, 'Daftar LPH belum bisa dimuat.');
@@ -864,9 +878,10 @@ function printLph() {
 
 onMounted(async () => {
   await loadOptions();
-  const restored = restoreLphState();
-  if (!restored) await loadRows();
+  restoreLphState();
+  await loadRows(Number(filters.page) || 1);
 });
+watch(()=>createForm.id_perusahaan,company=>{createForm.payment_workflow_version=preferredWorkflow(company);});
 
 onBeforeUnmount(() => {
   abortCandidateRequest();
@@ -879,6 +894,8 @@ watch(
     if (restoringState.value) return;
     if (String(value || '') === String(previousValue || '')) return;
     resetBranchWhenCompanyChanges(filters, 'id_perusahaan', 'id_cabang', branchRows.value, auth, companyRows.value);
+    filters.page = 1;
+    totalRows.value = 0;
     rows.value = [];
     detailRows.value = [];
     selectedRow.value = null;
@@ -890,6 +907,8 @@ watch(
   (branchId, previousBranchId) => {
     if (restoringState.value) return;
     if (String(branchId || '') === String(previousBranchId || '')) return;
+    filters.page = 1;
+    totalRows.value = 0;
     rows.value = [];
     detailRows.value = [];
     selectedRow.value = null;
@@ -1019,6 +1038,7 @@ watch(
         </div>
         <AppTable
           :rows="tableRows"
+          :paginated="false"
           :columns="[
             { key: 'kode_lph', label: 'Kode LPH' },
             { key: 'tanggal_label', label: 'Tanggal' },
@@ -1035,6 +1055,13 @@ watch(
           empty-message="Belum ada LPH pada cabang ini."
           @row-click="loadDetail"
         />
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+          <span>Halaman {{ filters.page }} dari {{ totalPages }} · {{ totalRows.toLocaleString('id-ID') }} LPH</span>
+          <div class="flex gap-2">
+            <button class="rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-40" :disabled="loading.list || filters.page <= 1" @click="loadRows(filters.page - 1)">Sebelumnya</button>
+            <button class="rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-40" :disabled="loading.list || filters.page >= totalPages" @click="loadRows(filters.page + 1)">Berikutnya</button>
+          </div>
+        </div>
       </article>
 
       <article class="panel p-5">
@@ -1106,7 +1133,7 @@ watch(
           <AppSearchSelect v-model="createForm.id_perusahaan" class="min-w-0 xl:col-span-2" label="Perusahaan" placeholder="Pilih perusahaan" :options="createCompanyOptions" :disabled="shouldLockBusinessScope && !!fallbackCompanyId" empty-text="Perusahaan belum tersedia." />
           <AppSearchSelect v-model="createForm.id_cabang" class="min-w-0 xl:col-span-2" label="Cabang" placeholder="Pilih cabang" :options="createBranchOptions" :disabled="!createForm.id_perusahaan || (shouldLockBusinessScope && !!fallbackBranchId)" empty-text="Pilih perusahaan terlebih dahulu." />
           <AppSearchSelect v-model="createForm.id_sales" class="min-w-0 xl:col-span-2" label="Sales" placeholder="Pilih sales" :options="salesOptions" :disabled="canUseLoginScope && !!fallbackSalesId" empty-text="Sales belum tersedia." />
-          <label v-if="auth.hasPermission('finance.receipts.create')" class="min-w-0 xl:col-span-2 field-label">Alur pembayaran<select v-model="createForm.payment_workflow_version" class="field-control mt-1"><option value="1">Rekap lama</option><option value="2">Kuitansi &amp; Giro (baru)</option></select></label>
+          <label v-if="auth.hasPermission('finance.receipts.create')" class="min-w-0 xl:col-span-2 field-label">Alur pembayaran<select v-model="createForm.payment_workflow_version" class="field-control mt-1"><option value="2" :disabled="preferredWorkflow(createForm.id_perusahaan)!=='2'">Kuitansi &amp; Giro (baru)</option><option value="1">Rekap lama</option></select><span class="mt-1 block text-xs">Alur baru dipilih otomatis untuk perusahaan yang sudah diaktifkan. Dokumen lama tidak diubah.</span><span v-if="workflowOptionsError" class="text-amber-700">{{ workflowOptionsError }}</span></label>
           <AppFormField v-model="createForm.tanggal_lph" class="min-w-0 xl:col-span-2" label="Tanggal LPH" type="date" />
           <AppFormField v-model="createForm.tanggal_jatuh_tempo_sampai" class="min-w-0 xl:col-span-2" label="Jatuh Tempo s.d." type="date" />
           <AppSearchSelect

@@ -1,17 +1,16 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { getBranches, getCompanies, getPrincipals } from '@/api/master';
 import {
-  getCompanyBankAccounts,
   getCreditNoteCandidates,
   getCreditNoteDetail,
   getCreditNoteList,
-  issueCreditNoteFromQcReturn,
-  refundCreditNote
+  issueCreditNoteFromQcReturn
 } from '@/api/finance';
 import { useAuthStore } from '@/stores/auth';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
+import { paymentPermission } from '@/utils/paymentPermissions';
 import { branchMatchesCompany, getLoginBranchId, getLoginCompanyId, getRowBranchIds, getRowCompanyId, getRowCompanyIds, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
@@ -19,7 +18,8 @@ import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
 
 const authStore = useAuthStore();
-const route = useRoute();
+const route = useRoute(), router = useRouter();
+const canViewReceipts = computed(() => paymentPermission(authStore.permissions || [], 'finance.receipts.view') ?? authStore.hasPermission('finance.receipts.view'));
 const numberFormatter = new Intl.NumberFormat('id-ID');
 
 const filters = reactive({
@@ -34,8 +34,6 @@ const loading = reactive({
   refs: false,
   list: false,
   detail: false,
-  accounts: false,
-  refund: false,
   candidates: false,
   issue: false
 });
@@ -44,7 +42,6 @@ const rows = ref([]);
 const branches = ref([]);
 const companies = ref([]);
 const principals = ref([]);
-const accounts = ref([]);
 const pageError = ref('');
 const feedback = ref('');
 const selectedRow = ref(null);
@@ -56,24 +53,8 @@ const candidateError = ref('');
 const candidateOpen = ref(false);
 const selectedCandidate = ref(null);
 const issueConfirmation = ref('');
-const refundOpen = ref(false);
-const refundError = ref('');
-const refundForm = reactive({
-  tanggal_refund: localDateInput(),
-  nominal_refund: '',
-  metode_refund: 'bank',
-  id_rekening_perusahaan: '',
-  catatan_refund: '',
-  confirm_potong_tagihan: ''
-});
-
-const statusOptions = [
-  { value: '', label: 'Semua Status' },
-  { value: '0', label: 'Pending' },
-  { value: '3', label: 'Realisasi' },
-  { value: '1', label: 'Potong Tagihan' },
-  { value: '9', label: 'Batal' }
-];
+const fundingLabels = { AVAILABLE:'Tersedia', PARTIAL:'Terpakai Sebagian', HELD:'Ditahan Kuitansi', USED:'Terpakai', LEGACY_USED:'Terpakai (Lama)', LEGACY_TRANSACTION:'Perlu Rekonsiliasi', REVIEW:'Perlu Pemeriksaan', CANCELLED:'Batal' };
+const statusOptions = [{value:'',label:'Semua Status'}, ...Object.entries(fundingLabels).map(([value,label])=>({value,label}))];
 
 const fallbackBranchId = computed(() => getLoginBranchId(authStore.user));
 const fallbackCompanyId = computed(() => getLoginCompanyId(authStore.user));
@@ -132,32 +113,15 @@ const principalOptions = computed(() =>
     }))
 );
 
-const accountOptions = computed(() =>
-  accounts.value
-    .filter((item) => item.is_aktif === undefined || item.is_aktif === true || item.is_aktif === 'true' || Number(item.is_aktif) === 1)
-    .map((item) => ({
-      value: String(item.id_rekening_perusahaan || item.id),
-      label: `${item.nama_bank || 'Kas/Bank'} - ${item.nomor_rekening || '-'} (${item.nama_pemilik || '-'})`
-    }))
-);
-
-const summary = computed(() => {
-  const openRows = rows.value.filter((item) => resolveStatusValue(item) === 0);
-  const realizedRows = rows.value.filter((item) => resolveStatusValue(item) === 3);
-  const usedRows = rows.value.filter((item) => resolveStatusValue(item) === 1);
-  const canceledRows = rows.value.filter((item) => resolveStatusValue(item) === 9);
-
-  return {
-    total: rows.value.length,
-    open: openRows.length,
-    realized: realizedRows.length,
-    used: usedRows.length,
-    canceled: canceledRows.length,
-    totalNominal: rows.value.reduce((acc, item) => acc + Number(item.total_cn || 0), 0),
-    openNominal: openRows.reduce((acc, item) => acc + Number(item.total_cn || 0), 0),
-    usedNominal: usedRows.reduce((acc, item) => acc + Number(item.nominal_refund || item.total_cn || 0), 0)
-  };
-});
+const summary = computed(() => ({
+  total: rows.value.length,
+  open: rows.value.filter(r => Number(r.available_amount)>0).length,
+  used: rows.value.filter(r => ['USED','PARTIAL','LEGACY_USED'].includes(r.funding_status)).length,
+  review: rows.value.filter(r => ['REVIEW','LEGACY_TRANSACTION'].includes(r.funding_status)).length,
+  canceled: rows.value.filter(r => r.funding_status==='CANCELLED').length,
+  totalNominal: rows.value.reduce((n,r)=>n+Number(r.total_cn || 0),0),
+  openNominal: rows.value.reduce((n,r)=>n+Number(r.available_amount || 0),0)
+}));
 
 const columns = [
   { key: 'kode_cn', label: 'Kode CN' },
@@ -181,8 +145,10 @@ const columns = [
               : 'inline-flex min-w-[78px] justify-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-200 dark:text-slate-950 dark:ring-amber-100'
     })
   },
-  { key: 'no_faktur_digunakan', label: 'Faktur Pakai' },
-  { key: 'kode_refund', label: 'Transaksi Potong' }
+  { key: 'available_amount', label: 'Sisa Tersedia', render: row => formatCurrency(row.available_amount || 0) },
+  { key: 'no_faktur_digunakan', label: 'Faktur Terkait / Asal' },
+  { key: 'applied_invoice_numbers', label: 'Faktur Dibayar' },
+  { key: 'kode_refund', label: 'Transaksi Kas/Bank Lama' }
 ];
 
 const candidateColumns = [
@@ -229,14 +195,6 @@ function formatCurrency(value) {
   return `Rp ${numberFormatter.format(Number(value || 0))}`;
 }
 
-function localDateInput(date = new Date()) {
-  const value = date instanceof Date ? date : new Date(date);
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function formatDate(value) {
   if (!value) return '-';
   const text = String(value);
@@ -273,6 +231,7 @@ function resolveStatusValue(value) {
 }
 
 function resolveStatusLabel(value) {
+  if (value?.funding_status) return fundingLabels[value.funding_status] || value.funding_status;
   const status = resolveStatusValue(value);
   if (status === 1) return 'Potong Tagihan';
   if (status === 9) return 'Batal';
@@ -368,43 +327,6 @@ function resolveRows(response) {
   return normalizeList(unwrapResponse(response));
 }
 
-function firstFilledValue(values = []) {
-  return values.find((value) => value !== undefined && value !== null && value !== '');
-}
-
-function resolveCompanyId(row = {}) {
-  const principalId = firstFilledValue([row?.id_principal, detailHeader.value?.id_principal, selectedRow.value?.id_principal]);
-  const principal = principals.value.find((item) => String(item.id) === String(principalId || ''));
-
-  return firstFilledValue([
-    row?.id_perusahaan,
-    detailHeader.value?.id_perusahaan,
-    selectedRow.value?.id_perusahaan,
-    filters.companyId,
-    principal?.id_perusahaan,
-    principal?.company_id
-  ]);
-}
-
-function resolveBranchId(row = {}) {
-  return firstFilledValue([
-    row?.id_cabang,
-    detailHeader.value?.id_cabang,
-    selectedRow.value?.id_cabang,
-    filters.branchId
-  ]);
-}
-
-function uniqueAccounts(list = []) {
-  const seen = new Set();
-  return list.filter((item) => {
-    const id = item?.id_rekening_perusahaan || item?.id;
-    if (!id || seen.has(String(id))) return false;
-    seen.add(String(id));
-    return true;
-  });
-}
-
 async function loadReferences() {
   loading.refs = true;
   try {
@@ -439,7 +361,7 @@ async function loadRows() {
       id_cabang: filters.branchId || undefined,
       id_perusahaan: filters.companyId || undefined,
       id_principal: filters.principalId || undefined,
-      status_cn: filters.status === '' ? undefined : filters.status
+      funding_status: filters.status || undefined
     });
 
     rows.value = resolveRows(response);
@@ -510,47 +432,6 @@ async function issueCandidate() {
   }
 }
 
-async function loadAccountsForCreditNote(row = detailHeader.value || selectedRow.value) {
-  accounts.value = [];
-  refundForm.id_rekening_perusahaan = '';
-  const companyId = resolveCompanyId(row);
-  const branchId = resolveBranchId(row);
-  const attempts = [];
-
-  if (companyId) {
-    attempts.push({
-      clause: JSON.stringify({ id_perusahaan: `=${Number(companyId)}` })
-    });
-  }
-
-  if (branchId) {
-    attempts.push({
-      clause: JSON.stringify({ id_cabang: `=${Number(branchId)}` })
-    });
-  }
-
-  attempts.push({
-    clause: JSON.stringify({ is_aktif: '=true' })
-  });
-  attempts.push({});
-
-  loading.accounts = true;
-  try {
-    for (const params of attempts) {
-      const response = await getCompanyBankAccounts(params);
-      const list = uniqueAccounts(normalizeList(unwrapResponse(response)));
-      if (list.length) {
-        accounts.value = list;
-        break;
-      }
-    }
-  } catch (error) {
-    refundError.value = normalizeError(error, 'Daftar rekening kas/bank belum bisa dimuat.');
-  } finally {
-    loading.accounts = false;
-  }
-}
-
 async function openDetail(row) {
   selectedRow.value = row;
   detailOpen.value = true;
@@ -567,67 +448,6 @@ async function openDetail(row) {
     pageError.value = normalizeError(error, 'Detail Credit Note belum bisa dimuat.');
   } finally {
     loading.detail = false;
-  }
-}
-
-async function openRefundModal(row = detailHeader.value || selectedRow.value) {
-  if (!row || ![0, 3].includes(resolveStatusValue(row))) return;
-  refundError.value = '';
-  refundForm.tanggal_refund = localDateInput();
-  refundForm.nominal_refund = String(row.total_cn || '');
-  refundForm.metode_refund = 'bank';
-  refundForm.id_rekening_perusahaan = '';
-  refundForm.catatan_refund = '';
-  refundForm.confirm_potong_tagihan = '';
-  refundOpen.value = true;
-  await loadAccountsForCreditNote(row);
-}
-
-async function submitRefund() {
-  refundError.value = '';
-  if (!selectedRow.value?.id_cn && !detailHeader.value?.id_cn) {
-    refundError.value = 'Credit Note belum dipilih.';
-    return;
-  }
-  if (!refundForm.id_rekening_perusahaan) {
-    refundError.value = 'Pilih rekening kas/bank untuk potong tagihan.';
-    return;
-  }
-  if (!Number(refundForm.nominal_refund || 0)) {
-    refundError.value = 'Nominal potong tagihan wajib diisi.';
-    return;
-  }
-  if (String(refundForm.confirm_potong_tagihan || '').trim().toUpperCase() !== 'POTONG TAGIHAN') {
-    refundError.value = 'Ketik POTONG TAGIHAN untuk mengunci CN.';
-    return;
-  }
-
-  loading.refund = true;
-  try {
-    const idCn = detailHeader.value?.id_cn || selectedRow.value.id_cn;
-    await refundCreditNote(idCn, {
-      tanggal_refund: refundForm.tanggal_refund,
-      nominal_refund: Number(refundForm.nominal_refund || 0),
-      metode_refund: refundForm.metode_refund,
-      id_rekening_perusahaan: refundForm.id_rekening_perusahaan,
-      catatan_refund: refundForm.catatan_refund,
-      confirm_potong_tagihan: refundForm.confirm_potong_tagihan
-    });
-
-    feedback.value = `Credit Note ${detailHeader.value?.kode_cn || selectedRow.value?.kode_cn || ''} berhasil diproses potong tagihan.`;
-    refundOpen.value = false;
-    await loadRows();
-    const currentId = idCn;
-    const updatedRow = rows.value.find((item) => String(item.id_cn) === String(currentId));
-    if (updatedRow) {
-      await openDetail(updatedRow);
-    } else {
-      detailOpen.value = false;
-    }
-  } catch (error) {
-    refundError.value = normalizeError(error, 'Potong tagihan Credit Note belum berhasil diproses.');
-  } finally {
-    loading.refund = false;
   }
 }
 
@@ -668,23 +488,23 @@ onMounted(async () => {
         <p class="mt-3 text-2xl font-bold text-slate-950 dark:text-white">{{ summary.total }}</p>
       </div>
       <div class="panel p-5">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Pending</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Tersedia</p>
         <p class="mt-3 text-2xl font-bold text-emerald-600">{{ summary.open }}</p>
       </div>
       <div class="panel p-5">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Potong Tagihan</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Terpakai</p>
         <p class="mt-3 text-2xl font-bold text-slate-700 dark:text-slate-200">{{ summary.used }}</p>
       </div>
       <div class="panel p-5">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Realisasi</p>
-        <p class="mt-3 text-2xl font-bold text-emerald-600">{{ summary.realized }}</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Perlu Pemeriksaan</p>
+        <p class="mt-3 text-2xl font-bold text-emerald-600">{{ summary.review }}</p>
       </div>
       <div class="panel p-5">
         <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Batal</p>
         <p class="mt-3 text-2xl font-bold text-amber-600">{{ summary.canceled }}</p>
       </div>
       <div class="panel p-5">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Nominal Pending</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Saldo Tersedia</p>
         <p class="mt-3 text-xl font-bold text-emerald-600">{{ formatCurrency(summary.openNominal) }}</p>
       </div>
       <div class="panel p-5">
@@ -921,8 +741,29 @@ onMounted(async () => {
           <div class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
             <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Status</p>
             <p class="mt-2 font-semibold text-slate-950 dark:text-white">{{ resolveStatusLabel(detailHeader) }}</p>
-            <p class="text-sm text-slate-500">Faktur: {{ detailHeader?.no_faktur_digunakan || '-' }}</p>
+            <p class="text-sm text-slate-500">Faktur terkait / asal: {{ detailHeader?.no_faktur_digunakan || '-' }}</p>
           </div>
+        </div>
+
+        <div class="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+          <p class="font-semibold">Pemakaian Credit Note</p>
+          <p class="mt-2 text-sm">{{ detailHeader?.funding_message }}</p>
+          <div class="mt-3 grid gap-3 text-sm md:grid-cols-3">
+            <p>Sisa tersedia: <strong>{{ formatCurrency(detailHeader?.available_amount || 0) }}</strong></p>
+            <p>Ditahan kuitansi draft: <strong>{{ formatCurrency(detailHeader?.held_amount || 0) }}</strong></p>
+            <p>Terpakai melalui kuitansi: <strong>{{ formatCurrency(detailHeader?.used_amount || 0) }}</strong></p>
+          </div>
+          <div v-if="detailHeader?.receipt_usage?.length" class="mt-4 overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+              <thead><tr><th class="p-2">Kuitansi</th><th class="p-2">Faktur Dibayar</th><th class="p-2">Nominal CN</th><th class="p-2">Status</th></tr></thead>
+              <tbody><tr v-for="(usage,index) in detailHeader.receipt_usage" :key="index">
+                <td class="p-2">{{ usage.receipt_number }}</td><td class="p-2">{{ usage.no_faktur }}</td>
+                <td class="p-2">{{ formatCurrency(usage.amount) }}</td>
+                <td class="p-2">{{ {DRAFT:'Menunggu approval',FINALIZED:'Disetujui',CANCEL_REQUESTED:'Pengajuan batal'}[usage.status] || usage.status }}</td>
+              </tr></tbody>
+            </table>
+          </div>
+          <p v-else class="mt-3 text-sm text-slate-500">Belum ada alokasi kuitansi aktif. Faktur terkait / asal di atas bukan bukti pemakaian CN.</p>
         </div>
 
         <div class="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
@@ -935,8 +776,8 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="resolveStatusValue(detailHeader) === 1" class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
-          <p class="font-semibold">Credit Note sudah diproses potong tagihan</p>
+        <div v-if="detailHeader?.funding_status === 'LEGACY_TRANSACTION'" class="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <p class="font-semibold">Transaksi kas/bank lama — perlu rekonsiliasi</p>
           <div class="mt-3 grid gap-3 md:grid-cols-4">
             <p><span class="opacity-70">Tanggal:</span> {{ formatDate(detailHeader?.tanggal_refund) }}</p>
             <p><span class="opacity-70">Nominal:</span> {{ formatCurrency(detailHeader?.nominal_refund || detailHeader?.total_cn) }}</p>
@@ -992,13 +833,7 @@ onMounted(async () => {
           >
             Cetak CN
           </button>
-          <button
-            v-if="[0, 3].includes(resolveStatusValue(detailHeader))"
-            class="rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-sm hover:bg-amber-400"
-            @click="openRefundModal(detailHeader)"
-          >
-            Potong Tagihan
-          </button>
+          <button v-if="Number(detailHeader?.available_amount)>0 && canViewReceipts" class="rounded-xl bg-brand-600 px-4 py-3 font-semibold text-white" @click="detailOpen=false; router.push('/finance/receipt-workflow')">Buka Pembayaran Tagihan</button>
           <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200" @click="detailOpen = false">
             Tutup
           </button>
@@ -1006,97 +841,5 @@ onMounted(async () => {
       </div>
     </AppModal>
 
-    <AppModal
-      :open="refundOpen"
-      :title="`Potong Tagihan ${detailHeader?.kode_cn || selectedRow?.kode_cn || 'Credit Note'}`"
-      description="Proses ini membuat transaksi kas/bank dan mengunci CN sebagai Potong Tagihan."
-      size="2xl"
-      @close="refundOpen = false"
-    >
-      <div class="space-y-4">
-        <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-          Potong tagihan CN saat ini diproses penuh sesuai nominal CN: <strong>{{ formatCurrency(detailHeader?.total_cn || selectedRow?.total_cn) }}</strong>.
-        </div>
-
-        <p v-if="refundError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {{ refundError }}
-        </p>
-
-        <div class="grid gap-4 md:grid-cols-2">
-          <label class="block">
-            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Tanggal Potong</span>
-            <input
-              v-model="refundForm.tanggal_refund"
-              type="date"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            />
-          </label>
-
-          <label class="block">
-            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Nominal Potong</span>
-            <input
-              v-model.number="refundForm.nominal_refund"
-              type="number"
-              min="0"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            />
-          </label>
-
-          <label class="block">
-            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Metode Potong</span>
-            <select
-              v-model="refundForm.metode_refund"
-              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            >
-              <option value="bank">Transfer Bank</option>
-              <option value="cash">Tunai</option>
-              <option value="giro">Giro</option>
-            </select>
-          </label>
-
-          <AppSearchSelect
-            v-model="refundForm.id_rekening_perusahaan"
-            label="Rekening Kas/Bank"
-            :options="accountOptions"
-            :disabled="loading.accounts"
-            :placeholder="loading.accounts ? 'Memuat rekening...' : 'Pilih rekening'"
-            empty-text="Rekening perusahaan belum tersedia."
-          />
-        </div>
-
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Catatan Potong</span>
-          <textarea
-            v-model="refundForm.catatan_refund"
-            rows="3"
-            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            placeholder="Contoh: Nilai retur dipakai memotong tagihan customer"
-          />
-        </label>
-
-        <label class="block">
-          <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Konfirmasi</span>
-          <input
-            v-model="refundForm.confirm_potong_tagihan"
-            type="text"
-            class="w-full rounded-xl border border-amber-200 bg-white px-3 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-amber-400 dark:border-amber-500/40 dark:bg-slate-950 dark:text-white"
-            placeholder="Ketik POTONG TAGIHAN"
-          />
-        </label>
-
-        <div class="flex flex-wrap justify-end gap-3">
-          <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200" :disabled="loading.refund" @click="refundOpen = false">
-            Batal
-          </button>
-          <button
-            class="rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-sm hover:bg-amber-400 disabled:opacity-60"
-            :disabled="loading.refund || String(refundForm.confirm_potong_tagihan || '').trim().toUpperCase() !== 'POTONG TAGIHAN'"
-            @click="submitRefund"
-          >
-            {{ loading.refund ? 'Memproses...' : 'Proses Potong Tagihan' }}
-          </button>
-        </div>
-      </div>
-    </AppModal>
   </section>
 </template>

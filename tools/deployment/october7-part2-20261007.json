@@ -1,0 +1,137 @@
+{
+  "release": "20261007-part2",
+  "status": "DEPLOYED_AND_VERIFIED",
+  "production": "https://erp.budimas.swakarya.my.id:9092",
+  "backup_directory": "/www/backup/budimas-oct7-part2.1J3JAO",
+  "tests": {
+    "backend": 508,
+    "frontend_unit": 64,
+    "browser_scenarios": 4
+  },
+  "migration": {
+    "schema": true,
+    "giro_customer_linked": true
+  },
+  "api": {
+    "checks": [
+      "health",
+      "anonymous_rejected",
+      "legacy_giro_owner_verified",
+      "giro_customer_options",
+      "placement_ready_matches_report_without_physical_double_deduction",
+      "customer_scoped_sources",
+      "supervisor_receipts_access",
+      "csv_and_xlsx_preview_only",
+      "deleted_promo_code_reusable_unique_live_code"
+    ],
+    "stock": [
+      {
+        "product": 1487,
+        "ready": 125,
+        "placement_ready": 125,
+        "physical": 370
+      },
+      {
+        "product": 1493,
+        "ready": 110,
+        "placement_ready": 110,
+        "physical": 355
+      }
+    ],
+    "business_data_unchanged_by_smoke": true
+  },
+  "public_verification": {
+    "files": 728,
+    "ports": [
+      443,
+      9092
+    ],
+    "auth_and_cors": true
+  },
+  "published": {
+    "time": "2026-10-07T06:42:50.049843+00:00",
+    "all_hashes_verified": true
+  },
+  "notification": {
+    "channel": "WhatsApp Web",
+    "time": "2026-10-07 13:44 Asia/Jakarta",
+    "status": "Requested self-chat; sent and Read confirmed"
+  },
+  "cash_policy": "Existing same-sales LPH scope retained pending user decision; approved source balances are not capped by sales claims.",
+  "stock_policy": "READY projected across lots FEFO before filters. Physical inventory changes on actual Canvas/picking, not order reservations; no double deduction.",
+  "api_files": [
+    {
+      "bundle": "api/apps/routes/payment_workflow.py",
+      "targets": [
+        "/www/wwwroot/API/apps/routes/payment_workflow.py"
+      ],
+      "sha256": "4fdb85cbf0efb35fefd4fc1615ad8fb484aea9380896705a9b4f5eb310a20e8f",
+      "bytes": 10852
+    },
+    {
+      "bundle": "api/apps/routes/wms_mock.py",
+      "targets": [
+        "/www/wwwroot/API/apps/routes/wms_mock.py"
+      ],
+      "sha256": "46de3589cecd0ccec37f3ac8278de3ec7dbc975b04e264817bde4c9ecd2bd4dd",
+      "bytes": 661398
+    },
+    {
+      "bundle": "api/apps/services/FinanceWorkflow/rules.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/FinanceWorkflow/rules.py"
+      ],
+      "sha256": "d6a9978ad2be82b1fa5496c91f1d760b063e174da3dc70451c3337818c2bad37",
+      "bytes": 3151
+    },
+    {
+      "bundle": "api/apps/services/FinanceWorkflow/service.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/FinanceWorkflow/service.py"
+      ],
+      "sha256": "c57e3de24f3b8b8378b5b4fd57a4f6ac9e8ba2179223fc31602eea129517b2d2",
+      "bytes": 71499
+    },
+    {
+      "bundle": "api/apps/services/SalesCanvas.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/SalesCanvas.py"
+      ],
+      "sha256": "c2c5f7f212f112627d9ef47faadfc160f970651b76bf534be3f0c1d2cd01eae0",
+      "bytes": 245936
+    },
+    {
+      "bundle": "api/apps/services/UnifiedPromo.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/UnifiedPromo.py"
+      ],
+      "sha256": "dcdb70e062937c9450049ea06a74772b7a758581117cf207dce9cb9a9b184768",
+      "bytes": 49096
+    },
+    {
+      "bundle": "api/apps/lib/bank_file_import.py",
+      "targets": [
+        "/www/wwwroot/API/apps/lib/bank_file_import.py"
+      ],
+      "sha256": "1c20c9abfa5d6833d6c4d99420d7d93e2d537b611e391d9b38b5f125f5c49ece",
+      "bytes": 6047
+    },
+    {
+      "bundle": "api/apps/lib/rack_stock.py",
+      "targets": [
+        "/www/wwwroot/API/apps/lib/rack_stock.py"
+      ],
+      "sha256": "634f4b826abf0e0fa4a2dc053fb9e1537bd87d97b6b933d76785568df1caffd2",
+      "bytes": 3983
+    },
+    {
+      "bundle": "api/tools/migrations/20261007_part2_sources_promo.sql",
+      "targets": [
+        "/www/wwwroot/API/tools/migrations/20261007_part2_sources_promo.sql"
+      ],
+      "sha256": "c901bfe62285eefe8cf5a4e0b63ddd64474b7ea0789e291a033b25e66222f29a",
+      "bytes": 615
+    }
+  ],
+  "evidence_directory": "/tmp/budimas-oct7-part2.JbT1tO"
+}

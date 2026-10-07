@@ -11,6 +11,8 @@ import {
   useCustomerAdvance
 } from '@/api/finance';
 import { useAuthStore } from '@/stores/auth';
+import { workflowGet } from '@/api/paymentWorkflow';
+import { paymentPermission } from '@/utils/paymentPermissions';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { getLoginBranchId, getLoginCompanyId, isSuperUser, branchMatchesCompany } from '@/utils/accessScope';
 import AppModal from '@/shared/components/AppModal.vue';
@@ -64,6 +66,9 @@ const canUse = computed(() => (
   || auth.hasPermission('finance.customer-advances.use')
   || auth.hasPermission('finance.recap.update')
 ));
+const canUseReceipt = computed(() => paymentPermission(auth.permissions || [],'finance.receipts.create') === true);
+const fromReceipt = row => row?.origin === 'RECEIPT';
+function openReceiptPayment() { detailOpen.value=false;router.push('/finance/receipt-workflow'); }
 
 const companyOptions = computed(() => [
   { value: '', label: 'Semua perusahaan' },
@@ -103,6 +108,8 @@ const statusOptions = [
   { value: 'APPROVED', label: 'Aktif / dapat dipakai' },
   { value: 'PARTIAL', label: 'Dipakai sebagian' },
   { value: 'USED', label: 'Sudah digunakan' },
+  { value: 'RESERVED', label: 'Ditahan draft kuitansi' },
+  { value: 'CANCELLED', label: 'Dibatalkan' },
   { value: 'REJECTED', label: 'Ditolak' }
 ];
 
@@ -141,6 +148,9 @@ function advanceRemaining(row = {}) {
 
 function advanceStatus(row = {}) {
   const raw = String(row.status_uang_muka ?? row.status_approval ?? row.status ?? '').trim().toUpperCase();
+  // Workflow status is exact (including sub-rupiah balances), not rounded to 0.5.
+  if (fromReceipt(row) && ['APPROVED','PARTIAL','USED','RESERVED','CANCELLED'].includes(raw)) return raw;
+  if (['CANCELLED','RESERVED'].includes(raw)) return raw;
   if (['PENDING', 'PENDING_APPROVAL', 'MENUNGGU_APPROVAL', 'MENUNGGU PERSETUJUAN'].includes(raw)) return 'PENDING_APPROVAL';
   if (['REJECTED', 'DITOLAK', 'CANCELED', 'BATAL'].includes(raw)) return 'REJECTED';
   if (['USED', 'HABIS', 'CLOSED', 'SELESAI'].includes(raw) || (advanceRemaining(row) <= 0.5 && advanceAmount(row) > 0)) return 'USED';
@@ -155,6 +165,8 @@ function advanceStatusLabel(row = {}) {
     APPROVED: 'Aktif',
     PARTIAL: 'Dipakai sebagian',
     USED: 'Sudah digunakan',
+    RESERVED: 'Ditahan draft',
+    CANCELLED: 'Dibatalkan',
     REJECTED: 'Ditolak'
   }[status] || status;
 }
@@ -162,6 +174,8 @@ function advanceStatusLabel(row = {}) {
 function statusBadge(row) {
   const status = advanceStatus(row);
   const classes = {
+    RESERVED: 'inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-300 dark:text-slate-950',
+    CANCELLED: 'inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100',
     PENDING_APPROVAL: 'inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-300 dark:text-slate-950',
     APPROVED: 'inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-300 dark:text-slate-950',
     PARTIAL: 'inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800 dark:bg-sky-300 dark:text-slate-950',
@@ -193,11 +207,12 @@ const summary = computed(() => ({
 const columns = [
   { key: 'kode_uang_muka', label: 'Kode Uang Muka' },
   { key: 'nama_customer', label: 'Customer', render: (row) => row.nama_customer || row.customer_name || '-' },
-  { key: 'kode_mutasi', label: 'Mutasi Sumber', render: (row) => row.kode_mutasi || row.no_referensi || '-' },
+  { key: 'kode_mutasi', label: 'Dokumen Sumber', render: (row) => fromReceipt(row) ? `Kuitansi ${row.source_reference}` : row.kode_mutasi || row.no_referensi || '-' },
   { key: 'tanggal_mutasi', label: 'Tanggal', render: (row) => formatDate(row.tanggal_mutasi || row.tanggal) },
   { key: 'nominal_awal', label: 'Nilai Awal', render: (row) => formatCurrency(row.nominal_awal) },
   { key: 'nominal_terpakai', label: 'Terpakai', render: (row) => formatCurrency(row.nominal_terpakai) },
-  { key: 'sisa_nominal', label: 'Sisa', render: (row) => formatCurrency(row.sisa_nominal) },
+  { key: 'nominal_ditahan', label: 'Ditahan Draft', render: (row) => formatCurrency(row.nominal_ditahan) },
+  { key: 'sisa_nominal', label: 'Sisa Tersedia', render: (row) => formatCurrency(row.sisa_nominal) },
   { key: 'status', label: 'Status', render: (row) => statusBadge(row) }
 ];
 
@@ -273,23 +288,33 @@ async function loadReferences() {
   }
 }
 
+let listSequence=0;
 async function loadRows() {
+  const sequence=++listSequence;
   loading.list = true;
   pageError.value = '';
   try {
-    const response = await getCustomerAdvances({
+    const params = {
       id_perusahaan: filters.id_perusahaan || undefined,
       id_cabang: filters.id_cabang || undefined,
       status: filters.status || undefined,
       search: filters.search.trim() || undefined,
       limit: 250
-    });
-    rows.value = normalizeList(unwrapResponse(response)).map(normalizeAdvance);
+    };
+    // Distinct source identities; receipt advances are not copied into the old ledger.
+    const responses = await Promise.all([
+      ['RESERVED','CANCELLED'].includes(params.status) ? Promise.resolve({data:[]}) : getCustomerAdvances(params),
+      workflowGet('customer-advances',params)
+    ]);
+    if(sequence!==listSequence)return;
+    rows.value = responses.flatMap(response=>normalizeList(unwrapResponse(response))).map(normalizeAdvance)
+      .sort((a,b)=>new Date(b.tanggal || b.created_at || b.tanggal_mutasi || 0)-new Date(a.tanggal || a.created_at || a.tanggal_mutasi || 0));
   } catch (error) {
+    if(sequence!==listSequence)return;
     rows.value = [];
     pageError.value = normalizeError(error, 'Daftar Uang Muka Customer belum dapat dimuat.');
   } finally {
-    loading.list = false;
+    if(sequence===listSequence)loading.list = false;
   }
 }
 
@@ -310,7 +335,7 @@ async function openDetail(row) {
   detailOpen.value = true;
   loading.detail = true;
   try {
-    const response = await getCustomerAdvanceDetail(advanceId(row));
+    const response = fromReceipt(row) ? await workflowGet(`customer-advances/${row.id_source}`) : await getCustomerAdvanceDetail(advanceId(row));
     const payload = unwrapResponse(response) || {};
     detail.value = normalizeAdvance(payload.data || payload);
   } catch (error) {
@@ -439,7 +464,7 @@ onMounted(async () => {
   <section class="space-y-6">
     <PageHeader
       title="Uang Muka Customer"
-      description="Pantau saldo lebih dari mutasi bank, approval Finance, serta riwayat penggunaan ke faktur customer."
+      description="Pantau uang muka dari kelebihan kuitansi dan mutasi bank, beserta saldo serta riwayat penggunaannya."
     >
       <div class="flex flex-wrap gap-2">
         <button class="button-secondary" :disabled="loading.list" @click="loadRows">{{ loading.list ? 'Memuat...' : 'Muat Ulang' }}</button>
@@ -449,7 +474,7 @@ onMounted(async () => {
 
     <section class="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4 text-sm text-violet-950 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-100">
       <p class="font-semibold">Alur aman saldo lebih</p>
-      <p class="mt-1">Uang muka hanya dibuat dari sisa mutasi CR setelah alokasi ke setoran sumber. Finance harus menyetujui lebih dahulu; saldo aktif hanya dapat digunakan ke faktur terbuka customer, cabang, dan sales yang sama. Seluruh pemakaian tersimpan dalam riwayat audit.</p>
+      <p class="mt-1">Kelebihan dana di atas sisa piutang yang dipilih sebagai Uang Muka muncul setelah kuitansi disetujui, bukan saat Draft. Selisih terhadap klaim sales saja bukan kelebihan piutang. Uang muka kuitansi otomatis tersedia di Pembayaran Tagihan untuk customer, perusahaan, dan cabang yang sama; dana yang ditahan draft lain belum dapat dipakai lagi.</p>
     </section>
 
     <section class="panel p-5">
@@ -477,7 +502,7 @@ onMounted(async () => {
         />
         <label class="block">
           <span class="field-label">Cari</span>
-          <input v-model="filters.search" class="field-control" placeholder="Kode UM, customer, atau mutasi" @keyup.enter="loadRows" />
+          <input v-model="filters.search" class="field-control" placeholder="Kode UM, customer, kuitansi, atau mutasi" @keyup.enter="loadRows" />
         </label>
         <div class="flex items-end gap-2">
           <button class="button-primary w-full" :disabled="loading.list" @click="loadRows">Terapkan</button>
@@ -507,12 +532,12 @@ onMounted(async () => {
       @row-click="openDetail"
     />
 
-    <AppModal :open="detailOpen" title="Detail Uang Muka Customer" description="Sumber mutasi, status approval, dan riwayat penggunaan tersimpan sebagai jejak audit." size="4xl" @close="detailOpen = false">
+    <AppModal :open="detailOpen" title="Detail Uang Muka Customer" description="Dokumen sumber, status, dan riwayat penggunaan tersimpan sebagai jejak audit." size="4xl" @close="detailOpen = false">
       <div v-if="selectedAdvance" class="space-y-5">
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><p class="section-eyebrow">Kode</p><p class="mt-1 font-bold text-slate-950 dark:text-white">{{ selectedAdvance.kode_uang_muka }}</p></div>
           <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><p class="section-eyebrow">Customer</p><p class="mt-1 font-bold text-slate-950 dark:text-white">{{ selectedAdvance.nama_customer || '-' }}</p></div>
-          <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><p class="section-eyebrow">Mutasi</p><p class="mt-1 font-bold text-slate-950 dark:text-white">{{ selectedAdvance.kode_mutasi || '-' }}</p></div>
+          <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><p class="section-eyebrow">{{ fromReceipt(selectedAdvance) ? 'Kuitansi sumber' : 'Mutasi' }}</p><p class="mt-1 font-bold text-slate-950 dark:text-white">{{ selectedAdvance.source_reference || selectedAdvance.kode_mutasi || '-' }}</p></div>
           <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><p class="section-eyebrow">Status</p><div class="mt-1"><span :class="statusBadge(selectedAdvance).className">{{ statusBadge(selectedAdvance).text }}</span></div></div>
         </div>
 
@@ -522,7 +547,12 @@ onMounted(async () => {
           <div class="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-500/10"><p class="section-eyebrow">Saldo tersisa</p><p class="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-200">{{ formatCurrency(advanceRemaining(selectedAdvance)) }}</p></div>
         </div>
 
-        <div v-if="advanceStatus(selectedAdvance) === 'PENDING_APPROVAL'" class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+        <div v-if="fromReceipt(selectedAdvance)" class="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sky-950 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
+          <p>Ditahan draft: <b>{{ formatCurrency(selectedAdvance.nominal_ditahan) }}</b>. Sisa tersedia sudah dikurangi pemakaian final dan dana yang ditahan draft.</p>
+          <p v-if="advanceStatus(selectedAdvance)==='CANCELLED'">Kuitansi sumber dibatalkan. Uang muka ini tidak dapat dipakai; riwayat tetap disimpan.</p>
+          <template v-else><p>Uang muka ini telah disahkan bersama approval kuitansi. Gunakan melalui sumber dana pada Pembayaran Tagihan; tidak perlu approval atau pendaftaran ulang.</p><button v-if="canUseReceipt && advanceRemaining(selectedAdvance)>0" class="button-primary" @click="openReceiptPayment">Buka Pembayaran Tagihan</button></template>
+        </div>
+        <div v-else-if="advanceStatus(selectedAdvance) === 'PENDING_APPROVAL'" class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
           <p class="font-semibold text-amber-950 dark:text-amber-100">Menunggu keputusan Finance</p>
           <textarea v-model="approvalForm.catatan" class="field-control mt-3 min-h-20" placeholder="Catatan approval/penolakan (opsional)" />
           <div class="mt-3 flex flex-wrap gap-2">
@@ -592,11 +622,11 @@ onMounted(async () => {
 .button-primary { background: rgb(37 99 235); color: white; }
 .button-primary:hover:not(:disabled) { background: rgb(29 78 216); }
 .button-secondary { border: 1px solid rgb(203 213 225); color: rgb(51 65 85); }
-:global(.dark) .button-secondary { border-color: rgb(51 65 85); color: rgb(226 232 240); }
+.dark .button-secondary { border-color: rgb(51 65 85); color: rgb(226 232 240); }
 .button-danger { background: rgb(225 29 72); color: white; }
 .button-danger:hover:not(:disabled) { background: rgb(190 24 93); }
 .button-primary:disabled, .button-secondary:disabled, .button-danger:disabled { cursor: not-allowed; opacity: .55; }
 .field-label, .section-eyebrow { display: block; font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgb(100 116 139); }
 .field-control { width: 100%; margin-top: .35rem; border: 1px solid rgb(203 213 225); border-radius: .75rem; background: white; padding: .7rem .8rem; color: rgb(15 23 42); }
-:global(.dark) .field-control { border-color: rgb(51 65 85); background: rgb(2 6 23); color: rgb(226 232 240); }
+.dark .field-control { border-color: rgb(51 65 85); background: rgb(2 6 23); color: rgb(226 232 240); }
 </style>

@@ -27,7 +27,7 @@ try {
     else if(path.endsWith('/workflow/receipts'))data=[receipt];
     else if(path.endsWith('/workflow/receipts/1'))data=receipt;
     else if(path.endsWith('/workflow/funds'))data=funds;
-    else if(path.endsWith('/wms/placements'))data=[{id:1,id_cabang:5,id_produk:24,kode_barang:'AUTOSOL',nama_barang:'Autosol 15 GR',kode_rak:'R1',qty_pcs:4,qty_karton:0,uom1_nama:'PCS',uom1_factor:1}];
+    else if(path.endsWith('/wms/placements'))data=[{id:1,id_cabang:5,id_produk:24,kode_barang:'AUTOSOL',nama_barang:'Autosol 15 GR',kode_rak:'R1',qty_pcs:1000,available_qty_pcs:ready,qty_karton:0,uom1_nama:'PCS',uom1_factor:1}];
     else if(path.endsWith('/stock-opname/laporan-stock'))data=[{id:1,id_cabang:5,id_produk:24,kode_sku:'AUTOSOL',nama_produk:'Autosol 15 GR',nama_cabang:'Solo',jumlah_ready:ready,jumlah_good:1000,jumlah_rak_tetap:4,uom:'PCS'}];
     else if(path.endsWith('/sales/retur-tracking')){
       returRequests.push(Object.fromEntries(url.searchParams));
@@ -49,7 +49,8 @@ try {
   for(const name of ['Tambah Setoran','Input Manual','Import Mutasi','Edit','Hapus']) assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
   await page.goto(origin+'/finance/bank-input');await page.getByText('BANK-OUT',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Import Mutasi',exact:true}).waitFor();
-  await page.getByRole('button',{name:'Input Manual',exact:true}).click();
+  await page.goto(origin+'/finance/receipt-cash');
+  await page.getByRole('button',{name:'Tambah Setoran',exact:true}).click();
   const modal=page.locator('form').filter({has:page.getByRole('button',{name:'Simpan Setoran',exact:true})});
   const selects=modal.getByPlaceholder('Pilih data',{exact:true});
   await selects.nth(0).click();await page.getByRole('button',{name:'CO - Company Test',exact:true}).click();
@@ -60,7 +61,6 @@ try {
   assert.equal(await page.getByRole('button',{name:'YUNITA TRI MAHARINI',exact:true}).count(),0);
   await page.getByRole('button',{name:'Sales 1 (Test)',exact:true}).click();
   await modal.getByLabel('Nominal (Rp)',{exact:true}).fill('1000');
-  await modal.getByLabel('Bank',{exact:true}).fill('Bank Test');
   await modal.getByLabel('Deskripsi',{exact:true}).fill('Setoran pengujian lokal');
   await modal.getByRole('button',{name:'Simpan Setoran',exact:true}).click();
   assert.equal(writes.find(w=>w.path.endsWith('/workflow/funds')).body.id_sales,'334');
@@ -84,14 +84,11 @@ try {
   assert.equal(returRequests.at(-1).status,'4');
   assert.equal(returRequests.at(-1).status_group,undefined);
   await page.goto(origin+'/wms/penempatan');
-  await page.getByRole('heading',{name:'Saldo Penempatan — Acuan Laporan Stok Gudang',exact:true}).waitFor();
+  assert.equal(await page.getByRole('heading',{name:'Saldo Penempatan — Acuan Laporan Stok Gudang',exact:true}).count(),0);
   await page.getByRole('cell',{name:'1.000 PCS',exact:true}).waitFor();
-  await page.getByRole('cell',{name:'996',exact:true}).waitFor();
-  await page.getByRole('cell',{name:'4 PCS',exact:true}).waitFor();
   ready=850;
   await page.getByRole('button',{name:'Muat Penempatan',exact:true}).click();
   await page.getByRole('cell',{name:'850 PCS',exact:true}).waitFor();
-  await page.getByRole('cell',{name:'4 PCS',exact:true}).waitFor();
   await page.screenshot({path:'/tmp/budimas-oct7-revision.YYqw4V/placement-report.png',fullPage:true});
   assert.deepEqual(errors,[]);
   console.log('PASS: menu-only ACL, self-approval, no name-based bypass, bank input separation, Debit-only list, unique sales FK, exact retur filters, warehouse-authoritative placement quantities and live reload without changing lot quantities. Mock APIs only.');

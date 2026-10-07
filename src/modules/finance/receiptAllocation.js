@@ -12,9 +12,10 @@ export function claimsFor(invoiceId, claims = []) {
   return result;
 }
 export function sourceMatchesInvoice(source, invoice, lph) {
-  return Number(source.remaining)>0 &&
+  return Number(source.remaining)>0 && source.approval==='APPROVED' && source.giro_status!=='BOUNCED' && source.transaction_type!=='CREDIT' &&
     String(source.id_perusahaan)===String(lph?.id_perusahaan) &&
     String(source.id_cabang)===String(lph?.id_cabang) &&
+    (!['GIRO','ADVANCE','RETURN'].includes(source.kind) || !!source.id_customer) &&
     (!source.id_customer || String(source.id_customer)===String(invoice.id_customer)) &&
     (source.kind!=='CASH' || !source.id_sales || String(source.id_sales)===String(lph?.id_sales));
 }
@@ -23,22 +24,13 @@ export function initialAllocationAmount(invoice, source, invoices, funds, claims
 }
 export function allocationLimit(invoice, source, invoices, funds, claims) {
   let available = cents(source.remaining);
-  const methods = { CASH:0, TRANSFER:0, GIRO:0 };
   for (const row of invoices.filter(i => i.selected)) for (const allocation of row.sources || []) {
     const sameSource = String(allocation.id_source) === String(source.id);
     const sameInvoice = String(row.id) === String(invoice.id);
     if (sameSource && !sameInvoice) available -= cents(allocation.amount);
-    if (sameInvoice && !sameSource) {
-      const kind = funds.find(f => String(f.id) === String(allocation.id_source))?.kind;
-      if (kind in methods) methods[kind] += cents(allocation.amount);
-    }
   }
-  const claim = claimsFor(invoice.id, claims);
-  let cap = available;
-  if (source.kind === 'GIRO') cap = Math.min(cap, claim.GIRO - methods.GIRO);
-  if (['CASH','TRANSFER'].includes(source.kind)) cap = Math.min(cap, claim.CASH + claim.TRANSFER - methods.CASH - methods.TRANSFER);
-  if (source.kind === 'CASH') cap = Math.min(cap, claim.CASH - methods.CASH);
-  return Math.max(0, cap) / 100;
+  // Claims are reconciliation information, not a cap on approved deposits.
+  return Math.max(0, available) / 100;
 }
 export function remainingAfterChoices(invoice) {
   const used = [...(invoice.sources || []), ...(invoice.fees || [])].reduce((n,a) => n + cents(a.amount),cents(invoice.legacy_fee?.amount));

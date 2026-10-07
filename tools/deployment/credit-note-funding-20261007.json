@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-07",
+  "change": "Automatic customer credit notes in receipt funding",
+  "deployment_status": "DEPLOYED_AND_VERIFIED",
+  "production_writes": true,
+  "migration_required": false,
+  "prerequisite": "Existing October 7 Part 2 payment workflow schema",
+  "api_files": [
+    "apps/lib/credit_note_funding.py",
+    "apps/services/FinanceWorkflow/service.py",
+    "apps/services/Akuntansi/CreditNote.py",
+    "apps/routes/payment_workflow.py"
+  ],
+  "frontend_files": [
+    "src/modules/finance/pages/CreditNotePage.vue",
+    "src/modules/finance/pages/ReceiptWorkflowPage.vue",
+    "src/modules/finance/components/ReceiptEditor.vue"
+  ],
+  "tests": {
+    "backend": {
+      "passed": 515,
+      "failed": 0,
+      "isolated_database": "127.0.0.1:55432/budimas_workflow_tests"
+    },
+    "frontend_unit": {
+      "passed": 64,
+      "failed": 0
+    },
+    "browser": "tests/browser/credit-note-funding.mjs passed; all API traffic mocked",
+    "build": "Vite production build passed"
+  },
+  "server_read_only_verification": [
+    {
+      "credit_note_id": 5476,
+      "new_funding_status": "AVAILABLE",
+      "available": 110000
+    },
+    {
+      "credit_note_id": 5478,
+      "new_funding_status": "AVAILABLE",
+      "available": 110000
+    },
+    {
+      "credit_note_id": 5477,
+      "new_funding_status": "LEGACY_TRANSACTION",
+      "available": 0
+    }
+  ],
+  "behavior": [
+    "Invoice origin alone no longer excludes an unused CN.",
+    "Legacy refunds, cash/bank transactions, voucher use and ambiguous origin-invoice return deductions remain excluded.",
+    "Registration locks CN and is idempotent; GET does not register or consume balance.",
+    "Receipt save/finalize recheck registered CN validity and customer ownership.",
+    "Partial allocations, approval and cancellation reuse the receipt ledger; original invoice linkage is preserved.",
+    "The manual registration button is removed; the old direct Potong Tagihan endpoint returns 409 without creating accounting entries.",
+    "Credit Note list/detail display availability, draft holds and actual receipt/invoice usage separately from origin invoice and legacy cash/bank references."
+  ],
+  "remaining_manual_review": "CN 5477 has an existing cash/bank transaction. No automatic reversal, reactivation or journal correction was performed.",
+  "unrelated": "Sales Penanggung Jawab choices remain LPH-based; this change only addresses CN.",
+  "local_build": "/tmp/budimas-cn-release.Fpm2Uh/dist",
+  "financial_data_changed": false,
+  "production": "https://erp.budimas.swakarya.my.id:9092",
+  "deployed_at": "2026-10-07T08:18:03.602857+00:00",
+  "backup_directory": "/www/backup/budimas-cn-fix.ZVtAcF",
+  "database_backup": {
+    "file": "/www/backup/budimas-cn-fix.ZVtAcF/database-before.dump",
+    "bytes": 1672724534,
+    "sha256": "2ca7943188385eab361390c9dcf04b749ff6757cb21755986dd34d7936045f65"
+  },
+  "api_verification": {
+    "checks": [
+      "health",
+      "anonymous_auth",
+      "cn_list_detail_and_status_filter",
+      "legacy_cn_not_reactivated",
+      "admin_and_supervisor_sources",
+      "customer_scoped_sources"
+    ],
+    "actors": [
+      {
+        "actor": 1,
+        "lph": 110,
+        "pending_cn_count": 2,
+        "total": 220000
+      },
+      {
+        "actor": 774,
+        "lph": 110,
+        "pending_cn_count": 2,
+        "total": 220000
+      }
+    ],
+    "read_only": true,
+    "financial_state_unchanged_during_checks": true,
+    "financial_state_unchanged_since_predeploy": true,
+    "credit_notes": [
+      {
+        "id": 5478,
+        "code": "CN/BMM-P2/20261007/0001",
+        "status": "AVAILABLE",
+        "available": "110000.0"
+      },
+      {
+        "id": 5477,
+        "code": "CN/BMM-P2/20261005/0001",
+        "status": "LEGACY_TRANSACTION",
+        "available": "0"
+      },
+      {
+        "id": 5476,
+        "code": "CN/BMM-P2/20260928/0001",
+        "status": "AVAILABLE",
+        "available": "110000.0"
+      }
+    ]
+  },
+  "public_verification": {
+    "completed": "2026-10-07T08:18:22.604Z",
+    "files": 394,
+    "ports": [
+      443,
+      9092
+    ],
+    "anonymous_auth_enforced": true,
+    "android_webview_cors": true
+  },
+  "deployed_api_files": [
+    {
+      "bundle": "api/apps/lib/credit_note_funding.py",
+      "targets": [
+        "/www/wwwroot/API/apps/lib/credit_note_funding.py"
+      ],
+      "sha256": "b1ee83f152610b154ace1c1f68785de63d00f993dd927a4f200e4dda7b250d24",
+      "bytes": 4775
+    },
+    {
+      "bundle": "api/apps/services/FinanceWorkflow/service.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/FinanceWorkflow/service.py"
+      ],
+      "sha256": "e99838a077241b4d5429ae985bd137b93003597d3708a80c006a1f70329f6448",
+      "bytes": 71932
+    },
+    {
+      "bundle": "api/apps/services/Akuntansi/CreditNote.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/Akuntansi/CreditNote.py"
+      ],
+      "sha256": "5d244c28d34b7a061255a8eea4242dbbb710ffd7dc9b172308437bf657c5e722",
+      "bytes": 39810
+    },
+    {
+      "bundle": "api/apps/routes/payment_workflow.py",
+      "targets": [
+        "/www/wwwroot/API/apps/routes/payment_workflow.py"
+      ],
+      "sha256": "71f05273d579e06dbf449d562051d466e2d7a30d4f804a2ec1dbad1f6401ae7f",
+      "bytes": 10632
+    }
+  ],
+  "evidence_directory": "/tmp/budimas-cn-release.Fpm2Uh",
+  "config_and_apk_unchanged": true,
+  "uat_untouched": true
+}

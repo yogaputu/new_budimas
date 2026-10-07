@@ -3,6 +3,9 @@ import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import ReceiptReconciliation from './ReceiptReconciliation.vue';
 import { allocationLimit, initialAllocationAmount, sourceMatchesInvoice } from '../receiptAllocation';
+import { workflowPost } from '@/api/paymentWorkflow';
+import { unwrapResponse, normalizeError } from '@/utils/api';
+import { ref } from 'vue';
 const props=defineProps({open:Boolean,busy:Boolean,form:Object,lp:Object,funds:Array,feeTypes:Array,lphs:Array,sales:Array,quote:Object,error:String});
 defineEmits(['close','select-lph','preview','save']);
 const names={CASH:'Tunai',TRANSFER:'Non Tunai',GIRO:'Giro',ADVANCE:'Uang Muka',RETURN:'Nota Retur'};
@@ -13,7 +16,7 @@ function unavailable(i,f) {
   if(f.approval!=='APPROVED') return 'Menunggu approval kasir';
   if(f.giro_status==='BOUNCED') return 'Giro ditolak';
   if(f.transaction_type==='CREDIT') return 'Mutasi dana keluar';
-  if(!i.sources.some(a=>String(a.id_source)===String(f.id)) && max(i,f)<=0) return 'Sisa/batas klaim sudah dipakai';
+  if(!i.sources.some(a=>String(a.id_source)===String(f.id)) && max(i,f)<=0) return 'Sisa dana sudah dipakai';
   return '';
 }
 const sources=i=>(props.funds || []).filter(f=>sourceMatchesInvoice(f,i,props.lp));
@@ -23,26 +26,48 @@ function toggle(i,f,checked){
   i.sources.push({id_source:f.id,amount:amount>0 ? String(amount) : ''});
 }
 const source=id=>props.funds?.find(f=>String(f.id)===String(id));
+const sourceBusy=ref(false),sourceError=ref('');
+async function chooseSource(i,f,checked){
+  if(!f.external_id || !checked){toggle(i,f,checked);return;}
+  sourceBusy.value=true;sourceError.value='';
+  try{
+    const saved=unwrapResponse(await workflowPost('external-sources/register',{kind:f.kind,id:f.external_id}));
+    const existing=props.funds.find(x=>String(x.id)===String(saved.id));
+    props.funds.splice(props.funds.indexOf(f),1);
+    if(existing)Object.assign(existing,saved);else props.funds.push({...f,...saved,external_id:null});
+    if(!i.sources.some(a=>String(a.id_source)===String(saved.id)))toggle(i,existing || props.funds.at(-1),true);
+  }catch(e){sourceError.value=normalizeError(e);}
+  finally{sourceBusy.value=false;}
+}
 </script>
 <template>
-  <AppModal :open="open" title="Buat / Edit Kuitansi" size="6xl" :hide-close="busy" :close-on-backdrop="!busy" @close="$emit('close')">
+  <AppModal :open="open" title="Buat / Edit Kuitansi" size="6xl" :hide-close="busy || sourceBusy" :close-on-backdrop="!busy && !sourceBusy" @close="$emit('close')">
     <div class="receipt-editor space-y-6">
       <h3 class="text-lg font-semibold">1. Informasi Kuitansi</h3>
-      <fieldset :disabled="busy" class="grid gap-4 md:grid-cols-4">
+      <fieldset :disabled="busy" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <label>Tanggal Pembayaran<input v-model="form.receipt_date" type="date" class="field-control"/></label>
         <label>No. Kuitansi<input v-model="form.number" :disabled="!!form.edit_id" class="field-control" maxlength="100" placeholder="Otomatis saat disimpan"/></label>
-        <AppSearchSelect v-model="form.id_sales" label="Sales Penanggung Jawab" :options="sales || []" placeholder="Semua Sales" :disabled="!!form.edit_id"/>
-        <AppSearchSelect v-model="form.id_lph" label="LPH Dikembalikan" :options="(lphs || []).map(l=>({value:String(l.id),label:`${l.kode_lph} — ${l.nama_sales}`}))" :disabled="!!form.edit_id" @update:model-value="$emit('select-lph')"/>
+        <AppSearchSelect v-if="!form.edit_id" v-model="form.sales_filter" label="Filter Sales (opsional)" :options="sales || []" placeholder="Semua Sales" empty-text="Tidak ada sales dengan LPH yang tersedia."/>
+        <div class="min-w-0" :class="{ 'lg:col-span-2': !!form.edit_id }">
+          <AppSearchSelect v-model="form.id_lph" label="LPH Dikembalikan" :options="(lphs || []).map(l=>({value:String(l.id),label:`${l.kode_lph} — ${l.nama_sales}`}))" empty-text="Tidak ada LPH yang bisa dibuatkan kuitansi." :disabled="!!form.edit_id" @update:model-value="$emit('select-lph')"/>
+          <p v-if="lp" role="status" aria-label="Sales penanggung jawab" class="mt-2 break-words text-sm leading-relaxed">Sales penanggung jawab: <span class="font-medium">{{ lp.nama_sales || '—' }}</span></p>
+        </div>
       </fieldset>
+      <p v-if="!form.edit_id" class="text-sm">Langsung pilih LPH, atau gunakan Filter Sales untuk mempersempit pilihan. Hanya LPH yang masih dapat dibuatkan kuitansi yang ditampilkan.</p>
+      <p v-if="!form.edit_id && !busy && !(sales || []).length" role="status" class="rounded-xl bg-slate-100 p-4 text-slate-700">Belum ada LPH yang tersedia untuk kuitansi baru. Riwayat kuitansi tetap dapat dilihat pada daftar pembayaran.</p>
       <h3 class="text-lg font-semibold">2. Alokasi Pembayaran per Faktur</h3>
+      <p v-if="sourceError" role="alert" class="text-rose-600">{{ sourceError }}</p>
+      <p v-if="sourceBusy" role="status">Menyiapkan sumber dana…</p>
       <p class="text-sm">Pilih sumber dana lalu isi nominal yang dipakai pada setiap faktur. Satu setoran dapat dibagi ke beberapa faktur. Klaim Sales belum merupakan pembayaran final.</p>
+      <p class="text-sm">Credit Note yang masih tersedia muncul otomatis sesuai customer. Tidak perlu pendaftaran atau Potong Tagihan sebelumnya; saldo tagihan berkurang setelah approval kuitansi.</p>
       <p v-if="!lp" class="rounded-xl bg-slate-100 p-4 text-slate-700">Pilih LPH terlebih dahulu.</p>
+      <p v-else-if="!(form.invoices || []).length" role="status" class="rounded-xl bg-amber-50 p-4 text-amber-900">Tidak ada faktur yang dapat dialokasikan pada LPH ini. Status atau sisa tagihan mungkin sudah berubah; tutup lalu buka kembali formulir untuk memuat pilihan terbaru.</p>
       <article v-for="i in form.invoices || []" :key="i.id" class="rounded-xl border border-slate-400/30 p-4">
         <label class="flex items-center gap-3"><input v-model="i.selected" type="checkbox" :disabled="busy" :aria-label="`Pilih faktur ${i.no_faktur}`"/><span><b>{{ i.no_faktur }}</b> · {{ i.nama_customer }}<br/>Total {{ money(i.total) }} · Sisa Piutang {{ money(i.remaining) }}</span></label>
         <div v-if="i.selected" class="mt-4 grid gap-5 lg:grid-cols-2">
-          <fieldset :disabled="busy" class="space-y-3"><legend class="font-semibold">Klaim Sales & Sumber Dana</legend>
+          <fieldset :disabled="busy || sourceBusy" class="space-y-3"><legend class="font-semibold">Klaim Sales & Sumber Dana</legend>
             <div class="rounded-xl bg-blue-50 p-3 text-blue-950"><p v-for="c in claims(i)" :key="c.id">{{ names[c.method] }}: <b>{{ money(c.amount) }}</b><span v-if="c.giro_number"> · {{ c.giro_number }} · {{ c.bank }} · {{ c.due_date }}</span></p><p v-if="!claims(i).length">Belum ada klaim Sales pada faktur ini.</p></div>
-            <label v-for="f in sources(i)" :key="f.id" class="flex gap-3 rounded-xl border border-slate-400/30 p-3"><input type="checkbox" :checked="i.sources.some(a=>String(a.id_source)===String(f.id))" :disabled="!!unavailable(i,f)" :aria-label="`${i.no_faktur} sumber ${f.reference}`" @change="toggle(i,f,$event.target.checked)"/><span><b>{{ names[f.kind] }} · {{ f.reference }}</b><br/>Sisa {{ money(f.remaining) }} · {{ f.bank || f.nama_customer || '' }}<br/><small v-if="f.due_date">Jatuh tempo {{ f.due_date }} · </small><small>{{ unavailable(i,f) || `Maks. ${money(max(i,f))}` }}</small></span></label>
+            <label v-for="f in sources(i)" :key="f.id" class="flex gap-3 rounded-xl border border-slate-400/30 p-3"><input type="checkbox" :checked="i.sources.some(a=>String(a.id_source)===String(f.id))" :disabled="!!unavailable(i,f)" :aria-label="`${i.no_faktur} sumber ${f.reference}`" @change="chooseSource(i,f,$event.target.checked)"/><span><b>{{ names[f.kind] }} · {{ f.reference }}</b><br/>Sisa {{ money(f.remaining) }} · {{ f.bank || f.nama_customer || '' }}<br/><small v-if="f.due_date">Jatuh tempo {{ f.due_date }} · </small><small>{{ unavailable(i,f) || `Maks. ${money(max(i,f))}` }}</small></span></label>
             <p v-if="!sources(i).length">Belum ada sumber dana yang tersedia. Catat atau import setoran terlebih dahulu.</p>
           </fieldset>
           <fieldset :disabled="busy" class="space-y-4"><legend class="font-semibold">Nominal per Sumber Dana</legend>
@@ -65,9 +90,9 @@ const source=id=>props.funds?.find(f=>String(f.id)===String(id));
           </fieldset>
         </div>
       </article>
-      <button class="btn-secondary" :disabled="busy || !(form.invoices || []).some(i=>i.selected)" @click="$emit('preview')">Hitung & Tinjau Alokasi</button>
+      <button class="btn-secondary" :disabled="busy || sourceBusy || !(form.invoices || []).some(i=>i.selected)" @click="$emit('preview')">Hitung & Tinjau Alokasi</button>
       <ReceiptReconciliation v-if="quote" :value="quote"/>
-      <button v-if="quote" class="btn-primary" :disabled="busy" @click="$emit('save')">Simpan Draft</button>
+      <button v-if="quote" class="btn-primary" :disabled="busy || sourceBusy" @click="$emit('save')">Simpan Draft</button>
       <p v-if="error" role="alert" class="text-rose-600">{{ error }}</p>
     </div>
   </AppModal>

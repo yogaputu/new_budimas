@@ -48,8 +48,6 @@ import {
   updateWmsRack
 } from '@/api/wms';
 import { getPrincipals, getProducts } from '@/api/master';
-import { getStockReport } from '@/api/stockOpname';
-import { placementBalances } from '../placementBalances';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import AppFormField from '@/shared/components/AppFormField.vue';
 import AppModal from '@/shared/components/AppModal.vue';
@@ -69,10 +67,6 @@ const rackModalOpen = ref(false);
 const principalGroupModalOpen = ref(false);
 const palletModalOpen = ref(false);
 const placementModalOpen = ref(false);
-const placementReport = ref([]);
-const placementSummary = computed(() => placementBalances(placementReport.value, placementRows.value, {
-  search:filters.placementSearch, rack:filters.placementRack, status:filters.placementStatus,
-}));
 const incomingPalletModalOpen = ref(false);
 const transferConfirmOpen = ref(false);
 const scannerOpen = ref(false);
@@ -884,23 +878,12 @@ const placementColumns = [
   { key: 'kode_rak', label: 'Rak' },
   { key: 'kode_barang', label: 'Kode Barang' },
   { key: 'nama_barang', label: 'Produk' },
-  { key: 'qty_pcs', label: 'Jumlah (UOM)', render: (row) => formatUomQuantity(row.qty_pcs, row) },
-  { key: 'qty_pcs_total', label: 'Total PCS', render: (row) => numberLabel(row.qty_pcs) },
+  { key: 'qty_pcs', label: 'Jumlah Ready (UOM)', render: (row) => formatUomQuantity(row.available_qty_pcs ?? row.qty_pcs, row) },
+  { key: 'qty_pcs_total', label: 'Total PCS Ready', render: (row) => numberLabel(row.available_qty_pcs ?? row.qty_pcs) },
   { key: 'batch_number', label: 'Batch' },
   { key: 'expired_date', label: 'Expired' },
   { key: 'status', label: 'Status', render: (row) => statusBadge(row.status) },
   { key: 'source_type', label: 'Sumber' }
-];
-const placementBalanceColumns = [
-  {key:'nama_cabang',label:'Cabang'},
-  {key:'kode_sku',label:'Kode SKU'},
-  {key:'nama_produk',label:'Produk'},
-  {key:'quantity',label:'Jumlah (Stok Ready)',render:r=>`${numberLabel(r.qty_pcs)} ${r.uom || 'PCS'}`},
-  {key:'qty_pcs',label:'Total PCS',render:r=>numberLabel(r.qty_pcs)},
-  {key:'jumlah_good',label:'GOOD',render:r=>numberLabel(r.jumlah_good)},
-  {key:'mapped_pcs',label:'Terdata di Rak',render:r=>numberLabel(r.mapped_pcs)},
-  {key:'mapping_gap',label:'Selisih Pemetaan',render:r=>numberLabel(r.mapping_gap)},
-  {key:'mapping_status',label:'Status Pemetaan'},
 ];
 
 const transactionColumns = [
@@ -3127,16 +3110,16 @@ async function loadPlacements(silent = false) {
   const sequence = ++placementLoadSequence;
   loading.placements = true;
   try {
-    const [response, report] = await Promise.all([getWmsPlacements({
+    const response = await getWmsPlacements({
       search: filters.placementSearch || undefined,
       kode_rak: filters.placementRack || undefined,
       status: filters.placementStatus || undefined,
       id_cabang: rackBranchId(),
       limit: 5000,
-    }), getStockReport({id_cabang:rackBranchId()})]);
+      availability: 'ready',
+    });
     if (sequence !== placementLoadSequence) return;
     placementRows.value = payloadRows(response);
-    placementReport.value = payloadRows(report);
     if (!placementRows.value.some((row) => String(row.id) === String(selectedPlacementId.value))) {
       selectedPlacementId.value = '';
     }
@@ -3144,7 +3127,6 @@ async function loadPlacements(silent = false) {
   } catch (error) {
     if (sequence !== placementLoadSequence || silent === true) return;
     placementRows.value = [];
-    placementReport.value = [];
     setError(error, 'Penempatan barang belum bisa dimuat.');
   } finally {
     if (sequence === placementLoadSequence) loading.placements = false;
@@ -4429,11 +4411,7 @@ onBeforeUnmount(stopQrScanner);
             </div>
           </div>
 
-          <h3 class="font-semibold">Saldo Penempatan — Acuan Laporan Stok Gudang</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah dan Total PCS memakai STOK READY dari laporan, satu kali per produk/cabang. Filter rak memilih produk, bukan membagi saldo produk ke rak. Selisih pemetaan membandingkan GOOD dengan total rak Tetap/Lorong; tidak mengubah saldo laporan atau mengarang batch/lokasi. Saldo dimuat ulang tiap 30 detik saat halaman aktif.</p>
-          <AppTable :rows="placementSummary" :columns="placementBalanceColumns" :loading="loading.placements" row-key="id" empty-message="Saldo laporan belum tersedia untuk filter ini." />
-          <h3 class="font-semibold">Rincian Lokasi & Batch</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah di bawah adalah catatan fisik masing-masing rak, bukan saldo transaksi. Klik baris untuk memperbaiki pemetaan berdasarkan barang sebenarnya. Selisih positif berarti lokasi belum lengkap; negatif berarti catatan rak melebihi GOOD. Data ini tidak menimpa Laporan Stok Gudang.</p>
+          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah Ready mengikuti saldo yang masih tersedia setelah pesanan, dengan urutan batch FEFO. Pengambilan picking/canvas mengurangi stok fisik rak. Klik baris untuk mengedit jumlah fisik, bukan jumlah ready. Data diperbarui otomatis setiap 30 detik.</p>
           <AppTable :rows="placementRows" :columns="placementColumns" :loading="loading.placements" :clickable-rows="true" row-key="id" :selected-key="selectedPlacementId" empty-message="Penempatan barang belum tersedia." @row-click="editPlacement" />
         </section>
 

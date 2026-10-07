@@ -13,22 +13,26 @@ import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppModal from '@/shared/components/AppModal.vue';
 import ReceiptReconciliation from '../components/ReceiptReconciliation.vue';
 import ReceiptEditor from '../components/ReceiptEditor.vue';
+import BankImportModal from '../components/BankImportModal.vue';
 import { receiptPayload, workflowDate } from '../receiptAllocation';
 import { depositSalesOptions } from '../depositSales';
+import { receiptSalesOptions, receiptLphOptions, receiptInvoices } from '../receiptLph';
 import { paymentPermission } from '@/utils/paymentPermissions';
 
 const route = useRoute(), auth = useAuthStore();
 const tab = computed(() => route.meta.workflowTab || 'receipts');
-const title = computed(() => ({ receipts: 'Pembayaran Tagihan — Kuitansi', cash: 'Setoran Tunai — Kuitansi', transfer: 'Setoran Non Tunai — Kuitansi', 'bank-input': 'Input / Import Mutasi Bank', giro: 'Setoran Giro', cancel: 'Batal Kuitansi', settings: 'Pengaturan Workflow Pembayaran', fees:'Master Biaya Lain', journals: 'Jurnal Pembayaran', mobile: 'LPH & Pembayaran Sales' }[tab.value]));
+const title = computed(() => ({ receipts: 'Pembayaran Tagihan — Kuitansi', cash: 'Setoran Tunai — Kuitansi', transfer: 'Setoran Non Tunai — Kuitansi', 'bank-input': 'Mutasi Bank', giro: 'Setoran Giro', cancel: 'Batal Kuitansi', settings: 'Pengaturan Workflow Pembayaran', fees:'Master Biaya Lain', journals: 'Jurnal Pembayaran', mobile: 'LPH & Pembayaran Sales' }[tab.value]));
 const fundKind = computed(() => ({cash:'CASH',transfer:'TRANSFER','bank-input':'TRANSFER',giro:'GIRO'}[tab.value]));
 const allowed = p => paymentPermission(auth.permissions || [], p, fundKind.value) ?? auth.hasPermission(p);
-const list = ref([]), lphs = ref([]), funds = ref([]), companies = ref([]), branches = ref([]), sales = ref([]), accounts = ref([]), mutations = ref([]), credits = ref([]);
+const list = ref([]), lphs = ref([]), funds = ref([]), companies = ref([]), branches = ref([]), sales = ref([]), accounts = ref([]), mutations = ref([]);
 const error = ref(''), success = ref(''), busy = ref(false), modal = ref(''), detail = ref(null), lp = ref(null), quote = ref(null);
 const form = reactive({}), settings = reactive({ company: '', enabled: false, max_fee: '2900', accounts: {} });
 const accountsLoading = ref(false), accountsError = ref('');
 const feeTypes = ref([]), checkedReceipts = ref([]), filter = reactive({search:'',status:'',from:'',to:'',page:1});
 const cancellationCandidates=ref([]);
-const feeManage = computed(() => allowed('finance.workflow.configure') || allowed('finance.fees.manage'));
+const canCreateFee = computed(() => allowed('finance.workflow.configure') || allowed('finance.fees.create'));
+const canEditFee = computed(() => allowed('finance.workflow.configure') || allowed('finance.fees.update'));
+const canDeleteFee = computed(() => allowed('finance.fees.delete'));
 const filteredList = computed(() => list.value.filter(row => {
   const text = [row.reference,row.number,row.kode_lph,row.nama_sales,row.bank,row.description,row.notes,row.reason].filter(Boolean).join(' ').toLowerCase();
   const date = workflowDate(row.received_date || row.receipt_date || row.tanggal || row.requested_at);
@@ -39,8 +43,8 @@ const pageRows = computed(() => filteredList.value.slice((filter.page-1)*50,filt
 const statusOptions = computed(() => [...new Set(list.value.flatMap(r => [r.status,r.approval,r.giro_status,r.allocation_status,r.journal_type]).filter(Boolean))]);
 const listTotal = computed(() => filteredList.value.reduce((total,row) => total+Number(row.amount || row.total || 0),0));
 const availableTotal = computed(() => filteredList.value.reduce((total,row) => total+Number(row.remaining || 0),0));
-const receiptSales = computed(() => [...new Map(lphs.value.map(l => [String(l.id_sales),{value:String(l.id_sales),label:l.nama_sales || String(l.id_sales)}])).values()]);
-const returnedLphs = computed(() => lphs.value.filter(l => l.status_dokumen==='DIKEMBALIKAN' && (!form.id_sales || String(l.id_sales)===String(form.id_sales))));
+const receiptSales = computed(() => receiptSalesOptions(lphs.value));
+const returnedLphs = computed(() => receiptLphOptions(lphs.value, form.sales_filter, form.edit_id ? form.id_lph : ''));
 const journalTotals = computed(() => filteredList.value.flatMap(r => r.lines || []).reduce((s,l) => ({debit:s.debit+Number(l.debit || 0),credit:s.credit+Number(l.kredit || 0)}),{debit:0,credit:0}));
 const clearingCandidates = computed(() => funds.value.filter(f => f.kind==='TRANSFER' && f.transaction_type!=='CREDIT' && f.approval==='APPROVED' && Number(f.remaining)===Number(f.amount) && Number(f.amount)===Number(detail.value?.amount) && String(f.id_perusahaan)===String(detail.value?.id_perusahaan) && String(f.id_cabang)===String(detail.value?.id_cabang)));
 let accountsSequence = 0;
@@ -55,6 +59,17 @@ const companyOptions = computed(() => getCompanyOptionsForScope(companies.value,
 const branchOptions = computed(() => getBranchOptionsForCompany(branches.value, auth, form.id_perusahaan, false, companies.value));
 const optionRows = (rows, label) => rows.map(r => ({ value: String(r.id), label: label(r) }));
 const salesOptions = computed(() => depositSalesOptions(sales.value, form.id_cabang));
+const customers=ref([]),customersLoading=ref(false);
+const customerOptions=computed(()=>customers.value.map(c=>({value:String(c.id),label:`${c.kode || ''} — ${c.nama}`})));
+let customerSequence=0;
+async function loadCustomers(){
+  const seq=++customerSequence;customers.value=[];
+  if(form.kind!=='GIRO' || !form.id_perusahaan || !form.id_cabang){customersLoading.value=false;return;}
+  customersLoading.value=true;
+  try{const rows=normalizeList(unwrapResponse(await workflowGet('fund-customers',{id_perusahaan:form.id_perusahaan,id_cabang:form.id_cabang})));if(seq===customerSequence){customers.value=rows;if(!rows.some(c=>String(c.id)===String(form.id_customer)))form.id_customer='';}}
+  catch(e){if(seq===customerSequence)error.value=normalizeError(e);}
+  finally{if(seq===customerSequence)customersLoading.value=false;}
+}
 const actorId = computed(() => String(auth.user?.id_user || auth.user?.id || auth.user?.user_id || ''));
 const canFinalize = row => allowed('finance.receipts.approve') && row.status === 'DRAFT';
 const collectionSummary=computed(()=>{
@@ -105,18 +120,15 @@ async function newFund(row = null) {
   } catch(e) { error.value = normalizeError(e); }
 }
 async function importBank() {
-  try { mutations.value = normalizeList(unwrapResponse(await workflowGet('bank-mutations')));detail.value=null; resetForm({ ids:mutations.value.slice(0,500).map(m => m.id_mutasi) }); modal.value = 'import'; }
+  try { await masters();resetForm({id_perusahaan:'',id_cabang:''});modal.value='bank-file'; }
   catch(e) { error.value = normalizeError(e); }
 }
-async function registerCredit() {
-  try { credits.value = normalizeList(unwrapResponse(await workflowGet('credit-notes'))); resetForm({ id_credit_note:'' }); modal.value = 'credit'; }
-  catch(e) { error.value = normalizeError(e); }
-}
+async function bankImported(result){modal.value='';success.value=`${result.created} mutasi diimpor; ${result.skipped} duplikat dilewati.`;await refresh();}
 async function newReceipt(row = null) {
   busy.value = true; error.value = '';
   try {
-    lphs.value = normalizeList(unwrapResponse(await workflowGet('lphs'))); funds.value = [];
-    resetForm({ id_lph: row?.id_lph || '',id_sales:'', number: row?.number || '', receipt_date:toLocalDateInputValue(), client_key:crypto.randomUUID(), invoices:[], edit_id:row?.id });
+    lphs.value = normalizeList(unwrapResponse(await workflowGet('lphs', row ? {} : {receipt_eligible:true}))); funds.value = [];
+    resetForm({ id_lph: row?.id_lph || '',id_sales:'',sales_filter:'', number: row?.number || '', receipt_date:toLocalDateInputValue(), client_key:crypto.randomUUID(), invoices:[], edit_id:row?.id });
     lp.value = null; modal.value = 'receipt';
     if (row) {
       await selectLph();
@@ -136,7 +148,7 @@ async function newReceipt(row = null) {
 let lphSequence=0;
 async function selectLph() {
   const sequence=++lphSequence,selectedId=form.id_lph;
-  quote.value = null; lp.value = null; form.invoices = [];
+  quote.value = null; lp.value = null; form.invoices = []; form.id_sales = ''; funds.value = []; error.value = '';
   if (!form.id_lph) return;
   try {
     const [l, f] = await Promise.all([workflowGet(`lphs/${form.id_lph}/detail`), workflowGet('funds', { id_lph:form.id_lph })]);
@@ -144,9 +156,10 @@ async function selectLph() {
     const selected=unwrapResponse(l);
     const fees=normalizeList(unwrapResponse(await workflowGet('fee-types',{id_perusahaan:selected.id_perusahaan})));
     if(sequence!==lphSequence || String(form.id_lph)!==String(selectedId)) return;
-    lp.value=selected;funds.value=normalizeList(unwrapResponse(f));feeTypes.value=fees;
-    form.invoices = lp.value.invoices.filter(i => Number(i.remaining) > 0).map(i => ({ ...i, selected:false, sources:[], fees:[], excess_treatment:'ADVANCE' }));
-  } catch(e) { error.value = normalizeError(e); }
+    lp.value={...selected,nama_sales:selected.nama_sales || lphs.value.find(l=>String(l.id)===String(selectedId))?.nama_sales};
+    form.id_sales=String(selected.id_sales);funds.value=normalizeList(unwrapResponse(f));feeTypes.value=fees;
+    form.invoices = receiptInvoices(lp.value, !!form.edit_id).map(i => ({ ...i, selected:false, sources:[], fees:[], excess_treatment:'ADVANCE' }));
+  } catch(e) { if(sequence===lphSequence && String(form.id_lph)===String(selectedId)) error.value = normalizeError(e); }
 }
 function payload() {
   return receiptPayload(form);
@@ -169,8 +182,24 @@ async function ask(row, operation) {
   modal.value = operation;
 }
 async function openFundDetail(row) { busy.value=true;error.value='';try {detail.value=unwrapResponse(await workflowGet(`funds/${row.id}`));modal.value='fund-detail';} catch(e){error.value=normalizeError(e);} finally{busy.value=false;} }
-async function loadFees(company) { feeTypes.value=company ? normalizeList(unwrapResponse(await workflowGet('fee-types',{id_perusahaan:company}))) : []; }
-function editFee(row=null) { resetForm({id_perusahaan:settings.company,code:'',name:'',max_amount:'0',is_active:true,requires_approval:false,...row,edit_id:row?.id});modal.value='fee'; }
+let feeSequence=0;
+async function loadFees(company) {
+  const sequence=++feeSequence;feeTypes.value=[];
+  const rows=company ? normalizeList(unwrapResponse(await workflowGet('fee-types',{id_perusahaan:company}))) : [];
+  if(sequence===feeSequence)feeTypes.value=rows;
+}
+async function editFee(row=null) {
+  error.value='';
+  resetForm({id_perusahaan:settings.company,code:'',name:'',id_coa:'',max_amount:'0',is_active:true,requires_approval:false,...row,edit_id:row?.id});
+  form.id_coa=String(form.id_coa || '');modal.value='fee';
+  await loadAccounts(form.id_perusahaan);
+}
+async function viewFee(row) {
+  error.value='';busy.value=true;
+  try { detail.value=unwrapResponse(await workflowGet(`fee-types/${row.id}`));modal.value='fee-detail'; }
+  catch(e) { error.value=normalizeError(e); } finally { busy.value=false; }
+}
+function deleteFee(row) { detail.value=row;error.value='';modal.value='fee-delete'; }
 async function cancelBatch() {
   busy.value=true;error.value='';
   try{cancellationCandidates.value=normalizeList(unwrapResponse(await workflowGet('receipts'))).filter(r=>r.status==='FINALIZED');resetForm({ids:[...checkedReceipts.value],reason:''});modal.value='cancel-batch';}
@@ -189,10 +218,12 @@ async function configuration() {
 async function loadAccounts(company) {
   const sequence = ++accountsSequence;
   accounts.value = []; accountsError.value = ''; accountsLoading.value = false;
-  if (!company || tab.value !== 'settings') return;
+  if (!company || !['settings','fees'].includes(tab.value)) return;
   accountsLoading.value = true;
   try {
-    const response = await getCoaCatalog({ id_perusahaan: company, is_active: 'true', 'no-paginate': 'true', field: 'nomor_akun', order: 'asc' });
+    const response = tab.value==='fees'
+      ? await workflowGet('fee-accounts',{id_perusahaan:company})
+      : await getCoaCatalog({ id_perusahaan: company, is_active: 'true', 'no-paginate': 'true', field: 'nomor_akun', order: 'asc' });
     if (sequence === accountsSequence) accounts.value = normalizeList(unwrapResponse(response));
   } catch(e) {
     if (sequence === accountsSequence) accountsError.value = normalizeError(e, 'Daftar COA belum bisa dimuat.');
@@ -206,22 +237,23 @@ watch(() => settings.company, company => {
 });
 watch(() => form.id_perusahaan, () => { if (!branchOptions.value.some(b => b.value === String(form.id_cabang))) form.id_cabang = ''; });
 watch(() => form.id_cabang, () => { if (modal.value === 'fund' && !salesOptions.value.some(s => s.value === String(form.id_sales))) form.id_sales = ''; });
+watch(()=>[form.kind,form.id_perusahaan,form.id_cabang],loadCustomers);
 watch(() => form.invoices, () => { quote.value = null; }, { deep:true });
 watch(() => [filter.search,filter.status,filter.from,filter.to],()=>{filter.page=1;});
 watch(pageCount,count=>{filter.page=Math.min(filter.page,count);});
-watch(() => form.id_sales,()=>{if(modal.value==='receipt' && form.id_lph && !returnedLphs.value.some(l=>String(l.id)===String(form.id_lph))){form.id_lph='';lp.value=null;form.invoices=[];}});
+watch(() => form.sales_filter,()=>{if(modal.value==='receipt' && !form.edit_id && form.id_lph && !returnedLphs.value.some(l=>String(l.id)===String(form.id_lph))){form.id_lph='';selectLph();}});
 watch(tab, async () => { modal.value = '';Object.assign(filter,{search:'',status:'',from:'',to:'',page:1}); await refresh(); if (['settings','fees'].includes(tab.value)) await configuration(); });
 onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.value)) await configuration(); });
 </script>
 
 <template>
   <div class="space-y-5">
+    <BankImportModal :open="modal==='bank-file'" :form="form" :companies="companyOptions" :branches="branchOptions" @close="modal=''" @imported="bankImported"/>
     <PageHeader :title="title" description="LPH → klaim sales → setoran → kuitansi → approval → jurnal. Transaksi Rekap lama tetap tersedia melalui menu legacy.">
       <button class="btn-secondary" :disabled="busy" @click="refresh">Muat ulang</button>
       <button v-if="['cash','bank-input','giro'].includes(tab) && allowed('finance.funds.create')" class="btn-primary" :disabled="busy" @click="newFund()">{{ tab === 'bank-input' ? 'Input Manual' : 'Tambah Setoran' }}</button>
       <button v-if="tab === 'bank-input' && allowed('finance.funds.create')" class="btn-secondary" :disabled="busy" @click="importBank">Import Mutasi</button>
       <button v-if="tab === 'receipts' && allowed('finance.receipts.create')" class="btn-primary" :disabled="busy" @click="newReceipt()">Buat Kuitansi</button>
-      <button v-if="tab === 'receipts' && allowed('finance.receipts.create')" class="btn-secondary" :disabled="busy" @click="registerCredit">Daftarkan Credit Note</button>
       <button v-if="tab==='cancel' && allowed('finance.receipts.cancel')" class="btn-primary" :disabled="busy" @click="cancelBatch">Buat Pengajuan Pembatalan</button>
     </PageHeader>
     <p v-if="error" role="alert" class="rounded-xl bg-rose-50 p-4 text-rose-800">{{ error }}</p>
@@ -235,10 +267,10 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
       </div>
       <div class="flex flex-wrap gap-6 text-sm"><span>Dokumen: <b>{{ filteredList.length }}</b></span><template v-if="['cash','transfer','giro','receipts'].includes(tab)"><span>Total: <b>{{ money(listTotal) }}</b></span><span v-if="tab!=='receipts'">Belum dialokasikan: <b>{{ money(availableTotal) }}</b></span></template><template v-if="tab==='journals'"><span>Total Debit: <b>{{ money(journalTotals.debit) }}</b></span><span>Total Kredit: <b>{{ money(journalTotals.credit) }}</b></span><b>{{ Math.abs(journalTotals.debit-journalTotals.credit)<0.01 ? 'SEIMBANG' : 'ADA SELISIH' }}</b></template></div>
     </section>
-    <p v-if="tab === 'transfer'" class="text-sm">Daftar dana masuk (Debit). Pencatatan dilakukan melalui menu Input / Import Mutasi Bank.</p>
+    <p v-if="tab === 'transfer'" class="text-sm">Daftar dana masuk (Debit). Pencatatan dilakukan melalui menu Mutasi Bank.</p>
     <div v-if="fundKind" class="panel overflow-x-auto p-4">
-      <table class="w-full text-left text-sm"><thead><tr><th>Referensi / Bank</th><th>Tanggal / Sales</th><th>Deskripsi / Catatan</th><th>Nominal / Sisa</th><th>Status / Alokasi</th><th>Aksi</th></tr></thead><tbody>
-        <tr v-for="row in pageRows" :key="row.id" class="border-t border-slate-400/20"><td class="py-4 pr-3"><b>{{ row.reference }}</b><p>{{ row.bank }}</p><p>{{ row.account_name }}</p><small>{{ labels[row.origin] }}</small></td><td class="pr-3">{{ shownDate(row.received_date) }}<p>{{ row.nama_sales || '—' }}</p><p v-if="row.due_date">Jatuh tempo: {{ shownDate(row.due_date) }}</p></td><td class="pr-3"><p>{{ row.description || '—' }}</p><p>{{ row.notes }}</p><small v-if="row.kind==='TRANSFER'">{{ labels[row.transaction_type || 'DEBIT'] }}</small></td><td class="pr-3">{{ money(row.amount) }}<p>Sisa: {{ money(row.remaining) }}</p><small v-if="Number(row.held_amount)">Ditahan draft: {{ money(row.held_amount) }}</small></td><td class="pr-3">{{ labels[row.approval] }}<p>{{ labels[row.allocation_status] }}</p><p>{{ labels[row.giro_status] }} <b v-if="row.overdue" class="text-rose-600">Lewat jatuh tempo</b></p></td><td><div class="flex flex-wrap gap-2">
+      <table class="w-full text-left text-sm"><thead><tr><th>Referensi / Bank</th><th>{{ fundKind==='TRANSFER' ? 'Tanggal' : 'Tanggal / Sales / Customer' }}</th><th>Deskripsi / Catatan</th><th>Nominal / Sisa</th><th>Status / Alokasi</th><th>Aksi</th></tr></thead><tbody>
+        <tr v-for="row in pageRows" :key="row.id" class="border-t border-slate-400/20"><td class="py-4 pr-3"><b>{{ row.reference }}</b><p>{{ row.bank }}</p><p>{{ row.account_name }}</p><small>{{ labels[row.origin] }}</small></td><td class="pr-3">{{ shownDate(row.received_date) }}<p v-if="row.kind!=='TRANSFER'">{{ row.nama_sales || '—' }}</p><p v-if="row.kind==='GIRO'">Customer: {{ row.nama_customer || 'Belum ditentukan' }}</p><p v-if="row.due_date">Jatuh tempo: {{ shownDate(row.due_date) }}</p></td><td class="pr-3"><p>{{ row.description || '—' }}</p><p>{{ row.notes }}</p><small v-if="row.kind==='TRANSFER'">{{ labels[row.transaction_type || 'DEBIT'] }}</small></td><td class="pr-3">{{ money(row.amount) }}<p>Sisa: {{ money(row.remaining) }}</p><small v-if="Number(row.held_amount)">Ditahan draft: {{ money(row.held_amount) }}</small></td><td class="pr-3">{{ labels[row.approval] }}<p>{{ labels[row.allocation_status] }}</p><p>{{ labels[row.giro_status] }} <b v-if="row.overdue" class="text-rose-600">Lewat jatuh tempo</b></p></td><td><div class="flex flex-wrap gap-2">
           <button class="btn-secondary" :disabled="busy" @click="openFundDetail(row)">Detail & Tujuan</button>
           <button v-if="row.kind === 'CASH' && row.approval === 'PENDING' && allowed('finance.funds.approve')" class="btn-primary" :disabled="busy" @click="action(() => workflowPost(`funds/${row.id}/approve`), 'Setoran disetujui Kasir; jurnal penerimaan tercatat.')">Approve Kasir</button>
           <button v-if="row.giro_status === 'NOT_CLEARED' && allowed('finance.giro.clear')" class="btn-primary" :disabled="busy" @click="ask(row, 'clear')">Pencairan</button>
@@ -282,14 +314,32 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
       <h3 class="text-lg font-semibold">Master Jenis Biaya Lain</h3>
       <AppSearchSelect v-if="tab==='fees'" v-model="settings.company" label="Perusahaan" :options="companyOptions"/>
       <p class="text-sm">Batas berlaku per jenis per faktur, termasuk jika jenis yang sama diisi pada beberapa baris. Diskon pelunasan khusus tidak dapat dipakai pada kuitansi biasa.</p>
-      <button v-if="feeManage" class="btn-primary" :disabled="busy || !settings.company" @click="editFee()">Tambah Jenis Biaya</button>
-      <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr><th>Jenis Biaya</th><th>Batas / Faktur</th><th>Status</th><th>Aksi</th></tr></thead><tbody><tr v-for="fee in feeTypes" :key="fee.id" class="border-t border-slate-400/30"><td class="py-3">{{ fee.name }}</td><td>{{ money(fee.max_amount) }}</td><td>{{ fee.is_active ? 'Aktif' : 'Nonaktif' }}{{ fee.requires_approval ? ' · Persetujuan khusus' : '' }}</td><td><button v-if="feeManage" class="btn-secondary" :disabled="busy" @click="editFee(fee)">Edit</button></td></tr></tbody></table></div>
+      <button v-if="canCreateFee" class="btn-primary" :disabled="busy || !settings.company" @click="editFee()">Tambah Jenis Biaya</button>
+      <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr><th>Jenis Biaya</th><th>Akun COA</th><th>Batas / Faktur</th><th>Status</th><th>Aksi</th></tr></thead><tbody><tr v-for="fee in feeTypes" :key="fee.id" class="border-t border-slate-400/30"><td class="py-3 pr-3"><b>{{ fee.name }}</b><p class="text-xs">{{ fee.code }}</p></td><td class="pr-3">{{ fee.id_coa ? `${fee.nomor_akun} — ${fee.nama_akun}` : 'Belum dipetakan' }}<p v-if="fee.id_coa && !fee.coa_active" class="text-amber-600">COA tidak aktif</p></td><td class="pr-3">{{ money(fee.max_amount) }}</td><td class="pr-3">{{ fee.is_active ? 'Aktif' : 'Nonaktif' }}{{ fee.requires_approval ? ' · Persetujuan khusus' : '' }}</td><td class="py-3"><div class="flex flex-wrap gap-2"><button class="btn-secondary" :disabled="busy" @click="viewFee(fee)">Detail</button><button v-if="canEditFee" class="btn-secondary" :disabled="busy" @click="editFee(fee)">Edit</button><button v-if="canDeleteFee" class="btn-secondary" :disabled="busy" @click="deleteFee(fee)">Hapus</button></div></td></tr><tr v-if="!feeTypes.length"><td colspan="5" class="py-6">{{ settings.company ? 'Belum ada jenis biaya.' : 'Pilih perusahaan terlebih dahulu.' }}</td></tr></tbody></table></div>
     </section>
     <nav v-if="!['settings','fees','mobile'].includes(tab)" aria-label="Halaman workflow" class="flex items-center justify-between gap-3"><button class="btn-secondary" :disabled="filter.page<=1 || busy" @click="filter.page--">Sebelumnya</button><span>Halaman {{ filter.page }} / {{ pageCount }} · {{ filteredList.length }} dokumen</span><button class="btn-secondary" :disabled="filter.page>=pageCount || busy" @click="filter.page++">Berikutnya</button></nav>
     <section v-if="tab === 'mobile'" class="panel space-y-4 p-5"><p>LPH milik akun Sales yang login. Klaim tidak mengurangi piutang sebelum Finance memfinalisasi kuitansi.</p><button v-for="row in list" :key="row.id" class="block w-full rounded-xl border border-slate-400/30 p-4 text-left" :disabled="busy" @click="openMobile(row)">{{ row.kode_lph }} · {{ row.status_dokumen }}</button><p v-if="!list.length && !busy">Belum ada LPH versi Kuitansi untuk sales ini.</p></section>
 
     <AppModal :open="modal==='fee'" title="Jenis Biaya Lain" :hide-close="busy" :close-on-backdrop="!busy" @close="modal=''">
-      <form class="space-y-4" @submit.prevent="action(()=>form.edit_id ? workflowPut(`fee-types/${form.edit_id}`,{...form}) : workflowPost('fee-types',{...form}),'Master biaya tersimpan.')"><fieldset :disabled="busy" class="space-y-4"><label class="block">Nama Jenis Biaya<input v-model="form.name" required maxlength="160" class="field-control"/></label><label class="block">Batas Nominal per Faktur<input v-model="form.max_amount" type="number" min="0" step="0.01" required class="field-control"/></label><label class="flex gap-2"><input v-model="form.is_active" type="checkbox"/>Aktif</label><label class="flex gap-2"><input v-model="form.requires_approval" type="checkbox"/>Persetujuan khusus (tidak dapat dipilih pada kuitansi biasa)</label><button class="btn-primary">Simpan Jenis Biaya</button></fieldset></form><p v-if="error" role="alert" class="mt-3 text-rose-600">{{ error }}</p>
+      <form class="space-y-4" @submit.prevent="action(()=>form.edit_id ? workflowPut(`fee-types/${form.edit_id}`,{...form}) : workflowPost('fee-types',{...form}),'Master biaya tersimpan.')">
+        <fieldset :disabled="busy" class="space-y-4">
+          <label class="block">Kode Biaya<input v-model="form.code" :disabled="!!form.edit_id" maxlength="80" placeholder="Otomatis bila dikosongkan" class="field-control"/></label>
+          <label class="block">Nama Jenis Biaya<input v-model="form.name" required maxlength="160" class="field-control"/></label>
+          <AppSearchSelect v-model="form.id_coa" label="Akun COA Biaya Lain" placeholder="Cari kode / nama akun COA" :options="accountOptions" :disabled="accountsLoading"/>
+          <p v-if="accountsError" role="alert" class="text-rose-600">{{ accountsError }}</p>
+          <p class="text-sm">COA ini dipakai pada jurnal biaya. Akun disimpan saat membuat draft; perubahan master tidak mengganti akun pada kuitansi yang sudah tersimpan.</p>
+          <label class="block">Batas Nominal per Faktur<input v-model="form.max_amount" type="number" min="0" step="0.01" required class="field-control"/></label>
+          <label class="flex gap-2"><input v-model="form.is_active" type="checkbox"/>Aktif</label>
+          <label class="flex gap-2"><input v-model="form.requires_approval" type="checkbox"/>Persetujuan khusus (tidak dapat dipilih pada kuitansi biasa)</label>
+          <button class="btn-primary" :disabled="accountsLoading || !!accountsError || !accountOptions.some(a=>a.value===String(form.id_coa))">Simpan Jenis Biaya</button>
+        </fieldset>
+      </form><p v-if="error" role="alert" class="mt-3 text-rose-600">{{ error }}</p>
+    </AppModal>
+    <AppModal :open="modal==='fee-detail'" title="Detail Biaya Lain" @close="modal=''">
+      <div v-if="detail" class="space-y-3"><h3 class="font-semibold">{{ detail.code }} · {{ detail.name }}</h3><p>COA: {{ detail.nomor_akun || 'Belum dipetakan' }} {{ detail.nama_akun }}</p><p>Batas per faktur: {{ money(detail.max_amount) }}</p><p>{{ detail.is_active ? 'Aktif' : 'Nonaktif' }}{{ detail.requires_approval ? ' · Persetujuan khusus' : '' }}</p></div>
+    </AppModal>
+    <AppModal :open="modal==='fee-delete'" title="Hapus Jenis Biaya" :hide-close="busy" :close-on-backdrop="!busy" @close="modal=''">
+      <div v-if="detail" class="space-y-4"><p>Hapus <b>{{ detail.name }}</b> dari pilihan biaya baru? Riwayat transaksi dan jurnal yang sudah memakai biaya ini tetap disimpan.</p><button class="btn-primary" :disabled="busy" @click="action(()=>workflowDelete(`fee-types/${detail.id}`),'Jenis biaya dihapus dari daftar; riwayat tetap tersimpan.')">Ya, Hapus Jenis Biaya</button><p v-if="error" role="alert" class="text-rose-600">{{ error }}</p></div>
     </AppModal>
     <AppModal :open="modal==='cancel-batch'" title="Pengajuan Pembatalan Kuitansi" size="4xl" :hide-close="busy" :close-on-backdrop="!busy" @close="modal=''">
       <div class="space-y-4"><p>Pilih beberapa kuitansi Finalized. Setiap kuitansi tetap memerlukan keputusan Supervisor; pengajuan ini belum mengubah piutang.</p><div class="max-h-80 overflow-auto"><label v-for="r in cancellationCandidates" :key="r.id" class="flex gap-3 border-b border-slate-400/30 p-3"><input v-model="form.ids" type="checkbox" :value="r.id" :aria-label="`Batalkan ${r.number}`"/><span><b>{{ r.number }}</b> · {{ r.kode_lph }} · {{ money(r.total) }}</span></label></div><label class="block">Alasan Pembatalan<textarea v-model="form.reason" maxlength="2000" class="field-control"/></label><button class="btn-primary" :disabled="busy || !form.ids?.length || form.ids.length>500 || !form.reason?.trim()" @click="action(()=>workflowPost('receipts/cancel-batch',{ids:form.ids,reason:form.reason}),'Pengajuan pembatalan terpilih dikirim ke Supervisor.')">Ajukan {{ form.ids?.length || 0 }} Kuitansi</button><p v-if="error" role="alert" class="text-rose-600">{{ error }}</p></div>
@@ -302,7 +352,8 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
         <fieldset :disabled="busy" class="grid gap-4 md:grid-cols-2">
           <AppSearchSelect v-model="form.id_perusahaan" label="Perusahaan" :options="companyOptions" :disabled="!!form.edit_id"/>
           <AppSearchSelect v-model="form.id_cabang" label="Cabang" :options="branchOptions" :disabled="!!form.edit_id"/>
-          <AppSearchSelect v-model="form.id_sales" label="Sales Penyerah" :options="salesOptions" :clear-search-on-open="true"/>
+          <AppSearchSelect v-if="form.kind!=='TRANSFER'" v-model="form.id_sales" label="Sales Penyerah" :options="salesOptions" :clear-search-on-open="true"/>
+          <AppSearchSelect v-if="form.kind==='GIRO'" v-model="form.id_customer" label="Customer Pemilik Giro" :options="customerOptions" :disabled="customersLoading || !form.id_cabang" :placeholder="customersLoading ? 'Memuat customer…' : 'Pilih customer'"/>
           <label>Nomor referensi / BG<input v-model="form.reference" :required="form.kind==='GIRO'" maxlength="160" class="field-control" :placeholder="form.kind==='GIRO' ? 'Nomor giro wajib' : 'Opsional, otomatis jika kosong'"/></label>
           <label>Tanggal Penerimaan<input v-model="form.received_date" type="date" required class="field-control"/></label>
           <label>Nominal (Rp)<input v-model="form.amount" type="number" min="0.01" step="0.01" required class="field-control"/></label>
@@ -313,7 +364,7 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
           <label class="md:col-span-2">Catatan Tambahan<textarea v-model="form.notes" maxlength="2000" class="field-control"/></label>
         </fieldset>
         <p class="mt-4 text-sm">Tunai menunggu approval Kasir. Setoran berdiri sendiri sampai dialokasikan ke faktur. Mutasi dana keluar tidak dapat dipakai untuk pembayaran.</p>
-        <button class="btn-primary mt-4" :disabled="busy || !form.id_perusahaan || !form.id_cabang || (['CASH','GIRO'].includes(form.kind) && !form.id_sales)">Simpan Setoran</button>
+        <button class="btn-primary mt-4" :disabled="busy || !form.id_perusahaan || !form.id_cabang || (['CASH','GIRO'].includes(form.kind) && !form.id_sales) || (form.kind==='GIRO' && (!form.id_customer || customersLoading))">Simpan Setoran</button>
       </form><p v-if="error" role="alert" class="mt-3 text-rose-600">{{ error }}</p>
     </AppModal>
     <ReceiptEditor :open="modal==='receipt'" :busy="busy" :form="form" :lp="lp" :funds="funds" :fee-types="feeTypes" :lphs="returnedLphs" :sales="receiptSales" :quote="quote" :error="error" @close="modal=''" @select-lph="selectLph" @preview="preview" @save="action(() => form.edit_id ? workflowPut(`receipts/${form.edit_id}`,payload()) : workflowPost('receipts',payload()), 'Kuitansi Draft tersimpan; sumber dana ditahan sampai finalisasi/pembatalan.')"/>
@@ -331,7 +382,7 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
         <button v-if="detail.status==='DRAFT' && String(detail.created_by)===actorId && allowed('finance.receipts.delete')" class="btn-secondary" :disabled="busy" @click="ask(detail,'discard')">Tarik Draft untuk Koreksi</button>
       </div><p v-if="error" role="alert" class="mt-3 text-rose-600">{{ error }}</p>
     </AppModal>
-    <AppModal :open="['clear','bounce','cancel','cancel-approve','finalize','delete','import','credit','discard'].includes(modal)" :title="{clear:'Pencairan Giro',bounce:'Penolakan Giro',cancel:'Ajukan Pembatalan','cancel-approve':'Keputusan SPV',finalize:'Konfirmasi Finalisasi',delete:'Hapus Setoran',import:'Import Mutasi Dana Masuk',credit:'Daftarkan Credit Note',discard:'Tarik Draft untuk Koreksi'}[modal] || ''" size="4xl" :hide-close="busy" :close-on-backdrop="!busy" @close="modal=''">
+    <AppModal :open="['clear','bounce','cancel','cancel-approve','finalize','delete','import','discard'].includes(modal)" :title="{clear:'Pencairan Giro',bounce:'Penolakan Giro',cancel:'Ajukan Pembatalan','cancel-approve':'Keputusan SPV',finalize:'Konfirmasi Finalisasi',delete:'Hapus Setoran',import:'Import Mutasi Dana Masuk',discard:'Tarik Draft untuk Koreksi'}[modal] || ''" size="4xl" :hide-close="busy" :close-on-backdrop="!busy" @close="modal=''">
       <div class="space-y-4">
         <p v-if="detail">{{ detail.number || detail.reference }} · {{ money(detail.amount || detail.total) }}</p>
         <template v-if="modal==='discard'">
@@ -368,7 +419,6 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
           <div class="max-h-80 overflow-auto"><table class="w-full text-left text-sm"><thead><tr><th>Pilih</th><th>Tanggal</th><th>Referensi</th><th>Deskripsi</th><th>Nominal</th></tr></thead><tbody><tr v-for="m in mutations" :key="m.id_mutasi" class="border-t border-slate-400/30"><td class="p-2"><input v-model="form.ids" type="checkbox" :value="m.id_mutasi" :aria-label="`Pilih mutasi ${m.kode_mutasi}`"/></td><td>{{ shownDate(m.tanggal_mutasi) }}</td><td>{{ m.kode_mutasi }}</td><td>{{ m.keterangan || m.deskripsi || '—' }}</td><td>{{ money(m.nominal_mutasi) }}</td></tr></tbody></table></div>
           <button class="btn-primary" :disabled="busy || !form.ids?.length || form.ids.length>500" @click="action(()=>workflowPost('mutations/import',{ids:form.ids}),'Mutasi terpilih berhasil diimpor.')">Import {{ form.ids?.length || 0 }} Mutasi</button>
         </template>
-        <template v-if="modal==='credit'"><AppSearchSelect v-model="form.id_credit_note" label="Credit Note belum dipakai" :options="credits.map(c=>({value:String(c.id_cn),label:`${c.kode_cn} — ${money(c.total_cn)}`}))"/><button class="btn-primary" :disabled="busy || !form.id_credit_note" @click="action(()=>workflowPost(`credit-notes/${form.id_credit_note}/reserve`),'Credit Note dicadangkan sebagai sumber retur.')">Daftarkan</button></template>
         <p v-if="error" role="alert" class="text-rose-600">{{ error }}</p>
       </div>
     </AppModal>

@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-07",
+  "status": "deployed_and_verified",
+  "production_changes": true,
+  "business_data_changes": false,
+  "features": [
+    "Read receipt-origin ADVANCE funds in Uang Muka Customer without copying balances or posting duplicate journals",
+    "Show source receipt, available balance, finalized usage, draft holds, cancellation status and invoice usage history",
+    "Full fee-type CRUD with explicit action permissions, searchable company-scoped COA and history-preserving deletion",
+    "Snapshot each fee allocation's COA at draft creation; approval and reversal retain that account",
+    "Clarify sales-claim difference versus actual excess above invoice receivables and approval timing"
+  ],
+  "excess_rule": {
+    "unchanged": "ADVANCE is created only from funds exceeding the invoice's remaining receivable, at receipt approval",
+    "screenshot": "Rp256500 is a difference against sales claims, not excess over receivables; screenshot receipt is DRAFT",
+    "pending_optional_clarification": "Whether the user instead wants an explicit allocation rule reserving claim differences as advances; no such business-rule change or historical data repair was performed"
+  },
+  "migration": {
+    "path": "/Users/macairm2/www/API/tools/migrations/20261007_receipt_advance_fee_coa.sql",
+    "sha256": "bcf4de99da791adb1876e367526e588b0bc00ca510d8510ecaf56578d1b3900d",
+    "production_applied": true,
+    "notes": "Additive columns and fee permission definitions only; seed existing fee COA from configured FEE account, snapshot existing draft allocation account; no changes to posted journals or balances. Lock timeout 3s, statement timeout 60s. Tested rerun preserves explicit mappings and snapshots."
+  },
+  "api_files": {
+    "apps/services/FinanceWorkflow/service.py": "27da957bd335bd2df393671f3009fad38bd8b12f0c9521b82cec0e50777bc4bd",
+    "apps/routes/payment_workflow.py": "3af61eb6fc3120ad23e35dc9141d31398c2f0b28c04613b8b8635d2868414e6c",
+    "apps/lib/payment_permissions.py": "5a0bda3c812a56cdf1132409c54eb78a245912ca829b936610d48dc3ed1abd24"
+  },
+  "frontend_files": {
+    "src/modules/finance/pages/CustomerAdvancePage.vue": "36be3431ad7b337935bb4b35b0ceb6d63168397b3a351b6aeaf1272cde81a342",
+    "src/modules/finance/pages/ReceiptWorkflowPage.vue": "3746de434ac7356d3860acba1c4ba62f082a79e22a7fc5a6c5de6bf8f7c0cd2f",
+    "src/modules/finance/components/ReceiptReconciliation.vue": "404843033aec2c7012474660ce7e978a62b2918a7dd297ff05e055bd5c1bdf68",
+    "src/utils/paymentPermissions.js": "9738287ea1a90408c9cafefeab8ab1765b7fd84120cde7db7d5008e1c0b9078c"
+  },
+  "build": {
+    "directory": "/tmp/budimas-advance-fee-build.PiJ2dQ/final-dist",
+    "index_sha256": "45939c487fe64669cd8395c3a7f47ac226f583c7f31d561e51dd792f182cacc0",
+    "passed": true,
+    "warnings": ["Existing large WMS 3D bundle warning", "Browserslist data age warning"]
+  },
+  "verification": {
+    "backend_tests_passed": 530,
+    "frontend_unit_tests_passed": 70,
+    "browser_tests": [
+      "receipt-advances-fees.mjs: dev and production build passed; all APIs mocked",
+      "payment-demo-alignment.mjs: passed",
+      "receipt-source-partial.mjs: passed",
+      "credit-note-funding.mjs: passed",
+      "receipt-sales-eligibility.mjs: production build passed; first concurrent dev run had a dropdown detachment timeout"
+    ],
+    "screenshots_reviewed": [
+      "/tmp/budimas-fee-coa-form.png",
+      "/tmp/budimas-receipt-advance-detail.png",
+      "/tmp/budimas-receipt-advance-mobile.png"
+    ],
+    "database": "Isolated localhost:55432/budimas_workflow_tests only"
+  },
+  "deployment": {
+    "published_at": "2026-10-07T09:51:14.711199+00:00",
+    "verified_at": "2026-10-07T09:51:40.298Z",
+    "local_evidence": "/tmp/budimas-advance-fee-release.1pAtoj",
+    "remote_backup": "/www/backup/budimas-advance-fee.6Yd4fA",
+    "database_backup_bytes": 1672725825,
+    "database_backup_sha256": "d8d23c1509c5365a9411eab1976c7da758a0589400afbaf8a543c142225819bd",
+    "release_sha256": "f2c4e15a71149a2b2a51cad501eef79a7972725b0800cc3c41e1eef5ab854b41",
+    "migration_applied_at": "2026-10-07T09:50:28.763860+00:00",
+    "unmapped_fee_types": 0,
+    "api_reload_master_pid": 559494,
+    "deployed_package_files": 201,
+    "verified_public_files": 394,
+    "updated_page_routes_verified": 6,
+    "https_443_and_9092_healthy": true,
+    "anonymous_auth_enforced": true,
+    "android_webview_cors": true,
+    "config_apk_uat_unchanged": true,
+    "old_hashed_assets_retained": true,
+    "financial_state_unchanged_since_predeploy": true,
+    "api_checks": {
+      "read_only": true,
+      "fee_types": 4,
+      "receipt_advances": 0,
+      "legacy_advance_records": 1,
+      "receipt_history": 3,
+      "eligible_lphs": 0,
+      "admin_new_endpoints": "passed",
+      "spv_fee_types_and_eligible_lphs": "allowed",
+      "spv_customer_advances": "403 per existing permissions; no permission grants changed"
+    },
+    "notes": [
+      "The backup SSH connection was closed after remote completion and database-backup.json verification; the backup was not interrupted",
+      "Production financial workflows were verified with GET requests only; no test receipts or advances were created"
+    ]
+  },
+  "deployment_notes": [
+    "Back up exact current server code and affected database schema/data first",
+    "Apply additive migration before switching API files requiring the new columns",
+    "Deploy API and frontend together; verify both ERP webroots and scoped read-only endpoints",
+    "No financial test transactions or repairs on production without explicit user direction"
+  ]
+}

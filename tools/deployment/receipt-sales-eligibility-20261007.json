@@ -1,0 +1,199 @@
+{
+  "date": "2026-10-07",
+  "change": "Eligible LPH sales filter for new payment receipts",
+  "deployment_status": "DEPLOYED_AND_VERIFIED",
+  "production": "https://erp.budimas.swakarya.my.id:9092",
+  "deployed_at": "2026-10-07T08:33:46.420949+00:00",
+  "migration_required": false,
+  "financial_data_changed": false,
+  "backup_directory": "/www/backup/budimas-receipt-sales.dUWMcu",
+  "database_backup": {
+    "file": "/www/backup/budimas-receipt-sales.dUWMcu/database-before.dump",
+    "bytes": 1672724995,
+    "sha256": "d869fb65bef0179a2f5ee3445d44cb80bc7578115b175d9a2fe4655b6ad73204"
+  },
+  "api_files": [
+    {
+      "bundle": "api/apps/services/FinanceWorkflow/service.py",
+      "targets": [
+        "/www/wwwroot/API/apps/services/FinanceWorkflow/service.py"
+      ],
+      "sha256": "97c45067603b7907c4b1bfd0c814b81a986ed8c85f70a77ca26202f4ab67252c",
+      "bytes": 74310
+    },
+    {
+      "bundle": "api/apps/routes/payment_workflow.py",
+      "targets": [
+        "/www/wwwroot/API/apps/routes/payment_workflow.py"
+      ],
+      "sha256": "45122b04165fb4fbdf47fef54ecf3fdff272f2fc2f995ec0d8219450df8a7ca1",
+      "bytes": 10705
+    }
+  ],
+  "frontend_sources": [
+    "src/modules/finance/pages/ReceiptWorkflowPage.vue",
+    "src/modules/finance/components/ReceiptEditor.vue",
+    "src/modules/finance/receiptLph.js"
+  ],
+  "behavior": [
+    "New receipt sales options only derive from returned LPH with outstanding invoices not held by another draft.",
+    "Options include eligible LPH counts and refresh every time a new receipt form opens.",
+    "Optional Filter Sales is separate from the read-only responsible sales inherited from the selected LPH.",
+    "Finalized/closed LPH and settled/held invoices are excluded; history and cancelled receipt editing retain their original LPH/sales.",
+    "Eligibility is scoped and batch-checked against the existing finalized receivable ledger."
+  ],
+  "tests": {
+    "backend_previous_implementation": 521,
+    "frontend_unit": 69,
+    "browser_previous_implementation": 5,
+    "production_build_browser": [
+      "receipt-sales-eligibility.mjs",
+      "credit-note-funding.mjs",
+      "receipt-source-partial.mjs"
+    ],
+    "build": "PASS; explicit production API origin"
+  },
+  "api_verification": {
+    "actors": [
+      {
+        "actor": 1,
+        "history_lph_count": 3,
+        "eligible_lph_count": 1,
+        "visible_sales": [
+          {
+            "id": 334,
+            "name": "Sales 1 (Test)",
+            "lph_count": 1
+          }
+        ],
+        "history_only_sales": [
+          {
+            "id": 304,
+            "name": "LINE 1 ET : SEPTIYANI DU"
+          }
+        ],
+        "receipt_history_count": 2
+      },
+      {
+        "actor": 774,
+        "history_lph_count": 3,
+        "eligible_lph_count": 1,
+        "visible_sales": [
+          {
+            "id": 334,
+            "name": "Sales 1 (Test)",
+            "lph_count": 1
+          }
+        ],
+        "history_only_sales": [
+          {
+            "id": 304,
+            "name": "LINE 1 ET : SEPTIYANI DU"
+          }
+        ],
+        "receipt_history_count": 2
+      }
+    ],
+    "checks": [
+      "health",
+      "anonymous_auth",
+      "admin_and_spv_eligible_sales",
+      "matches_live_invoice_balance_and_draft_holds",
+      "receipt_history_access",
+      "customer_scoped_sources",
+      "legacy_cn_unchanged"
+    ],
+    "read_only": true,
+    "financial_state_unchanged_during_checks": true,
+    "financial_state_unchanged_since_predeploy": true,
+    "timings": [
+      {
+        "path": "health",
+        "actor": null,
+        "ms": 32
+      },
+      {
+        "path": "finance/workflow/lphs?receipt_eligible=true",
+        "actor": null,
+        "ms": 4
+      },
+      {
+        "path": "finance/workflow/lphs",
+        "actor": 1,
+        "ms": 85
+      },
+      {
+        "path": "finance/workflow/lphs?receipt_eligible=true",
+        "actor": 1,
+        "ms": 57
+      },
+      {
+        "path": "finance/workflow/lphs/110/detail",
+        "actor": 1,
+        "ms": 52
+      },
+      {
+        "path": "finance/workflow/receipts",
+        "actor": 1,
+        "ms": 30
+      },
+      {
+        "path": "finance/workflow/receipts/2",
+        "actor": 1,
+        "ms": 35
+      },
+      {
+        "path": "finance/workflow/funds?id_lph=110",
+        "actor": 1,
+        "ms": 47
+      },
+      {
+        "path": "finance/workflow/lphs",
+        "actor": 774,
+        "ms": 43
+      },
+      {
+        "path": "finance/workflow/lphs?receipt_eligible=true",
+        "actor": 774,
+        "ms": 55
+      },
+      {
+        "path": "finance/workflow/lphs/110/detail",
+        "actor": 774,
+        "ms": 57
+      },
+      {
+        "path": "finance/workflow/receipts",
+        "actor": 774,
+        "ms": 35
+      },
+      {
+        "path": "finance/workflow/receipts/2",
+        "actor": 774,
+        "ms": 42
+      },
+      {
+        "path": "finance/workflow/funds?id_lph=110",
+        "actor": 774,
+        "ms": 52
+      },
+      {
+        "path": "akuntansi/get-detail-credit-note/5477",
+        "actor": 1,
+        "ms": 24
+      }
+    ]
+  },
+  "public_verification": {
+    "completed": "2026-10-07T08:34:01.413Z",
+    "verified_public_files": 394,
+    "https_443_and_9092_healthy": true,
+    "anonymous_auth_enforced": true,
+    "android_webview_cors": true
+  },
+  "config_and_apk_unchanged": true,
+  "uat_untouched": true,
+  "old_hashed_assets_retained": true,
+  "evidence_directory": "/tmp/budimas-sales-release.Hik3A2/",
+  "local_build": "/tmp/budimas-sales-release.Hik3A2/dist"
+}

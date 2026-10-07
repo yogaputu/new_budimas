@@ -37,7 +37,7 @@ try {
     else if(path.includes('getPerusahaan'))data=[{id:1,nama:'Company Test',kode:'CO',id_cabang_list:'1'}];
     else if(path.includes('getCabang'))data=[{id:1,nama:'Branch Test',kode:'CB',id_perusahaan:1}];
     else if(path.includes('getSales'))data=[{id:3,id_sales:1,nama:'Sales Test'}];
-    else if(path.endsWith('/workflow/lphs'))data=[lp];
+    else if(path.endsWith('/workflow/lphs'))data=[{...lp,eligible_invoice_count:2}];
     else if(path.endsWith('/workflow/lphs/10/detail'))data=lp;
     else if(path.endsWith('/workflow/funds'))data=funds;
     else if(path.endsWith('/workflow/funds/1'))data={...funds[0],allocations:[{id:1,number:'KW-DEMO',no_faktur:'F-1',nama_customer:'Customer Test',amount:600,status:'FINALIZED'}],clearings:[],audit:[{id:1,action:'CREATED',nama:'Kasir',created_at:'2026-10-06'}]};
@@ -61,7 +61,7 @@ try {
   await page.getByLabel('F-2 nominal CASH-A',{exact:true}).fill('900');
   await page.getByRole('button',{name:'Hitung & Tinjau Alokasi',exact:true}).click();
   await page.getByRole('heading',{name:'Ringkasan & Rekonsiliasi Tiga Arah'}).waitFor();
-  await page.getByText('ADA SELISIH — periksa setiap faktur sebelum finalisasi',{exact:true}).waitFor();
+  await page.getByText('ADA SELISIH KLAIM — periksa setiap faktur sebelum finalisasi',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Simpan Draft',exact:true}).scrollIntoViewIfNeeded();
   await page.screenshot({path:process.env.PAYMENT_SCREENSHOT || '/tmp/budimas-payment-demo-reconciliation.png',fullPage:true});
   await page.getByRole('button',{name:'Simpan Draft',exact:true}).click();
@@ -74,7 +74,8 @@ try {
   await page.getByRole('button',{name:'Setujui & Finalisasi',exact:true}).click();
   assert.equal(writes.find(w=>w.path.endsWith('/receipts/1/finalize')).body.confirm_reconciliation,true);
   await page.goto(origin+'/finance/bank-input');await page.getByRole('button',{name:'Import Mutasi',exact:true}).click();
-  await page.getByRole('button',{name:'Import 2 Mutasi',exact:true}).click();assert.deepEqual(writes.find(w=>w.path.endsWith('/mutations/import')).body.ids,[1,2]);
+  await page.getByRole('heading',{name:'Import Mutasi Bank CSV / XLSX',exact:true}).waitFor();
+  // Actual file selection, preview and commit are covered by october7-part2.mjs.
   await page.goto(origin+'/finance/giro-deposits');await page.getByRole('button',{name:'Pencairan',exact:true}).click();
   await page.getByPlaceholder('Pilih setoran nominal cocok',{exact:true}).click();await page.getByRole('button',{name:/BANK-B · Bank Test/}).click();
   await page.getByRole('button',{name:'Konfirmasi Pencairan',exact:true}).click();assert.equal(writes.find(w=>w.path.endsWith('/giro/3/clear')).body.id_payment_source,'2');

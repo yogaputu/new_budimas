@@ -14,6 +14,9 @@ const aliases = {
   'finance.workflow.view': ['pw.view'],
   'finance.workflow.configure': ['pw.update'],
   'finance.fees.view': ['bl.view'],
+  'finance.fees.create': ['bl.create'],
+  'finance.fees.update': ['bl.update'],
+  'finance.fees.delete': ['bl.delete'],
   'finance.fees.manage': ['bl.create', 'bl.update'],
   'finance.giro.clear': ['bg.approve'],
   'finance.giro.bounce': ['bg.approve'],
@@ -22,6 +25,7 @@ export function paymentPermission(granted = [], permission, kind) {
   const managed = permission in aliases || permission.startsWith('finance.funds.') || /^m\.finance\.(kw|stk|snk|mb|bg|bk|jk|pw|bl)\./.test(permission);
   if (!managed) return null;
   if (granted.includes('*') || granted.includes(permission) || granted.includes(permission.replace(/-/g, '_'))) return true;
+  if (['finance.fees.view','finance.fees.create','finance.fees.update'].includes(permission) && granted.includes('finance.fees.manage')) return true;
   const candidates = [...(aliases[permission] || [])];
   if (permission.startsWith('finance.funds.')) {
     const action = permission.split('.').at(-1);

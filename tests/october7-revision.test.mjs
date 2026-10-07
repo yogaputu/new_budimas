@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { paymentPermission } from '../src/utils/paymentPermissions.js';
+
+test('Fee CRUD menu rights remain independent',()=>{
+  for(const action of ['view','create','update','delete'])for(const required of ['view','create','update','delete'])
+    assert.equal(paymentPermission([`m.finance.bl.${action}`],`finance.fees.${required}`),action===required);
+  for(const action of ['view','create','update'])assert.equal(paymentPermission(['finance.fees.manage'],`finance.fees.${action}`),true);
+  assert.equal(paymentPermission(['finance.fees.manage'],'finance.fees.delete'),false);
+});
 import { depositSalesOptions } from '../src/modules/finance/depositSales.js';
 import { returStatusOptions, returStatusLabel } from '../src/modules/sales-order/returStatus.js';
 import { placementBalances } from '../src/modules/wms/placementBalances.js';

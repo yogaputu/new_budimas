@@ -13,7 +13,7 @@ try {
     invoices:[{id:1,no_faktur:'F-1',id_customer:1,nama_customer:'Customer Test',total:122100,remaining:122100},{id:2,no_faktur:'F-2',id_customer:1,nama_customer:'Customer Test',total:610500,remaining:610500}],
     claims:[{id:1,id_faktur:1,method:'GIRO',amount:122100,giro_number:'BG001'},{id:2,id_faktur:2,method:'TRANSFER',amount:610500}]};
   const common={approval:'APPROVED',id_perusahaan:1,id_cabang:5,id_sales:772,transaction_type:'DEBIT'};
-  const funds=[{...common,id:1,kind:'GIRO',reference:'BG001',remaining:122100,giro_status:'NOT_CLEARED'},
+  const funds=[{...common,id:1,kind:'GIRO',id_customer:1,reference:'BG001',remaining:122100,giro_status:'NOT_CLEARED'},
     {...common,id:2,kind:'TRANSFER',reference:'TF001',remaining:598900},
     {...common,id:3,kind:'RETURN',reference:'CN-TEST',id_sales:null,id_customer:1,remaining:1165500},
     {...common,id:4,kind:'ADVANCE',reference:'UM-TEST',id_sales:null,id_customer:1,remaining:300000},
@@ -45,7 +45,7 @@ try {
     else if(path.includes('getPerusahaan'))data=[{id:1,nama:'Company Test',id_cabang_list:'5'}];
     else if(path.includes('getCabang'))data=[{id:5,nama:'Branch Test',id_perusahaan:1}];
     else if(path.includes('getSales'))data=[{id:334,nama:'Sales Test'}];
-    else if(path.endsWith('/workflow/lphs'))data=[lp];
+    else if(path.endsWith('/workflow/lphs'))data=[{...lp,eligible_invoice_count:2}];
     else if(path.endsWith('/workflow/lphs/111/detail'))data=lp;
     else if(path.endsWith('/workflow/funds'))data=funds;
     else if(path.endsWith('/workflow/receipts/preview'))data=quote=preview(body);
@@ -58,7 +58,7 @@ try {
   await page.getByRole('button',{name:'LPH-PARTIAL — Sales Test',exact:true}).click();
   for(const id of [1,2])await page.getByLabel(`Pilih faktur F-${id}`,{exact:true}).check();
   for(const reference of ['OTHER-SALES-CASH','OTHER-CUSTOMER','OTHER-COMPANY','OTHER-BRANCH'])assert.equal(await page.getByLabel(`F-1 sumber ${reference}`,{exact:true}).count(),0);
-  for(const reference of ['OUTGOING','BOUNCED'])assert.equal(await page.getByLabel(`F-1 sumber ${reference}`,{exact:true}).isDisabled(),true);
+  for(const reference of ['OUTGOING','BOUNCED'])assert.equal(await page.getByLabel(`F-1 sumber ${reference}`,{exact:true}).count(),0);
   assert.equal(await page.getByLabel('F-1 sumber BG001',{exact:true}).isDisabled(),false);
   assert.equal(await page.getByLabel('F-2 sumber TF001',{exact:true}).isDisabled(),false);
   await page.getByLabel('F-1 sumber CN-TEST',{exact:true}).check();

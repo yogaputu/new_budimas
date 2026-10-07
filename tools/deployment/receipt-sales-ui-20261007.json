@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-07",
+  "change": "Compact receipt sales UI: optional filter and responsible sales as text below LPH",
+  "deployment_status": "DEPLOYED_AND_VERIFIED",
+  "deployed_at": "2026-10-07T08:49:26.918902+00:00",
+  "production": "https://erp.budimas.swakarya.my.id:9092",
+  "webroots": ["/www/wwwroot/new_budimas", "/www/wwwroot/new_budimas/dist"],
+  "source_file": "src/modules/finance/components/ReceiptEditor.vue",
+  "backup_directory": "/www/backup/budimas-sales-ui.7aagKK",
+  "backup_file": "/www/backup/budimas-sales-ui.7aagKK/files-before.tar.gz",
+  "evidence_directory": "/tmp/budimas-sales-ui-release.W2nQfL",
+  "local_build": "/tmp/budimas-sales-ui.Ac6awN/dist",
+  "bundle_sha256": "757c02566a5c4f8560c4291949346c48cd272253492d788aba1b8343830f819d",
+  "index_sha256": "1299d1f48cc02715742ab8d1d39682bdec13b2c815d720acbb9ae5ef5f77836a",
+  "files": 197,
+  "public_file_checks": 394,
+  "verified_at": "2026-10-07T08:49:41.934Z",
+  "tests": {
+    "frontend_unit_passed": 69,
+    "production_build_browser_passed": ["receipt-sales-eligibility.mjs", "credit-note-funding.mjs"],
+    "desktop_and_mobile_layout": "PASS",
+    "direct_lph_selection_and_historical_edit": "PASS",
+    "receipt_page_latest_index_on_both_ports": true,
+    "api_health_anonymous_auth_and_mobile_cors": "PASS"
+  },
+  "api_unchanged": true,
+  "api_restarted": false,
+  "database_modified": false,
+  "migration_required": false,
+  "config_and_apk_unchanged": true,
+  "old_hashed_assets_retained": true
+}

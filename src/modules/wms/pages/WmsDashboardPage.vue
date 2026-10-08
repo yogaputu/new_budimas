@@ -254,7 +254,7 @@ function createPalletForm() {
     nama_barang: '',
     default_qty_pcs: 0,
     default_qty_karton: 0,
-    status_pallet: 'Kosong',
+    status_pallet: 'Nonaktif',
     active: true,
     notes: ''
   };
@@ -412,16 +412,14 @@ const rackActiveOptions = [
 
 const palletStatusOptions = [
   { value: '', label: 'Semua status' },
-  { value: 'Kosong', label: 'Kosong' },
-  { value: 'Terisi', label: 'Terisi' },
-  { value: 'Rusak', label: 'Rusak' },
+  { value: 'Aktif', label: 'Aktif' },
   { value: 'Nonaktif', label: 'Nonaktif' }
 ];
 
 const palletActiveOptions = [
   { value: '', label: 'Semua pallet' },
-  { value: 'true', label: 'Aktif' },
-  { value: 'false', label: 'Nonaktif' }
+  { value: 'true', label: 'Layak digunakan' },
+  { value: 'false', label: 'Tidak layak / rusak' }
 ];
 
 const principalOptions = computed(() =>
@@ -871,7 +869,7 @@ const palletColumns = [
   { key: 'used_berat_kg', label: 'Berat Isi', render: (row) => `${numberLabel(row.used_berat_kg)} kg` },
   { key: 'max_berat_kg', label: 'Max Berat', render: (row) => row.max_berat_kg ? `${numberLabel(row.max_berat_kg)} kg` : 'Tidak dibatasi' },
   { key: 'kode_rak_list', label: 'Rak' },
-  { key: 'active', label: 'Aktif', render: (row) => statusBadge(row.active === false ? 'Nonaktif' : 'Aktif') }
+  { key: 'active', label: 'Layak Digunakan', render: (row) => row.active === false ? 'Tidak / rusak' : 'Ya' }
 ];
 
 const placementColumns = [
@@ -2896,7 +2894,7 @@ function editPallet(row) {
     nama_barang: row.nama_barang || '',
     default_qty_pcs: row.default_qty_pcs ?? 0,
     default_qty_karton: row.default_qty_karton ?? 0,
-    status_pallet: row.status_pallet || 'Kosong',
+    status_pallet: row.status_pallet || 'Nonaktif',
     active: row.active !== false,
     notes: row.notes || ''
   });
@@ -5115,16 +5113,12 @@ onBeforeUnmount(stopQrScanner);
         <AppFormField v-model="palletForm.default_qty_pcs" label="Isi Otomatis PCS" type="number" min="0" />
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Pallet</span>
-          <select v-model="palletForm.status_pallet" class="field">
-            <option value="Kosong">Kosong</option>
-            <option value="Terisi">Terisi</option>
-            <option value="Rusak">Rusak</option>
-            <option value="Nonaktif">Nonaktif</option>
-          </select>
+          <div class="field">{{ palletForm.active && palletForm.status_pallet === 'Aktif' ? 'Aktif' : 'Nonaktif' }}</div>
+          <span class="text-xs text-slate-500">Otomatis: Aktif jika berisi; Nonaktif jika kosong atau tidak layak digunakan.</span>
         </label>
         <label class="flex min-h-[68px] items-end gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
           <input v-model="palletForm.active" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-          Pallet aktif
+          Pallet layak digunakan (hapus centang jika rusak)
         </label>
         <AppFormField v-model="palletForm.notes" label="Catatan" placeholder="Opsional" />
       </div>

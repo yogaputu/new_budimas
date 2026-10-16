@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies } from '@/api/master';
 import { confirmCashierExpense, createCashierExpense, getCashierExpenses, getCashierExpenseDetail, getCoaCatalog } from '@/api/finance';
+import { getCashierCashSources, saveCashierCashSource, downloadCashierProof } from '@/api/finance';
 import { useAuthStore } from '@/stores/auth';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { getLoginBranchId, getRowBranchIds, getRowCompanyIds, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
@@ -23,6 +24,7 @@ const filters = reactive({
 });
 
 const form = reactive({
+  client_key: '', source_id: '', reference: '', proof: null,
   id_cabang: '',
   id_perusahaan: '',
   pic: '',
@@ -40,6 +42,14 @@ const actionError = ref('');
 const modalOpen = ref(false);
 const coaRows = ref([]);
 const coaError = ref('');
+const cashSources = ref([]);
+const cashError = ref('');
+const cashLoading = ref(false);
+const configSaving = ref(false);
+const cashConfig = reactive({ kind: 'SMALL', id_coa: '' });
+const canConfigureCash = computed(() => ['finance.coa.update', 'finance.accounting-config.update', 'm.finance.ca.update'].some((p) => authStore.hasPermission(p)));
+const cashOptions = computed(() => cashSources.value.map((s) => ({ value: String(s.id), label: `${s.label} · ${s.nomor_akun} — ${formatCurrency(s.balance)}` })));
+const selectedCash = computed(() => cashSources.value.find((s) => String(s.id) === String(form.source_id)));
 const selectedExpense = ref(null);
 const detailOpen = ref(false);
 const detailError = ref('');
@@ -147,12 +157,59 @@ function userPositionId() {
 
 function resetForm() {
   Object.assign(form, {
+    client_key: crypto.randomUUID(), source_id: '', reference: '', proof: null,
     id_cabang: filters.branchId || (!canAccessAllBranches.value ? fallbackBranchId.value : ''),
     id_perusahaan: filters.companyId || '',
     pic: authStore.user?.nama || '',
     tanggal_pengeluaran: filters.date || today,
     details: [newDetail()]
   });
+  loadCashSources();
+}
+
+let cashSequence = 0;
+async function loadCashSources() {
+  const sequence = ++cashSequence;
+  cashSources.value = []; cashError.value = ''; form.source_id = ''; cashConfig.id_coa = '';
+  if (!form.id_perusahaan || !form.id_cabang) { cashLoading.value = false; return; }
+  cashLoading.value = true;
+  try {
+    const response = await getCashierCashSources({ id_perusahaan: form.id_perusahaan, id_cabang: form.id_cabang });
+    if (sequence === cashSequence) cashSources.value = normalizeList(unwrapResponse(response));
+  } catch (error) {
+    if (sequence === cashSequence) cashError.value = normalizeError(error, 'Saldo kas belum dapat dimuat.');
+  } finally { if (sequence === cashSequence) cashLoading.value = false; }
+}
+
+async function configureCash() {
+  if (configSaving.value || !cashConfig.id_coa || !form.id_perusahaan || !form.id_cabang) return;
+  configSaving.value = true; cashError.value = '';
+  try {
+    await saveCashierCashSource({ ...cashConfig, id_perusahaan: Number(form.id_perusahaan), id_cabang: Number(form.id_cabang), id_coa: Number(cashConfig.id_coa) });
+    await loadCashSources();
+  } catch (error) { cashError.value = normalizeError(error, 'Pemetaan kas belum tersimpan.'); }
+  finally { configSaving.value = false; }
+}
+
+async function selectProof(event) {
+  const file = event.target.files?.[0]; form.proof = null;
+  if (!file) return;
+  if (!['application/pdf', 'image/png', 'image/jpeg'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+    actionError.value = 'Bukti harus PDF, PNG, atau JPEG, maksimal 5 MB.'; event.target.value = ''; return;
+  }
+  try {
+    const content = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+    form.proof = { name: file.name, base64: String(content).split(',')[1] };
+  } catch { actionError.value = 'Bukti tidak dapat dibaca. Silakan pilih ulang.'; }
+}
+
+async function openProof() {
+  try {
+    const response = await downloadCashierProof(selectedExpense.value.id);
+    const url = URL.createObjectURL(response.data); const link = document.createElement('a');
+    link.href = url; link.download = selectedExpense.value.funding.proof_name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) { detailError.value = normalizeError(error, 'Bukti tidak dapat diunduh.'); }
 }
 
 async function loadReferences() {
@@ -202,6 +259,9 @@ function openCreate() {
 
 async function saveExpense() {
   if (loading.save) return;
+  if (!selectedCash.value || (!form.reference.trim() && !form.proof)) {
+    actionError.value = 'Pilih sumber dana dan isi nomor nota atau lampirkan bukti.'; return;
+  }
   if (!form.id_cabang || !form.id_perusahaan || !form.pic.trim() || !form.tanggal_pengeluaran) {
     actionError.value = 'Cabang, perusahaan, tanggal pengeluaran, dan PIC wajib diisi.';
     return;
@@ -294,6 +354,7 @@ watch(
   }
 );
 watch(() => [form.id_cabang, form.id_perusahaan], loadCoa);
+watch(() => [form.id_cabang, form.id_perusahaan], loadCashSources);
 
 onMounted(async () => {
   await loadReferences();
@@ -395,6 +456,23 @@ onMounted(async () => {
           <input id="expense-pic" v-model="form.pic" type="text" maxlength="100" class="field-control" />
         </div>
       </div>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <AppSearchSelect v-model="form.source_id" label="Sumber Dana" placeholder="Pilih akun kas" :options="cashOptions" :loading="cashLoading" :disabled="loading.save || cashLoading" />
+        <div><label class="field-label">Nomor Bukti / Nota</label><input v-model="form.reference" maxlength="200" class="field-control" /></div>
+        <div><label class="field-label">Lampiran Bukti (PDF / PNG / JPEG, maksimal 5 MB)</label><input :key="form.client_key" type="file" accept="application/pdf,image/png,image/jpeg" class="field-control" @change="selectProof" /></div>
+        <p class="self-center text-sm text-slate-400">Saldo berasal dari jurnal yang sudah diposting. Dana berkurang setelah konfirmasi pengeluaran, bukan saat pengajuan.</p>
+      </div>
+      <p v-if="cashError" role="alert" class="mt-3 text-rose-400">{{ cashError }}</p>
+      <p v-if="selectedCash && totalExpense > Number(selectedCash.balance)" class="mt-3 text-amber-500">Saldo saat ini tidak mencukupi. Pengajuan dapat disimpan, tetapi belum dapat dikonfirmasi.</p>
+      <details v-if="canConfigureCash" class="mt-4 rounded-xl border border-slate-500/40 p-4">
+        <summary class="cursor-pointer font-bold">Pemetaan akun kas perusahaan / cabang</summary>
+        <p class="my-3 text-sm text-slate-400">Pilih COA kas yang benar. Pemetaan tidak membuat saldo baru atau mengubah sumber dana dokumen lama.</p>
+        <div class="grid items-end gap-3 md:grid-cols-3">
+          <AppSearchSelect v-model="cashConfig.kind" label="Jenis Kas" :options="[{value:'SMALL',label:'Kas Kecil'},{value:'LARGE',label:'Kas Besar'},{value:'WAREHOUSE',label:'Kas Gudang'}]" />
+          <AppSearchSelect v-model="cashConfig.id_coa" label="COA Kas" :options="coaOptions" :disabled="!form.id_perusahaan || !form.id_cabang" />
+          <button class="rounded-xl border border-slate-500 px-4 py-3 disabled:opacity-50" :disabled="configSaving || !cashConfig.id_coa" @click="configureCash">{{ configSaving ? 'Menyimpan…' : 'Simpan Pemetaan' }}</button>
+        </div>
+      </details>
       <div class="mt-6 flex items-center justify-between gap-3">
         <h3 class="font-bold">Detail Pengeluaran</h3>
         <button class="rounded-xl border border-slate-500 px-3 py-2 text-sm font-bold disabled:opacity-50" :disabled="form.details.length >= 200 || loading.save" @click="form.details.push(newDetail())">+ Tambah Detail</button>
@@ -440,6 +518,12 @@ onMounted(async () => {
           <div><dt class="field-label">PIC</dt><dd>{{ selectedExpense.pic }}</dd></div>
           <div><dt class="field-label">Dicatat pada</dt><dd>{{ formatDateTime(selectedExpense.tanggal_pengajuan) }}</dd></div>
         </dl>
+        <div v-if="selectedExpense.funding" class="mt-4 rounded-xl border border-slate-500/40 p-4">
+          <p>Sumber dana: <strong>{{ selectedExpense.funding.label }}</strong> · {{ selectedExpense.funding.nomor_akun }} — {{ selectedExpense.funding.nama_akun }}</p>
+          <p>Nomor bukti: {{ selectedExpense.funding.reference || '—' }}</p>
+          <p v-if="selectedExpense.funding.id_jurnal">Jurnal: #{{ selectedExpense.funding.id_jurnal }}</p>
+          <button v-if="selectedExpense.funding.proof_name" class="mt-2 underline" @click="openProof">Unduh {{ selectedExpense.funding.proof_name }}</button>
+        </div>
         <div v-if="selectedExpense.details?.length" class="mt-5 overflow-x-auto">
           <table class="expense-details w-full min-w-[560px] text-sm">
             <thead><tr><th>No.</th><th>Akun COA</th><th>Keterangan</th><th>Nominal</th></tr></thead>

@@ -1,4 +1,5 @@
 <script setup>
+import { generalLedgerHtml, reportContext, showFinancialPrint } from '@/utils/financialReportPrint';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies } from '@/api/master';
 import { getAccountCoaList, getGeneralLedger } from '@/api/finance';
@@ -86,7 +87,7 @@ const companyOptions = computed(() =>
 const tableRows = computed(() =>
   ledgerRows.value.map((item, index) => ({
     ...item,
-    row_key: `${item.isParent ? 'parent' : 'child'}-${item.coa_id || item.id_jurnal || index}`,
+    row_key: `${item.isParent ? 'parent' : 'child'}-${item.coa_id || 0}-${item.id_jurnal_detail || index}`,
     tanggal_label: item.tanggal || '-',
     akun_label: item.isParent ? `${item.nomor_akun || ''} ${item.nama_akun || ''}`.trim() : item.nama_akun || '-',
     keterangan_label: item.keterangan || '-',
@@ -104,6 +105,18 @@ const filterLabel = computed(() => {
   const account = coaOptions.value.find((item) => String(item.value) === String(form.coaId))?.label || 'Semua akun';
   return `${account} / ${branch} / ${company}`;
 });
+
+
+const printPayload = ref(null);
+const loadedPrintContext = ref(null);
+const loadedPrintFilters = ref('');
+const canPrint = computed(() => !!printPayload.value && !loading.ledger && loadedPrintFilters.value === JSON.stringify(form));
+function printReport() {
+  if (!canPrint.value) return;
+  const html = generalLedgerHtml({ ...loadedPrintContext.value, printedAt: new Date().toLocaleString('id-ID') }, printPayload.value);
+  if (!showFinancialPrint('Buku Besar', html)) errorMessage.value = 'Izinkan pop-up untuk membuka pratinjau cetak.';
+}
+const ledgerWarnings = ref([]);
 
 function formatCurrency(value) {
   return `Rp ${new Intl.NumberFormat('id-ID').format(Number(value || 0))}`;
@@ -141,6 +154,9 @@ async function loadOptions() {
 }
 
 async function loadLedger() {
+  const filterSnapshot = JSON.stringify(form);
+  const contextSnapshot = reportContext(form, companyRows.value, branchRows.value, authStore.user);
+  printPayload.value = null;
   loading.ledger = true;
   feedback.value = '';
   errorMessage.value = '';
@@ -159,6 +175,10 @@ async function loadLedger() {
         ? rawPayload.data
         : rawPayload;
 
+    printPayload.value = payload;
+    ledgerWarnings.value = payload?.warnings || [];
+    loadedPrintFilters.value = filterSnapshot;
+    loadedPrintContext.value = contextSnapshot;
     ledgerRows.value = normalizeList(payload?.result ?? payload);
     summary.value = {
       saldo_awal: Number(payload?.summary?.saldo_awal || 0),
@@ -213,6 +233,12 @@ watch(
       title="Buku Besar"
       description="Pantau saldo awal, mutasi debit kredit, dan detail buku besar per akun dalam rentang periode yang dipilih."
     />
+    <div class="flex flex-wrap items-center gap-3">
+      <button class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="!canPrint" @click="printReport">Cetak / Simpan PDF</button>
+      <span class="text-xs text-slate-500">Cetak seluruh hasil filter. Setelah mengubah filter, muat laporan kembali.</span>
+    </div>
+    <p v-for="warning in ledgerWarnings" :key="warning" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{{ warning }}</p>
+
 
     <section class="panel p-5">
       <div class="grid gap-4 xl:grid-cols-[1.4fr_1.1fr_1.1fr_0.9fr_0.9fr_auto_auto]">

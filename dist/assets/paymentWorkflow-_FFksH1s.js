@@ -1,0 +1,1 @@
+import{x as s}from"./index-BeeUSn-u.js";const e="/api/finance/workflow",l=(o,t)=>s.get(`${e}/${o}`,{params:t}),r=(o,t={})=>s.post(`${e}/${o}`,t),f=(o,t)=>s.put(`${e}/${o}`,t),$=o=>s.delete(`${e}/${o}`),c=(o,t,w)=>s.request({method:o,url:`/api/mobile/workflow/${t}`,data:w});export{l as a,f as b,$ as c,c as m,r as w};

@@ -76,6 +76,8 @@ const columns = [
 
 const detailColumns = [
   { key: 'jenis', label: 'Jenis', render: (row) => capitalize(row.jenis) },
+  { key: 'referensi', label: 'No Dokumen' },
+  { key: 'sumber', label: 'Sumber' },
   { key: 'tanggal', label: 'Tanggal', render: (row) => formatDate(row.tanggal) },
   { key: 'pic', label: 'PIC' },
   { key: 'nominal', label: 'Nominal', render: (row) => formatCurrency(row.nominal) }

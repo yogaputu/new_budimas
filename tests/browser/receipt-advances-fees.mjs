@@ -42,7 +42,7 @@ try {
     else if(p.endsWith('/finance/customer-advances'))data=[{id_uang_muka:1,kode_uang_muka:'UM-LEGACY',kode_mutasi:'BANK-OLD',nama_customer:'Legacy Customer',tanggal:'2026-10-01',nominal_awal:10000,sisa_nominal:10000,status:'APPROVED'}];
     return route.fulfill({json:{data}});
   });
-  const selectCompany=async()=>{await page.getByPlaceholder('Pilih data',{exact:true}).click();await page.getByRole('button',{name:'CO - Company Test',exact:true}).click();};
+  const selectCompany=async()=>{await page.getByPlaceholder('Pilih data',{exact:true}).click();await page.getByRole('option',{name:'CO - Company Test',exact:true}).click();};
   const closeModal=async()=>{await page.getByRole('button',{name:'✕',exact:true}).click();};
   await page.goto(origin+'/finance/payment-fees');await selectCompany();
   await page.getByRole('cell',{name:'6108 — Beban Administrasi',exact:true}).waitFor();
@@ -52,7 +52,7 @@ try {
   await page.getByLabel('Batas Nominal per Faktur',{exact:true}).fill('25000');
   assert(await page.getByRole('button',{name:'Simpan Jenis Biaya',exact:true}).isDisabled());
   await page.getByPlaceholder('Cari kode / nama akun COA',{exact:true}).fill('6109');
-  await page.getByRole('button',{name:'6109 — Beban Bank',exact:true}).click();
+  await page.getByRole('option',{name:'6109 — Beban Bank',exact:true}).click();
   await page.screenshot({path:'/tmp/budimas-fee-coa-form.png',animations:'disabled'});
   await page.getByRole('button',{name:'Simpan Jenis Biaya',exact:true}).click();
   const newRow=page.getByRole('row').filter({has:page.getByText('Biaya Baru',{exact:true})});

@@ -1,1 +1,0 @@
-import{l as t}from"./index-CarDeg1Q.js";function o(i){return t.get("/api/supervisor-audit/logs",{params:i})}function s(i){return t.get("/api/supervisor-audit/options",{params:i})}export{s as a,o as g};

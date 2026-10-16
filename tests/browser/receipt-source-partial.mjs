@@ -55,7 +55,7 @@ try {
   await page.goto(origin+'/finance/receipt-workflow');
   await page.getByRole('button',{name:'Buat Kuitansi',exact:true}).click();
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  await page.getByRole('button',{name:'LPH-PARTIAL — Sales Test',exact:true}).click();
+  await page.getByRole('option',{name:'LPH-PARTIAL — Sales Test',exact:true}).click();
   for(const id of [1,2])await page.getByLabel(`Pilih faktur F-${id}`,{exact:true}).check();
   for(const reference of ['OTHER-SALES-CASH','OTHER-CUSTOMER','OTHER-COMPANY','OTHER-BRANCH'])assert.equal(await page.getByLabel(`F-1 sumber ${reference}`,{exact:true}).count(),0);
   for(const reference of ['OUTGOING','BOUNCED'])assert.equal(await page.getByLabel(`F-1 sumber ${reference}`,{exact:true}).count(),0);

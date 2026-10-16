@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -1477,13 +1478,13 @@ onMounted(initialize);
           <div v-if="mutationEntryMode === 'MANUAL'" class="mt-4 grid gap-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4 md:grid-cols-2 dark:border-violet-500/30 dark:bg-violet-500/10">
             <label class="block">
               <span class="field-label">Jenis instrumen</span>
-              <select v-model="manualMutationForm.instrument_type" class="field-control">
+              <AppSelect2 aria-label="Jenis instrumen" v-model="manualMutationForm.instrument_type" >
                 <option value="TRANSFER_MANUAL">Transfer bank manual</option>
                 <option value="BILYET_GIRO">Bilyet Giro</option>
                 <option value="CEK">Cek</option>
                 <option value="GIRO">Giro</option>
                 <option value="LAINNYA">Lainnya</option>
-              </select>
+              </AppSelect2>
             </label>
             <label class="block">
               <span class="field-label">Tanggal instrumen</span>

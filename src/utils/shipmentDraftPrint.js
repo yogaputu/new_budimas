@@ -57,7 +57,8 @@ export function prepareShipmentDocument(row, payload) {
       }
       pickingIds.add(pickingId);
       if (!orders.has(orderId)) orders.set(orderId, { id: orderId, no: allocation.no_order, customerId: allocation.customer_id,
-        customer: allocation.customer_name, code: allocation.customer_code, orderPcs: 0, pickedPcs: 0 });
+        customer: allocation.customer_name, code: allocation.customer_code,
+        date: allocation.order_date, amount: allocation.order_amount, orderPcs: 0, pickedPcs: 0 });
       const order = orders.get(orderId), picked = qty(allocation.draft_picked_pcs);
       product.pickedPcs += picked; order.pickedPcs += picked;
       // Multiple batch/picking rows for one order detail must not multiply its ordered quantity.

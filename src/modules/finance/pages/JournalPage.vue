@@ -1,4 +1,5 @@
 <script setup>
+import { journalHtml, reportContext, showFinancialPrint } from '@/utils/financialReportPrint';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies } from '@/api/master';
 import { getJournalDetail, getJournalList } from '@/api/finance';
@@ -141,6 +142,18 @@ const selectedDetailSummary = computed(() => {
   };
 });
 
+
+const printPayload = ref(null);
+const loadedPrintContext = ref(null);
+const loadedPrintFilters = ref('');
+const canPrint = computed(() => !!printPayload.value && !loading.list && loadedPrintFilters.value === JSON.stringify(filters));
+function printReport() {
+  if (!canPrint.value) return;
+  const html = journalHtml({ ...loadedPrintContext.value, printedAt: new Date().toLocaleString('id-ID') }, filteredRows.value);
+  if (!showFinancialPrint('Jurnal', html)) pageError.value = 'Izinkan pop-up untuk membuka pratinjau cetak.';
+}
+
+
 function formatCurrency(value) {
   return `Rp ${new Intl.NumberFormat('id-ID').format(Number(value || 0))}`;
 }
@@ -277,6 +290,9 @@ async function loadReferences() {
 }
 
 async function loadRows() {
+  const filterSnapshot = JSON.stringify(filters);
+  const contextSnapshot = reportContext(filters, companies.value, branches.value, authStore.user);
+  printPayload.value = null;
   loading.list = true;
   pageError.value = '';
   feedback.value = '';
@@ -292,6 +308,9 @@ async function loadRows() {
     });
 
     rows.value = normalizeList(unwrapResponse(response));
+    printPayload.value = true;
+    loadedPrintFilters.value = filterSnapshot;
+    loadedPrintContext.value = contextSnapshot;
     journalPage.value = 1;
     if (!rows.value.length) {
       feedback.value = 'Belum ada jurnal pada periode dan filter yang dipilih.';
@@ -377,6 +396,12 @@ onMounted(async () => {
       title="Jurnal"
       description="Pantau jurnal yang terbentuk dari modul operasional dan telusuri detail debit-kredit per transaksi accounting."
     />
+    <div class="flex flex-wrap items-center gap-3">
+      <button class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="!canPrint" @click="printReport">Cetak / Simpan PDF</button>
+      <span class="text-xs text-slate-500">Cetak seluruh hasil filter. Setelah mengubah filter, muat laporan kembali.</span>
+    </div>
+
+
 
     <section class="panel p-5">
       <div class="grid gap-4 xl:grid-cols-[1.5fr_1fr_1fr_0.9fr_0.9fr_auto_auto]">

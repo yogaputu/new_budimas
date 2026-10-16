@@ -13,6 +13,7 @@ import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
 import { buildStockOpnameDetailPayload, normalizeStockOpnameDetail, updateStockOpnameDetail } from '../detailQuantities';
+import { productUoms } from '@/utils/productUom';
 
 const auth = useAuthStore();
 const filters = reactive({
@@ -417,9 +418,7 @@ onMounted(async () => {
               <thead class="bg-slate-900 text-slate-400">
                 <tr>
                   <th class="px-3 py-3 text-left uppercase tracking-wide">Produk</th>
-                  <th class="px-3 py-3 text-left uppercase tracking-wide">UOM 3</th>
-                  <th class="px-3 py-3 text-left uppercase tracking-wide">UOM 2</th>
-                  <th class="px-3 py-3 text-left uppercase tracking-wide">UOM 1</th>
+                  <th colspan="3" class="px-3 py-3 text-left uppercase tracking-wide">Jumlah per UOM</th>
                   <th class="px-3 py-3 text-right uppercase tracking-wide">Stock</th>
                   <th class="px-3 py-3 text-right uppercase tracking-wide">Good</th>
                   <th class="px-3 py-3 text-right uppercase tracking-wide">Bad</th>
@@ -440,17 +439,13 @@ onMounted(async () => {
                     <p class="font-bold text-white">{{ item.nama_produk || '-' }}</p>
                     <p class="text-xs text-slate-400">{{ item.kode_sku || item.sku || '-' }}</p>
                   </td>
-                  <td class="px-3 py-3">
-                    <input :value="item.uom_3" :disabled="!item.konversi_uom_3" type="number" min="0" class="input w-24" @input="updateDetailRow(index, 'uom_3', $event.target.value)" />
-                    <p class="mt-1 text-xs text-slate-500">{{ item.label_uom_3 || '-' }}</p>
-                  </td>
-                  <td class="px-3 py-3">
-                    <input :value="item.uom_2" :disabled="!item.konversi_uom_2" type="number" min="0" class="input w-24" @input="updateDetailRow(index, 'uom_2', $event.target.value)" />
-                    <p class="mt-1 text-xs text-slate-500">{{ item.label_uom_2 || '-' }}</p>
-                  </td>
-                  <td class="px-3 py-3">
-                    <input :value="item.uom_1" :disabled="!item.konversi_uom_1" type="number" min="0" class="input w-24" @input="updateDetailRow(index, 'uom_1', $event.target.value)" />
-                    <p class="mt-1 text-xs text-slate-500">{{ item.label_uom_1 || '-' }}</p>
+                  <td colspan="3" class="px-3 py-3">
+                    <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(100px,1fr));min-width:220px">
+                      <label v-for="unit in productUoms(item)" :key="unit.level" class="block">
+                        <span class="mb-1 block text-xs text-slate-400">{{ unit.nama }} × {{ unit.faktor_konversi }}</span>
+                        <input :value="item['uom_' + unit.level]" type="number" min="0" step="1" class="input w-full" @input="updateDetailRow(index, 'uom_' + unit.level, $event.target.value)" />
+                      </label>
+                    </div>
                   </td>
                   <td class="px-3 py-3 text-right text-white">{{ numberLabel(item.stok) }}</td>
                   <td class="px-3 py-3 text-right text-emerald-300">{{ numberLabel(item.good_stock) }}</td>

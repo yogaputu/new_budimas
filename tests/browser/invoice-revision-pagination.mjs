@@ -36,7 +36,7 @@ try {
   });
   await page.goto(origin + '/distribution/invoice-revisions?id_cabang=5');
   await page.getByPlaceholder('Pilih perusahaan').click();
-  await page.getByRole('button', { name: /BMM.*Perusahaan/ }).click();
+  await page.getByRole('option', { name: /BMM.*Perusahaan/ }).click();
   await page.getByRole('button', { name: 'Muat Revisi', exact: true }).click();
   await page.getByRole('cell', { name: '- - Tanpa jadwal', exact: true }).click();
   await Promise.all([

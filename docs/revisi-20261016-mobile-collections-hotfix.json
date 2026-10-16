@@ -1,0 +1,36 @@
+{
+  "release": "Mobile Sales payment collection refresh hotfix",
+  "date": "2026-10-16",
+  "status": "deployed_and_verified",
+  "server": "103.86.117.35",
+  "server_backup": "/www/backup/budimas-collections-fix-20261016.43X3mm",
+  "deployed_file": "/www/wwwroot/API/apps/lib/mobile_collections.py",
+  "source_sha256": "4a11470c6df23fd782003681a6c882c9d15687784a287cd751e873a25d8e26ac",
+  "root_cause": "After a successful claim, collection-options subtracted a NUMERIC/Decimal pending claim total from a legacy float receivable balance and returned HTTP 500.",
+  "fix": "Normalize operands to Decimal before calculating available_to_collect; do not modify ledger balances, claim amounts, or LPH status.",
+  "api_changes": "No new endpoints or request fields. Availability is computed as Decimal and serialized like other monetary workflow fields; the installed APK already accepts decimal strings.",
+  "migration_required": false,
+  "apk_update_required": false,
+  "production_business_transactions_created": false,
+  "reload": "Graceful SIGHUP of the verified production uWSGI master; API UAT and the aaPanel PID alias remain unchanged.",
+  "verification": {
+    "pre_fix_reproduction": "Failed with the reported TypeError in both Call Plan and outside-Call-Plan regression cases using DOUBLE PRECISION legacy invoice totals and NUMERIC claims.",
+    "local_postgresql_tests_passed": 99,
+    "regression_coverage": [
+      "Repeated claims on different invoices and the same invoice",
+      "Both collection origins",
+      "Fractional monetary values",
+      "Exact client-key retry without duplication",
+      "Over-collection rejection and zero availability",
+      "LPH remains AKTIF and receivable is not posted by a claim"
+    ],
+    "production_data_probe": "Read-only transactions; both collection origins returned all four eligible invoice rows.",
+    "authenticated_http_checks": "Six successful collection-options GETs, plus collection history and the active LPH document.",
+    "existing_first_claim": "Present exactly once in the verified customer history.",
+    "missing_token_http_status": 401,
+    "public_erp_http_status": 200,
+    "public_openapi_http_status": 200,
+    "physical_android_acceptance_test": "Not performed; current APK compatibility checked against its monetary-value parser."
+  },
+  "client_action": "Reload the payment screen. Do not re-enter the first successful collection."
+}

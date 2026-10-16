@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { createFleetScheduleFromSalesOrders } from '@/api/distribution';
 import { getDrivers, getFleets, getHelpers } from '@/api/master';
@@ -89,8 +90,8 @@ async function save() {
         <AppSearchSelect v-model="form.helper_ids" label="Helper / Kernet" multiple :options="helperOptions" :disabled="saving || loading" />
         <AppFormField v-model="form.tanggal_pengiriman" label="Tanggal Pengiriman" type="date" />
         <AppFormField v-model="form.dock_code" label="Loading Dock" maxlength="60" />
-        <label class="text-sm">Zona muatan<select v-model="form.cargo_zone" aria-label="Zona muatan" class="field mt-1"><option value="">Pilih zona</option><option value="FOOD">FOOD</option><option value="NON_FOOD">NON-FOOD</option></select></label>
-        <label class="text-sm">Satuan estimasi volume<select v-model="form.volume_unit" aria-label="Satuan estimasi volume" class="field mt-1"><option value="">Pilih satuan</option><option value="CM3">cm³</option><option value="M3">m³</option></select></label>
+        <label class="text-sm">Zona muatan<AppSelect2 v-model="form.cargo_zone" aria-label="Zona muatan" ><option value="">Pilih zona</option><option value="FOOD">FOOD</option><option value="NON_FOOD">NON-FOOD</option></AppSelect2></label>
+        <label class="text-sm">Satuan estimasi volume<AppSelect2 v-model="form.volume_unit" aria-label="Satuan estimasi volume" ><option value="">Pilih satuan</option><option value="CM3">cm³</option><option value="M3">m³</option></AppSelect2></label>
         <AppFormField v-model="form.delivery_notes" label="Catatan Pengiriman" maxlength="2000" />
       </fieldset>
       <p v-if="error || selectionError" role="alert" class="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{{ error || selectionError }}</p>

@@ -1,4 +1,6 @@
 <script setup>
+import ProductUomFields from '@/shared/components/ProductUomFields.vue';
+import { productUoms, emptyProductUomValues, productUomTotal } from '@/utils/productUom';
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -354,7 +356,7 @@ const orderItemRows = computed(() => {
     .map((item) => {
     const qtyPieces = calculateItemPieces(item, item.qty_uom1, item.qty_uom2, item.qty_uom3);
     const subtotal = qtyPieces * Number(item.harga_per_uom1 || item.harga_beli || 0);
-    item.request_qty_label = formatCanvasQty(item, item.request_qty_uom1, item.request_qty_uom2, item.request_qty_uom3);
+    item.request_qty_label = formatCanvasUomQty(item, Object.fromEntries(productUoms(item).map(u => [`qty_uom${u.level}`, item[`request_qty_uom${u.level}`]])));
     item.stock_label = `${orderItemAvailablePieces(item).toLocaleString('id-ID')} PCS`;
     item.order_qty_pieces = qtyPieces;
     item.subtotal_order = subtotal;
@@ -583,7 +585,9 @@ function normalizeOrderItem(row) {
     request_qty_uom3: requestQty.qty_uom3,
     qty_uom1: 0,
     qty_uom2: 0,
-    qty_uom3: 0
+    qty_uom3: 0,
+    ...emptyProductUomValues(row, 'qty_uom'),
+    ...Object.fromEntries(productUoms(row).map(u => [`request_qty_uom${u.level}`, requestQty[`qty_uom${u.level}`] || 0]))
   };
 }
 
@@ -614,7 +618,7 @@ function orderItemAvailablePieces(item) {
   }
   return Math.min(
     Math.max(0, Number(item?.stock_canvas || 0)),
-    canvasPieces(item, item?.request_qty_uom1, item?.request_qty_uom2, item?.request_qty_uom3)
+    productUomTotal(item, item, 'request_qty_uom')
   );
 }
 
@@ -695,7 +699,8 @@ function buildVoucherPreviewItems() {
       id_produk: Number(item.id_produk || item.id || 0),
       qty_uom1: Number(quantities.qty_uom1 || 0),
       qty_uom2: Number(quantities.qty_uom2 || 0),
-      qty_uom3: Number(quantities.qty_uom3 || 0)
+      qty_uom3: Number(quantities.qty_uom3 || 0),
+      ...quantities
     });
     return items;
   }, []).filter((item) => item.id_produk > 0);
@@ -729,7 +734,8 @@ function buildVoucherPreviewSignature(payload = buildVoucherPreviewPayload()) {
       id_produk: Number(item.id_produk || 0),
       qty_uom1: Number(item.qty_uom1 || 0),
       qty_uom2: Number(item.qty_uom2 || 0),
-      qty_uom3: Number(item.qty_uom3 || 0)
+      qty_uom3: Number(item.qty_uom3 || 0),
+      uom_quantities: item.uom_quantities || null
     })),
     voucher_selections: (payload.voucher_selections || []).map((item) => ({
       tipe_voucher: Number(item.tipe_voucher || 0),
@@ -1782,9 +1788,7 @@ onMounted(async () => {
                   <th class="px-4 py-3">Produk</th>
                   <th class="px-4 py-3">Qty Siap Dijual</th>
                   <th class="px-4 py-3">Siap Order (PCS)</th>
-                  <th class="px-4 py-3">Order UOM Besar</th>
-                  <th class="px-4 py-3">Order UOM Tengah</th>
-                  <th class="px-4 py-3">Order UOM Kecil</th>
+                  <th colspan="3" class="px-4 py-3">Jumlah Order per UOM</th>
                   <th class="px-4 py-3 text-right">Subtotal Est.</th>
                 </tr>
               </thead>
@@ -1803,17 +1807,8 @@ onMounted(async () => {
                     </td>
                     <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ item.request_qty_label }}</td>
                     <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ item.stock_label }}</td>
-                    <td class="px-4 py-3">
-                      <p class="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ orderUomLabel(item, 3) }}</p>
-                      <input :value="item.qty_uom3" type="number" min="0" step="1" inputmode="numeric" class="field min-w-[110px]" :disabled="!isOrderUomEnabled(item, 3)" @input="updateOrderQty(item, 3, $event.target.value)" />
-                    </td>
-                    <td class="px-4 py-3">
-                      <p class="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ orderUomLabel(item, 2) }}</p>
-                      <input :value="item.qty_uom2" type="number" min="0" step="1" inputmode="numeric" class="field min-w-[110px]" :disabled="!isOrderUomEnabled(item, 2)" @input="updateOrderQty(item, 2, $event.target.value)" />
-                    </td>
-                    <td class="px-4 py-3">
-                      <p class="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ orderUomLabel(item, 1) }}</p>
-                      <input :value="item.qty_uom1" type="number" min="0" step="1" inputmode="numeric" class="field min-w-[110px]" :disabled="!isOrderUomEnabled(item, 1)" @input="updateOrderQty(item, 1, $event.target.value)" />
+                    <td colspan="3" class="min-w-[300px] px-4 py-3">
+                      <ProductUomFields :product="item" :values="item" @change="updateOrderQty(item, $event.level, $event.value)" />
                     </td>
                     <td class="px-4 py-3 text-right font-bold text-slate-950 dark:text-white">{{ item.subtotal_label }}</td>
                   </tr>

@@ -35,6 +35,9 @@ import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
+import EanScanner from '@/shared/components/EanScanner.vue';
+
+const cartonFields = ['berat_per_karton', 'panjang_karton', 'lebar_karton', 'tinggi_karton'];
 
 const auth = useAuthStore();
 
@@ -57,6 +60,11 @@ const detailLoading = ref(false);
 const detailError = ref('');
 const selectedProduct = ref(null);
 const editProductDraft = ref(null);
+const cartonVolume = computed(() => {
+  const dimensions = cartonFields.slice(1).map(key => Number(editProductDraft.value?.[key]));
+  return dimensions.every(value => Number.isFinite(value) && value > 0)
+    ? (dimensions.reduce((a, b) => a * b, 1) / 1000000).toFixed(9) : '—';
+});
 const productDrawerMode = ref('detail');
 const productEditMode = ref(false);
 const productSaveLoading = ref(false);
@@ -439,6 +447,7 @@ function normalizeProductDetailPayload(payload, row = null) {
 
 function emptyProductDraft() {
   return {
+    ...Object.fromEntries(cartonFields.map(key => [key, ''])),
     id_principal: filters.principalId ? String(filters.principalId) : '',
     nama: '',
     kode_sku: '',
@@ -465,6 +474,7 @@ function emptyProductDraft() {
 
 function makeProductDraft(detailPayload = {}) {
   return {
+    ...Object.fromEntries(cartonFields.map(key => [key, detailPayload[key] ?? ''])),
     id_principal: detailPayload?.id_principal ? String(detailPayload.id_principal) : '',
     nama: detailPayload?.nama || '',
     kode_sku: detailPayload?.kode_sku || '',
@@ -1237,7 +1247,15 @@ watch([bulkTotalPages, bulkPageSize], () => {
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AppFormField v-model="editProductDraft.nama" label="Nama" />
           <AppFormField v-model="editProductDraft.kode_sku" label="SKU" />
-          <AppFormField v-model="editProductDraft.kode_ean" label="Kode EAN" />
+          <div class="space-y-2">
+            <AppFormField v-model="editProductDraft.kode_ean" label="Kode EAN" />
+            <EanScanner @scan="editProductDraft.kode_ean = $event" />
+          </div>
+          <AppFormField v-model="editProductDraft.berat_per_karton" label="Berat per Karton (kg)" type="number" min="0.001" step="0.001" />
+          <AppFormField v-model="editProductDraft.panjang_karton" label="Panjang Karton (cm)" type="number" min="0.001" step="0.001" />
+          <AppFormField v-model="editProductDraft.lebar_karton" label="Lebar Karton (cm)" type="number" min="0.001" step="0.001" />
+          <AppFormField v-model="editProductDraft.tinggi_karton" label="Tinggi Karton (cm)" type="number" min="0.001" step="0.001" />
+          <div class="space-y-2"><p class="text-sm font-semibold">Volume per Karton (m³)</p><output class="block rounded-xl border p-3">{{ cartonVolume }}</output><p class="text-xs text-slate-500">Otomatis: panjang × lebar × tinggi ÷ 1.000.000. Tidak mengubah kubikasi lama.</p></div>
           <AppFormField
             v-model="editProductDraft.kode_external"
             label="Kode External"

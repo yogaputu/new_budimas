@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -861,10 +862,10 @@ onMounted(async () => {
       <div class="space-y-4">
         <label class="block">
           <span class="text-sm font-medium text-slate-700">Sumber file</span>
-          <select v-model="importSourceType" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none">
+          <AppSelect2 aria-label="Sumber file" v-model="importSourceType" >
             <option value="lob">Analisa DOI / LOB (XLSX atau CSV)</option>
             <option value="bd">Form Order Barang / BD (XLSX)</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <div v-if="importSourceType === 'bd'" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-15",
+  "status": "deployed_verified",
+  "target_host": "103.86.117.35",
+  "api_root": "/www/wwwroot/API",
+  "web_roots": ["/www/wwwroot/new_budimas", "/www/wwwroot/new_budimas/dist"],
+  "backup": "/www/backup/budimas-dynamic-uom-20261015.8oqNbo",
+  "scope": "Master-driven product UOM lists, conversion, persisted breakdown and compatible legacy quantity columns",
+  "migration": "tools/migrations/20261015_dynamic_product_uom.sql",
+  "migration_result": "Additive snapshot table and index created; no stock balance rewrite",
+  "api_files_verified": 14,
+  "frontend_asset_files_verified": 205,
+  "frontend_index_sha256": "c1f85208c3138043f4164617da68f538b9630c18414c3bf80d13ba35cb9a2ba6",
+  "live_http_checks_passed": 31,
+  "live_product_check": {"id_produk": 49145, "kode_sku": "P3P1", "uom_count": 4, "last_level": 4},
+  "api_compatibility_fix": "Legacy DB.get() result envelopes are retained; first attempt was restored before verified retry",
+  "excluded_unrelated_local_change": "Canvas pallet-outflow approval hook remains local; server approval implementation retained",
+  "reload": "Graceful reload of API master only; nginx and other project services not restarted",
+  "old_frontend_assets": "Retained for existing browser tabs and rollback",
+  "business_test_transactions": false,
+  "apk_downloads": [
+    {
+      "app": "Mobile Sales",
+      "version": "1.0.10",
+      "build": "debug",
+      "url": "https://erp.budimas.swakarya.my.id:9092/downloads/BudimasMobile-v1.0.10-dynamic-uom-debug.apk",
+      "sha256": "8fa98cb5dd409afd63db8a12013078518bb7cf1a66aab6497815f8c9810cbc41"
+    },
+    {
+      "app": "WMS",
+      "version": "1.0.20",
+      "build": "debug",
+      "url": "https://erp.budimas.swakarya.my.id:9092/downloads/BudimasWMS-v1.0.20-dynamic-uom-debug.apk",
+      "sha256": "cc9e0fcfc4ba69990fa6630f14963ad39e8c362f626622587d7df2fb3c906769"
+    }
+  ],
+  "verification_records": ["verification-api.json", "verification-web.json"],
+  "user_next_steps": ["Hard refresh ERP", "Update APK", "Sync product master"]
+}

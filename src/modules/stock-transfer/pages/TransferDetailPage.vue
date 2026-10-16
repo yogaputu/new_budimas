@@ -78,7 +78,7 @@ const canAdminConfirm = computed(() => canProcessWarehouseAction.value && String
 const canReceive = computed(() => canProcessWarehouseAction.value && String(transferHeader.value?.status) === '2');
 
 function formatConfiguredUom(item) {
-  return [1, 2, 3]
+  return (item.uoms || [1, 2, 3].map(level => ({ level }))).map(unit => unit.level)
     .filter((level) => item[`uom_${level}_configured`])
     .map((level) => `${Number(item[`uom_${level}`] || 0).toLocaleString('id-ID')} ${item[`uom_${level}_label`] || `UOM ${level}`}`)
     .join(' · ') || `${Number(item.total_pieces ?? item.jumlah ?? 0).toLocaleString('id-ID')} PCS`;

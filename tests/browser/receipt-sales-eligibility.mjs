@@ -36,7 +36,7 @@ try {
   assert.equal(await page.getByPlaceholder('Otomatis dari LPH yang dipilih',{exact:true}).count(),0);
   // LPH can be chosen directly; its sales is informational, never a second input.
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  await page.getByRole('button',{name:'LPH-20 — SEPTIYANI DU',exact:true}).click();
+  await page.getByRole('option',{name:'LPH-20 — SEPTIYANI DU',exact:true}).click();
   await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-20',exact:true}).waitFor();
   assert.equal((await responsible.textContent()).trim(),'Sales penanggung jawab: SEPTIYANI DU');
   assert.equal(await page.getByPlaceholder('Semua Sales',{exact:true}).inputValue(),'');
@@ -46,22 +46,22 @@ try {
   await close();await open();
   assert.equal(reads.filter(u=>u.pathname.endsWith('/workflow/lphs')).at(-1).searchParams.get('receipt_eligible'),'true');
   await page.getByPlaceholder('Semua Sales',{exact:true}).click();
-  await page.getByRole('button',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).waitFor();
-  await page.getByRole('button',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:/Sales Riwayat|Sales Cancelled/}).count(),0);
-  await page.getByRole('button',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).click();
+  await page.getByRole('option',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).waitFor();
+  await page.getByRole('option',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).waitFor();
+  assert.equal(await page.getByRole('option',{name:/Sales Riwayat|Sales Cancelled/}).count(),0);
+  await page.getByRole('option',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).click();
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'LPH-20 — SEPTIYANI DU',exact:true}).count(),0);
-  await page.getByRole('button',{name:'LPH-10 — Sales 1 (Test)',exact:true}).click();
+  assert.equal(await page.getByRole('option',{name:'LPH-20 — SEPTIYANI DU',exact:true}).count(),0);
+  await page.getByRole('option',{name:'LPH-10 — Sales 1 (Test)',exact:true}).click();
   await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-10',exact:true}).waitFor();
   assert.equal(await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-DITAHAN',exact:true}).count(),0);
   assert.equal((await responsible.textContent()).trim(),'Sales penanggung jawab: Sales 1 (Test)');
   await page.getByPlaceholder('Semua Sales',{exact:true}).fill('SEPTIYANI');
-  await page.getByRole('button',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).click();
+  await page.getByRole('option',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).click();
   assert.equal(await responsible.count(),0);
   assert.equal(await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-10',exact:true}).count(),0);
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  await page.getByRole('button',{name:'LPH-20 — SEPTIYANI DU',exact:true}).click();
+  await page.getByRole('option',{name:'LPH-20 — SEPTIYANI DU',exact:true}).click();
   await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-20',exact:true}).waitFor();
   assert.equal((await responsible.textContent()).trim(),'Sales penanggung jawab: SEPTIYANI DU');
   await page.screenshot({path:'/tmp/budimas-receipt-sales-compact.png',fullPage:true});
@@ -74,8 +74,8 @@ try {
   // The next opening fetches current eligibility; it must not cache historical sales.
   candidates=history.slice(0,2);await open();
   await page.getByPlaceholder('Semua Sales',{exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).count(),0);
-  await page.getByRole('button',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).waitFor();
+  assert.equal(await page.getByRole('option',{name:'SEPTIYANI DU — 1 LPH tersedia',exact:true}).count(),0);
+  await page.getByRole('option',{name:'Sales 1 (Test) — 2 LPH tersedia',exact:true}).waitFor();
   await close();
   // Editing a cancelled historical receipt retains the original LPH and sales.
   await page.getByRole('button',{name:'Edit Ulang',exact:true}).click();

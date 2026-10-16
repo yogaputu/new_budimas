@@ -1,0 +1,67 @@
+{
+  "revision": "ERP searchable dropdowns / Select2",
+  "date": "2026-10-15",
+  "status": "implemented_and_tested_locally",
+  "server_deployed": false,
+  "api_changed": false,
+  "database_changed": false,
+  "native_apps_changed": false,
+  "converted_dropdowns": 65,
+  "converted_pages_and_components": 20,
+  "scope": [
+    "Picking: searchable shipment draft and display mode",
+    "Loading: searchable fleet and dependent driver",
+    "WMS master, incoming, manifests, principal groups, rack 3D",
+    "Principal claims, returns, replacement goods, principal portal and PO settlement COA",
+    "PO import, receipts, payment methods and shipment draft forms",
+    "Receipt workflow, fee choices and COA import category mapping",
+    "Shared AppFilterBar select fields"
+  ],
+  "implementation": {
+    "component": "src/shared/components/AppSelect2.vue",
+    "shared_search_component": "src/shared/components/AppSearchSelect.vue",
+    "third_party_select2_dependency_added": false,
+    "preserved": [
+      "Original option values, numeric model modifiers, booleans and multiple selections",
+      "Change events and native required/disabled form behavior",
+      "Disabled fee/principal choices and existing permission guards",
+      "Transaction APIs, payloads, CT/PCS allocation and validations"
+    ],
+    "features": [
+      "Case-insensitive and punctuation-insensitive option search",
+      "50 visible choices with more-results control; search covers all loaded choices",
+      "Arrow/Enter/Escape/Tab keyboard interaction and accessible combobox/option roles",
+      "Body-positioned dropdown in new controls prevents modal clipping",
+      "Light/dark themes, outside-click dismissal and touch selection"
+    ],
+    "pagination_page_size_selects": "Intentionally left as native controls"
+  },
+  "build": {
+    "directory": "/tmp/budimas-select2-final.NHSCpD",
+    "index_sha256": "e0b9d87f9819870e86efad73473421207608464f066c0029ae9a5aaf6b47a7c4",
+    "result": "passed"
+  },
+  "tests": {
+    "searchable_dropdown_browser_checks": 44,
+    "workflow_ui_browser_checks": 72,
+    "additional_browser_suites_passed": [
+      "shipment-schedule-create: exact payload, scope, date and validation guards",
+      "receipt-source-partial: customer/company/cash guards and exact allocation payload",
+      "receipt-advances-fees: fee CRUD, permissions and COA search",
+      "dynamic-product-uom: 1/2/3/4/6 UOMs, quantities, payload and layout",
+      "october5-revision: dynamic workflow status filter",
+      "receipt-sales-eligibility: filtering, responsible sales, held invoices, refresh and historical edit",
+      "payment-workflow: nine finance/LPH pages"
+    ],
+    "node_unit_tests": { "total": 96, "passed": 95, "failed": 1 },
+    "unrelated_failure": {
+      "file": "tests/stock-opname-details.test.mjs:48",
+      "test": "missing master units have no guessed labels or conversions and do not erase counts",
+      "detail": "Expected three empty labels; current stock-opname implementation returns undefined labels. Neither the test nor stock-opname logic was changed for this dropdown revision."
+    },
+    "all_business_api_requests_mocked": true,
+    "production_business_writes": false,
+    "screenshots": "/tmp/budimas-select2-{light,dark}-{390,768,1440}.png"
+  },
+  "worktree_note": "Existing unrelated changes were retained. Generated build is outside tracked dist; no production files or API deployment was performed."
+}

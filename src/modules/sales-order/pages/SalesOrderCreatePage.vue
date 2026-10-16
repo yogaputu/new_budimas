@@ -33,6 +33,7 @@ import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
 import { getEligiblePaymentVouchers } from '@/api/finance';
+import { productUoms, productUom, productUomLabel, productUomTotal, productUomQuantities, emptyProductUomValues, uomQuantity } from '@/utils/productUom';
 
 const router = useRouter();
 const route = useRoute();
@@ -431,9 +432,7 @@ const filteredRows = computed(() => {
       item.kategori_customer_toko,
       item.kode,
       item.barcode,
-      item.uom_1,
-      item.uom_2,
-      item.uom_3
+      ...productUoms(item).map(unit => unit.nama)
     ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(keyword))
@@ -663,26 +662,19 @@ function hasValidPpn(row) {
 }
 
 function getUomLevel(field) {
-  return field === 'uom1' ? 1 : field === 'uom2' ? 2 : field === 'uom3' ? 3 : 0;
+  return Number(String(field).match(/^uom(\d+)$/)?.[1] || 0);
 }
 
 function getUomConversion(row, level) {
-  if (level === 1) {
-    return toNumber(row?.konversi_1, 1);
-  }
-
-  return toNumber(row?.[`konversi_${level}`]);
+  return productUom(row, level)?.faktor_konversi || 0;
 }
 
 function isUomEnabled(row, level) {
-  if (!level) return false;
-  return hasText(row?.[`uom_${level}`]) && getUomConversion(row, level) > 0;
+  return Boolean(productUom(row, level));
 }
 
 function formatUomLabel(row, level) {
-  const name = row?.[`uom_${level}`] || `UOM ${level} belum diset`;
-  if (level === 1) return name;
-  return `${name} x ${Number(getUomConversion(row, level) || 0).toLocaleString('id-ID')}`;
+  return productUomLabel(row, level);
 }
 
 function normalizeProductRow(item) {
@@ -703,6 +695,7 @@ function normalizeProductRow(item) {
     uom1: 0,
     uom2: 0,
     uom3: 0,
+    ...emptyProductUomValues(item),
     harga_jual: price,
     ppnRate,
     ppnMissing,
@@ -718,21 +711,14 @@ function normalizeProductRow(item) {
 }
 
 function recalculateRow(row) {
-  const pieces = isUomEnabled(row, 1) ? toNumber(row.uom1) : 0;
-  const box = isUomEnabled(row, 2) ? toNumber(row.uom2) : 0;
-  const carton = isUomEnabled(row, 3) ? toNumber(row.uom3) : 0;
-  const konversi2 = getUomConversion(row, 2);
-  const konversi3 = getUomConversion(row, 3);
-  const subtotal = (pieces + box * konversi2 + carton * konversi3) * toNumber(row.harga_jual);
+  const totalPieces = productUomTotal(row);
+  const subtotal = totalPieces * toNumber(row.harga_jual);
   const tax = subtotal * (toNumber(row.ppnRate) / 100);
 
-  row.uom1 = pieces;
-  row.uom2 = box;
-  row.uom3 = carton;
   row.subtotalorder = subtotal;
   row.ppn_value = tax;
   row.totalHarga = subtotal;
-  row.total_pieces = pieces + box * konversi2 + carton * konversi3;
+  row.total_pieces = totalPieces;
 }
 
 function updateQty(row, field, value) {
@@ -744,7 +730,7 @@ function updateQty(row, field, value) {
     return;
   }
 
-  row[field] = toNumber(value);
+  row[field] = uomQuantity(value);
   recalculateRow(row);
   schedulePromoPreview();
 }
@@ -769,6 +755,7 @@ function buildPromoPreviewPayload() {
       pieces_order: Number(item.uom1 || 0),
       box_order: Number(item.uom2 || 0),
       karton_order: Number(item.uom3 || 0),
+      uom_quantities: productUomQuantities(item),
       konversi_2: Number(getUomConversion(item, 2) || 0),
       konversi_3: Number(getUomConversion(item, 3) || 0),
       subtotalorder: Number(toNumber(item.subtotalorder).toFixed(2)),
@@ -1023,6 +1010,14 @@ function hydrateRowsFromDetails(details = []) {
       uom3: Number(detail.karton_order || 0),
       harga_jual: Number(detail.hargaorder || item.harga_jual || 0)
     };
+    if (Array.isArray(detail.uom_quantities)) {
+      Object.assign(next, emptyProductUomValues(item));
+      for (const quantity of detail.uom_quantities) {
+        const unit = productUoms(item).find(u => quantity.uom_id ? String(u.id) === String(quantity.uom_id) : u.level === quantity.level);
+        if (!unit && Number(quantity.quantity) > 0) throw new Error('UOM order lama telah berubah. Periksa master produk sebelum mengedit.');
+        if (unit) next[`uom${unit.level}`] = uomQuantity(quantity.quantity);
+      }
+    }
     recalculateRow(next);
     return next;
   });
@@ -1107,6 +1102,7 @@ function buildPayload() {
       pieces_order: Number(item.uom1 || 0),
       box_order: Number(item.uom2 || 0),
       karton_order: Number(item.uom3 || 0),
+      uom_quantities: productUomQuantities(item),
       subtotalorder: Number(toNumber(item.subtotalorder).toFixed(2)),
       totalDiskon: 0,
       ppn_value: Number(toNumber(item.ppn_value).toFixed(2)),
@@ -1224,7 +1220,7 @@ async function submitOrder({ ignoreStockWarning = false } = {}) {
     await createSalesOrder(payload);
     form.orderNo = generateOrderNo();
     rows.value = rows.value.map((item) => {
-      const next = { ...item, uom1: 0, uom2: 0, uom3: 0 };
+      const next = { ...item, uom1: 0, uom2: 0, uom3: 0, ...emptyProductUomValues(item) };
       recalculateRow(next);
       return next;
     });
@@ -1804,46 +1800,18 @@ onMounted(async () => {
               </td>
 
               <td class="px-4 py-3 align-top">
-                <div class="grid min-w-[320px] gap-2 sm:grid-cols-3">
-                  <label class="block">
-                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 1) }}</span>
+                <div class="grid min-w-[220px] gap-2" style="grid-template-columns: repeat(auto-fit, minmax(110px, 1fr))">
+                  <label v-for="unit in productUoms(item)" :key="unit.id || unit.level" class="block min-w-0">
+                    <span class="mb-1 block break-words text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, unit.level) }}</span>
                     <input
-                      :value="item.uom1"
-                      type="number"
-                      min="0"
-                      step="1"
-                      :disabled="!isUomEnabled(item, 1)"
-                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
-                      @input="updateQty(item, 'uom1', $event.target.value)"
+                      :value="item[`uom${unit.level}`] || 0"
+                      :aria-label="`${item.nama} — ${unit.nama}`"
+                      type="number" min="0" step="1" inputmode="numeric"
+                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                      @input="updateQty(item, `uom${unit.level}`, $event.target.value)"
                     >
-                    <span v-if="!isUomEnabled(item, 1)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM belum lengkap</span>
                   </label>
-                  <label class="block">
-                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 2) }}</span>
-                    <input
-                      :value="item.uom2"
-                      type="number"
-                      min="0"
-                      step="1"
-                      :disabled="!isUomEnabled(item, 2)"
-                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
-                      @input="updateQty(item, 'uom2', $event.target.value)"
-                    >
-                    <span v-if="!isUomEnabled(item, 2)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM/konversi belum lengkap</span>
-                  </label>
-                  <label class="block">
-                    <span class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{{ formatUomLabel(item, 3) }}</span>
-                    <input
-                      :value="item.uom3"
-                      type="number"
-                      min="0"
-                      step="1"
-                      :disabled="!isUomEnabled(item, 3)"
-                      class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
-                      @input="updateQty(item, 'uom3', $event.target.value)"
-                    >
-                    <span v-if="!isUomEnabled(item, 3)" class="mt-1 block text-[11px] font-semibold text-rose-500 dark:text-rose-300">UOM/konversi belum lengkap</span>
-                  </label>
+                  <p v-if="!productUoms(item).length" class="text-xs text-rose-500">Master UOM belum tersedia.</p>
                 </div>
                 <p v-if="!hasValidPpn(item)" class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                   PPN produk belum terisi. Produk ini tidak bisa disimpan ke order sebelum PPN dilengkapi.

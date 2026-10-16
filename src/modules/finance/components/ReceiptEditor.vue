@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import ReceiptReconciliation from './ReceiptReconciliation.vue';
@@ -80,13 +81,13 @@ async function chooseSource(i,f,checked){
                 <button type="button" class="btn-secondary" @click="i.legacy_fee=null">Hapus Biaya Lama</button>
               </div>
               <div v-for="(fee,index) in i.fees" :key="index" class="grid gap-2 sm:grid-cols-[1fr_9rem_auto]">
-                <label>Jenis biaya<select v-model="fee.id_fee_type" class="field-control"><option value="">Pilih biaya</option><option v-for="type in (feeTypes || []).filter(t=>t.is_active || String(t.id)===String(fee.id_fee_type))" :key="type.id" :value="type.id" :disabled="type.requires_approval || !type.is_active">{{ type.name }} — maks. {{ money(type.max_amount) }}{{ type.requires_approval ? ' (persetujuan khusus)' : !type.is_active ? ' (nonaktif)' : '' }}</option></select></label>
+                <label>Jenis biaya<AppSelect2 aria-label="Jenis biaya" v-model="fee.id_fee_type" ><option value="">Pilih biaya</option><option v-for="type in (feeTypes || []).filter(t=>t.is_active || String(t.id)===String(fee.id_fee_type))" :key="type.id" :value="type.id" :disabled="type.requires_approval || !type.is_active">{{ type.name }} — maks. {{ money(type.max_amount) }}{{ type.requires_approval ? ' (persetujuan khusus)' : !type.is_active ? ' (nonaktif)' : '' }}</option></AppSelect2></label>
                 <label>Nominal biaya<input v-model="fee.amount" type="number" min="0.01" step="0.01" class="field-control"/></label>
                 <button type="button" class="btn-secondary self-end" @click="i.fees.splice(index,1)">Hapus</button>
               </div>
               <button type="button" class="btn-secondary" :disabled="!!i.legacy_fee" @click="i.fees.push({id_fee_type:'',amount:''})">Tambah Biaya</button>
             </div>
-            <label class="block">Jika ada kelebihan<select v-model="i.excess_treatment" class="field-control"><option value="ADVANCE">Uang Muka Customer</option><option value="FEE">Biaya Lain</option></select></label>
+            <label class="block">Jika ada kelebihan<AppSelect2 aria-label="Jika ada kelebihan" v-model="i.excess_treatment" ><option value="ADVANCE">Uang Muka Customer</option><option value="FEE">Biaya Lain</option></AppSelect2></label>
           </fieldset>
         </div>
       </article>

@@ -25,9 +25,10 @@ await p.goto(origin+'/stock-opname/report');await p.getByRole('cell',{name:'SKU1
 assert.deepEqual(await p.locator('thead th').allTextContents(),['Perusahaan','Cabang','Principal','Kode SKU','Produk','Stok Ready','Good','Bad','In Transit','Satuan','Last Update']);
 await p.getByRole('cell',{name:'2026-10-05 15:30:00',exact:true}).waitFor();
 await p.goto(origin+'/sales-order');await p.getByRole('cell',{name:'CKC · Menunggu checker',exact:true}).waitFor();
-const select=p.locator('select').filter({has:p.locator('option[value="CKC"]')});
-assert.equal(await select.count(),1);assert.equal(await select.locator('option[value="PCK"]').count(),0);
-await select.selectOption('CKC');await Promise.all([p.waitForResponse(r=>r.url().includes('list-orders') && new URL(r.url()).searchParams.get('workflow_status')==='CKC'),p.getByRole('button',{name:'Terapkan',exact:true}).click()]);
+const select=p.getByRole('combobox',{name:'Status',exact:true});
+assert.equal(await select.count(),1);await select.fill('CKC');
+assert.equal(await p.getByRole('option').filter({hasText:/^PCK/}).count(),0);
+await p.getByRole('option').filter({hasText:/CKC/}).click();await Promise.all([p.waitForResponse(r=>r.url().includes('list-orders') && new URL(r.url()).searchParams.get('workflow_status')==='CKC'),p.getByRole('button',{name:'Terapkan',exact:true}).click()]);
 assert.equal(requests.at(-1).searchParams.get('include_workflow_statuses'),'true');
 assert.deepEqual(errors,[]);console.log('PASS ERP: eleven stock columns, timestamp, dynamic workflow status filter.');
 }finally{await browser.close();}

@@ -53,7 +53,7 @@ try {
   await page.goto(origin+'/finance/receipt-workflow');
   await page.getByRole('button',{name:'Buat Kuitansi',exact:true}).click();
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  await page.getByRole('button',{name:'LPH-DEMO — Sales Test',exact:true}).click();
+  await page.getByRole('option',{name:'LPH-DEMO — Sales Test',exact:true}).click();
   for(const id of [1,2])await page.getByLabel(`Pilih faktur F-${id}`,{exact:true}).check();
   await page.getByLabel('F-1 sumber CASH-A',{exact:true}).check();
   await page.getByLabel('F-1 nominal CASH-A',{exact:true}).fill('600');
@@ -77,7 +77,7 @@ try {
   await page.getByRole('heading',{name:'Import Mutasi Bank CSV / XLSX',exact:true}).waitFor();
   // Actual file selection, preview and commit are covered by october7-part2.mjs.
   await page.goto(origin+'/finance/giro-deposits');await page.getByRole('button',{name:'Pencairan',exact:true}).click();
-  await page.getByPlaceholder('Pilih setoran nominal cocok',{exact:true}).click();await page.getByRole('button',{name:/BANK-B · Bank Test/}).click();
+  await page.getByPlaceholder('Pilih setoran nominal cocok',{exact:true}).click();await page.getByRole('option',{name:/BANK-B · Bank Test/}).click();
   await page.getByRole('button',{name:'Konfirmasi Pencairan',exact:true}).click();assert.equal(writes.find(w=>w.path.endsWith('/giro/3/clear')).body.id_payment_source,'2');
   await page.goto(origin+'/finance/receipt-cancellation');await page.getByRole('button',{name:'Buat Pengajuan Pembatalan',exact:true}).click();
   await page.getByLabel('Batalkan KW-FINAL-2',{exact:true}).check();await page.getByLabel('Batalkan KW-FINAL-3',{exact:true}).check();

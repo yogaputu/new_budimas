@@ -50,6 +50,9 @@ const rawNavigationSections = [
       { label: 'Input Penerimaan Barang', to: '/purchase/receipts/create', icon: 'IB', permission: 'purchase.receipts.create', menuPermission: 'm.purchase.ib.view' },
       { label: 'Finalisasi Purchase Order', to: '/purchase/confirmations', icon: 'KP', permission: 'purchase.confirmations.approve', menuPermission: 'm.purchase.kp.view' },
       { label: 'Tagihan Purchase Order', to: '/purchase/bills', icon: 'TP', permission: 'purchase.bills.view', menuPermission: 'm.purchase.tp.view' },
+      { label: 'Klaim Principal', to: '/purchase/principal-claims', icon: 'KPR', permission: 'purchase.principal-claims.view', menuPermission: 'm.purchase.kpr.view' },
+      { label: 'Retur PO & Pemusnahan', to: '/purchase/returns', icon: 'RPO', permission: 'purchase.principal-claims.view', menuPermission: 'm.purchase.kpr.view' },
+      { label: 'Akun Portal Principal', to: '/purchase/principal-accounts', icon: 'APR', permission: 'purchase.principal-accounts.view', menuPermission: 'm.purchase.apr.view' },
       { label: 'Laporan Purchase Order', to: '/purchase/order-reports', icon: 'LP', permission: 'purchase.orders.view', menuPermission: 'm.purchase.lp.view' }
     ]
   },

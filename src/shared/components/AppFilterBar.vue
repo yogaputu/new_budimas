@@ -88,7 +88,8 @@ function searchSelectPlaceholder(field) {
           @input="updateField(field.key, $event.target.value)"
         />
         <AppSearchSelect
-          v-else-if="field.type === 'search-select'"
+          v-else
+          :aria-label="field.label"
           :model-value="field.multiple ? (modelValue[field.key] || []) : (modelValue[field.key] || '')"
           :options="withAllOption(field)"
           :multiple="Boolean(field.multiple)"
@@ -97,25 +98,10 @@ function searchSelectPlaceholder(field) {
           :disabled="field.disabled"
           :loading="field.loading"
           :display-value="field.displayValue || ''"
-          @update:model-value="updateField(field.key, $event)"
+          clear-search-on-open
+          :option-page-size="50"
+          @update:model-value="updateField(field.key, field.type === 'select' ? String($event ?? '') : $event)"
         />
-        <select
-          v-else
-          :value="modelValue[field.key] || ''"
-          :disabled="field.disabled"
-          :class="field.inputClass || [
-            'w-full rounded-xl px-3 py-2.5 text-sm outline-none ring-0 transition focus:border-brand-400',
-            app.isDark
-              ? 'border border-slate-700 bg-slate-950 text-slate-100'
-              : 'border border-slate-200 bg-white text-slate-900'
-          ]"
-          @change="updateField(field.key, $event.target.value)"
-        >
-          <option value="">{{ field.allLabel || `Semua ${String(field.label || '').toLowerCase()}`.trim() }}</option>
-          <option v-for="option in field.options || []" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
       </div>
     </div>
     <div class="mt-4 flex flex-wrap gap-2">

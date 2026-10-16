@@ -15,6 +15,7 @@ import { getBranchOptionsForCompany, getCompanyOptionsForScope } from '@/utils/f
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
+import { productUoms, productUom, uomQuantity } from '@/utils/productUom';
 
 const route = useRoute();
 const router = useRouter();
@@ -159,11 +160,7 @@ function hasText(value) {
   return String(value ?? '').trim() !== '';
 }
 
-function rowConversion(row, level) {
-  if (level === 1) return Number(row.konversi_level1 || row.konversi1 || 1) || 1;
-  if (level === 2) return Number(row.konversi_level2 || row.konversi2 || 0) || 0;
-  return Number(row.konversi_level3 || row.konversi3 || 0) || 0;
-}
+function rowConversion(row, level) { return productUom(row, level)?.faktor_konversi || 0; }
 
 function rowUomCode(row, level) {
   return String(
@@ -198,22 +195,9 @@ function isRevisionUomEnabled(row, level) {
   return hasText(rowUomCode(row, level) || rowUomName(row, level)) && rowConversion(row, level) > 0;
 }
 
-function revisionUomFields(row) {
-  return revisionUomDefinitions
-    .filter((field) => isRevisionUomEnabled(row, field.level))
-    .map((field) => ({
-      ...field,
-      label: rowUomLabel(row, field.level)
-    }));
-}
+function revisionUomFields(row) { return productUoms(row).map(unit => ({level:unit.level, key:({1:'revisi_pieces',2:'revisi_box',3:'revisi_karton'})[unit.level] || 'revisi_uom' + unit.level, label:unit.nama + (unit.faktor_konversi > 1 ? ' × ' + unit.faktor_konversi : '')})); }
 
-function rowTotalPieces(row) {
-  return (
-    Number(row.revisi_pieces || 0) * rowConversion(row, 1) +
-    Number(row.revisi_box || 0) * rowConversion(row, 2) +
-    Number(row.revisi_karton || 0) * rowConversion(row, 3)
-  );
-}
+function rowTotalPieces(row) { return revisionUomFields(row).reduce((sum, field) => sum + uomQuantity(row[field.key]) * rowConversion(row, field.level), 0); }
 
 function rowBaseUomLabel(row) {
   return rowUomLabel(row, 1);
@@ -329,7 +313,7 @@ function updateNumber(row, key, value) {
   if (key === 'revisi_ppn') return;
   const numberValue = Number(value || 0);
   row[key] = numberValue < 0 ? 0 : numberValue;
-  if (['revisi_pieces', 'revisi_box', 'revisi_karton', 'revisi_harga', 'revisi_diskon'].includes(key)) {
+  if (revisionUomFields(row).some(field => field.key === key) || ['revisi_harga', 'revisi_diskon'].includes(key)) {
     recalculateRow(row);
   }
 }
@@ -355,28 +339,7 @@ async function loadProducts() {
   }
 }
 
-function getProductUomFields(uoms) {
-  const uomsByLevel = new Map();
-
-  normalizeList(uoms).forEach((item) => {
-    const level = Number(item?.level ?? item?.uom_level ?? 0);
-    if (![1, 2, 3].includes(level) || uomsByLevel.has(level)) return;
-
-    uomsByLevel.set(level, item);
-  });
-
-  return revisionUomDefinitions.reduce((fields, definition) => {
-    const uom = uomsByLevel.get(definition.level);
-    if (!uom) return fields;
-
-    fields[`puom${definition.level}_kode`] = String(uom.kode ?? uom.uom_kode ?? '').trim();
-    fields[`puom${definition.level}_nama`] = String(uom.nama ?? uom.uom_nama ?? '').trim();
-    fields[`konversi_level${definition.level}`] = Number(
-      uom.faktor_konversi ?? uom.uom_faktor_konversi ?? (definition.level === 1 ? 1 : 0)
-    ) || (definition.level === 1 ? 1 : 0);
-    return fields;
-  }, {});
-}
+function getProductUomFields(uoms) { return {uoms: productUoms({uoms:normalizeList(uoms)})}; }
 
 async function addProductRow() {
   const product = productOptions.value.find((item) => String(item.value) === String(selectedProductId.value));
@@ -639,6 +602,7 @@ function buildPayload() {
     pieces_order: normalizeNumber(item.revisi_pieces),
     box_order: normalizeNumber(item.revisi_box),
     karton_order: normalizeNumber(item.revisi_karton),
+    uom_quantities: revisionUomFields(item).map(field => ({uom_id:productUom(item, field.level)?.id,level:field.level,quantity:uomQuantity(item[field.key])})),
     hargaorder: normalizeNumber(item.revisi_harga),
     subtotal: normalizeNumber(item.revisi_subtotal),
     total_diskon: normalizeNumber(item.revisi_diskon),

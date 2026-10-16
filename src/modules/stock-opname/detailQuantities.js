@@ -1,4 +1,5 @@
-const UOM_LEVELS = [1, 2, 3];
+import { productUoms, productUomQuantities } from '../../utils/productUom.js';
+const uomLevels = row => productUoms(row).map(unit => unit.level);
 
 function number(value) {
   const parsed = Number(value ?? 0);
@@ -6,16 +7,17 @@ function number(value) {
 }
 
 function uomTotal(row) {
-  return UOM_LEVELS.reduce((total, level) => total + number(row[`uom_${level}`]) * number(row[`konversi_uom_${level}`]), 0);
+  return uomLevels(row).reduce((total, level) => total + number(row[`uom_${level}`]) * number(row[`konversi_uom_${level}`]), 0);
 }
 
 function reconcileUomCounts(row) {
   if (Math.abs(uomTotal(row) - row.stok_fisik) < 0.000001) return row;
-  const levels = UOM_LEVELS.filter((level) => row[`konversi_uom_${level}`] > 0)
+  const levels = uomLevels(row).filter((level) => row[`konversi_uom_${level}`] > 0)
     .sort((left, right) => row[`konversi_uom_${right}`] - row[`konversi_uom_${left}`]);
   // Missing master data must not erase the saved physical count.
   if (!levels.length) return row;
   const result = { ...row, uom_1: 0, uom_2: 0, uom_3: 0 };
+  levels.forEach(level => { result[`uom_${level}`] = 0; });
   let remainder = row.stok_fisik;
   levels.forEach((level, index) => {
     const conversion = row[`konversi_uom_${level}`];
@@ -42,10 +44,11 @@ export function normalizeStockOpnameDetail(item) {
     subtotal: number(item.subtotal ?? physical * price),
     subtotal_selisih: number(item.subtotal_selisih ?? (physical - system) * price)
   };
-  UOM_LEVELS.forEach((level) => {
+  productUoms(item).forEach((unit) => {
+    const level = unit.level;
     // Unit names and conversions come only from this product's master UOM.
-    row[`label_uom_${level}`] = String(item[`label_uom_${level}`] ?? '').trim();
-    row[`konversi_uom_${level}`] = Math.max(number(item[`konversi_uom_${level}`]), 0);
+    row[`label_uom_${level}`] = unit.nama;
+    row[`konversi_uom_${level}`] = unit.faktor_konversi;
     row[`uom_${level}`] = number(item[`uom_${level}`]);
   });
   return reconcileUomCounts(row);
@@ -73,6 +76,7 @@ export function updateStockOpnameDetail(item, field, value) {
 export function buildStockOpnameDetailPayload(rows) {
   return rows.map((item) => ({
     id_produk: number(item.id_produk),
+    uom_quantities: productUomQuantities(item, item, 'uom_'),
     stok: number(item.stok_fisik),
     stock: number(item.stok_fisik),
     stok_fisik: number(item.stok_fisik),

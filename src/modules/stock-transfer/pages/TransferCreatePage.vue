@@ -153,23 +153,12 @@ const productOptions = computed(() =>
 
 const selectedProduct = computed(() => productRows.value.find((item) => String(item.id) === String(productForm.id_produk)));
 
-const productUomFields = computed(() => {
-  const uomsByLevel = new Map(selectedProductUoms.value.map((item) => [Number(item.level), item]));
-
-  return [1, 2, 3].map((level) => {
-    const uom = uomsByLevel.get(level);
-    const label = uom?.kode || uom?.nama || `UOM ${level}`;
-    const factor = Math.max(1, Number(uom?.faktor_konversi || 1));
-    return {
-      level,
-      key: `uom_${level}`,
-      enabled: Boolean(uom),
-      label,
-      factor,
-      helpText: uom ? `1 ${label} = ${factor.toLocaleString('id-ID')} PCS` : 'Tidak dikonfigurasi pada master produk'
-    };
-  });
-});
+const productUomFields = computed(() => selectedProductUoms.value.map(uom => {
+  const level = Number(uom.level), factor = Number(uom.faktor_konversi);
+  const label = uom.nama || uom.kode || `UOM ${level}`;
+  return { level, key: `uom_${level}`, enabled: true, label, factor,
+    helpText: `1 ${label} = ${factor.toLocaleString('id-ID')} PCS` };
+}));
 
 function normalizeTransferQuantity(value) {
   const parsed = Number(value);
@@ -182,7 +171,7 @@ function normalizeProductUoms(payload) {
 
   uoms.forEach((item) => {
     const level = Number(item?.level ?? item?.uom_level ?? 0);
-    if (![1, 2, 3].includes(level) || uomsByLevel.has(level)) return;
+    if (!Number.isInteger(level) || level < 1 || uomsByLevel.has(level)) return;
     uomsByLevel.set(level, {
       id: item?.id ?? item?.uom_id ?? '',
       level,
@@ -196,6 +185,7 @@ function normalizeProductUoms(payload) {
 }
 
 function resetProductUomQuantities() {
+  Object.keys(productForm).filter(key => /^uom_\d+$/.test(key)).forEach(key => { productForm[key] = 0; });
   productForm.uom_1 = 0;
   productForm.uom_2 = 0;
   productForm.uom_3 = 0;
@@ -203,7 +193,7 @@ function resetProductUomQuantities() {
 
 function normalizeUnavailableProductUoms() {
   const enabledLevels = new Set(selectedProductUoms.value.map((item) => Number(item.level)));
-  [1, 2, 3].forEach((level) => {
+  new Set([...enabledLevels, ...Object.keys(productForm).filter(key => /^uom_\d+$/.test(key)).map(key => Number(key.slice(4)))]).forEach((level) => {
     const key = `uom_${level}`;
     productForm[key] = enabledLevels.has(level) ? normalizeTransferQuantity(productForm[key]) : 0;
   });
@@ -286,6 +276,8 @@ function addProduct() {
     nama_produk: product.nama || product.nama_produk || 'Produk',
     kode_sku: product.kode_sku || product.kode || '-',
     stock_ready: selectedStockReady.value ?? product.stok_ready ?? product.jumlah_ready ?? '-',
+    ...Object.fromEntries(productUomFields.value.map(field => [field.key, normalizeTransferQuantity(productForm[field.key])])),
+    uom_quantities: selectedProductUoms.value.map(unit => ({ uom_id: unit.id, level: unit.level, quantity: normalizeTransferQuantity(productForm[`uom_${unit.level}`]) })),
     uom_1: Number(productForm.uom_1 || 0),
     uom_2: Number(productForm.uom_2 || 0),
     uom_3: Number(productForm.uom_3 || 0),
@@ -431,6 +423,7 @@ async function submitForm() {
       products: products.value.map((item) => ({
         id_principal: item.id_principal,
         id_produk: item.id_produk,
+        uom_quantities: item.uom_quantities,
         uom_1: item.uom_1,
         uom_2: item.uom_2,
         uom_3: item.uom_3

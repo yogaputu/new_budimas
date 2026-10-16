@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getBranches, getCompanies, getPrincipals } from '@/api/master';
@@ -740,17 +741,17 @@ onMounted(async () => {
         <div class="grid gap-4 md:grid-cols-2">
           <label v-if="importForm.sourceType === 'bd'" class="block">
             <span class="mb-1.5 block text-sm font-medium text-slate-700">Cabang Tujuan <span class="text-rose-600">*</span></span>
-            <select v-model="importForm.branchId" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400">
+            <AppSelect2 aria-label="Cabang Tujuan *" v-model="importForm.branchId" >
               <option value="">Pilih cabang</option>
               <option v-for="item in branchOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-            </select>
+            </AppSelect2>
           </label>
           <label v-if="importForm.sourceType === 'bd'" class="block">
             <span class="mb-1.5 block text-sm font-medium text-slate-700">Validasi Principal (opsional)</span>
-            <select v-model="importForm.principalId" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400">
+            <AppSelect2 aria-label="Validasi Principal (opsional)" v-model="importForm.principalId" >
               <option value="">Sesuai kode di file</option>
               <option v-for="item in importPrincipalOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-            </select>
+            </AppSelect2>
           </label>
         </div>
 

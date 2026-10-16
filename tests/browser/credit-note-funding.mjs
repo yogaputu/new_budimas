@@ -55,7 +55,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Daftarkan Credit Note',exact:true}).count(),0);
   await page.getByRole('button',{name:'Buat Kuitansi',exact:true}).click();
   await page.getByPlaceholder('Pilih data',{exact:true}).click();
-  await page.getByRole('button',{name:'LPH-TEST — Sales 1',exact:true}).click();
+  await page.getByRole('option',{name:'LPH-TEST — Sales 1',exact:true}).click();
   await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-A',exact:true}).check();
   for(const id of [1,2])await page.getByRole('checkbox',{name:'FAKTUR-A sumber CN-PENDING-'+id,exact:true}).waitFor();
   assert.equal(await page.getByRole('checkbox',{name:'FAKTUR-A sumber CN-CUSTOMER-B',exact:true}).count(),0);

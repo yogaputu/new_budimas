@@ -13,6 +13,7 @@ import {
   submitCancelRealizationRevision
 } from '@/api/distribution';
 import { getBranches, getCompanies } from '@/api/master';
+import { productUoms, productUom, uomQuantity } from '@/utils/productUom';
 import { useAuthStore } from '@/stores/auth';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { getLoginBranchId, getLoginCompanyId, isSuperUser } from '@/utils/accessScope';
@@ -719,25 +720,13 @@ function isUomEnabled(row, level) {
   return Boolean(uomName(row, level)) || conversion > 0;
 }
 
-function uomFields(row) {
-  return [
-    { key: 'pieces_order', level: 1, label: uomName(row, 1) || 'PCS' },
-    { key: 'box_order', level: 2, label: uomName(row, 2) || 'UOM 2' },
-    { key: 'karton_order', level: 3, label: uomName(row, 3) || 'UOM 3' }
-  ].filter((field) => isUomEnabled(row, field.level));
-}
+function uomFields(row) { return productUoms(row).map(unit => ({key:({1:'pieces_order',2:'box_order',3:'karton_order'})[unit.level] || 'uom_order' + unit.level, level:unit.level, label:unit.nama + (unit.faktor_konversi > 1 ? ' × ' + unit.faktor_konversi : '')})); }
 
 function normalizeNonNegative(row, key) {
   row[key] = Math.max(0, toNumber(row[key]));
 }
 
-function revisionPieces(row) {
-  return (
-    toNumber(row.pieces_order) * (toNumber(row.konversi_level1, 1) || 1) +
-    toNumber(row.box_order) * toNumber(row.konversi_level2) +
-    toNumber(row.karton_order) * toNumber(row.konversi_level3)
-  );
-}
+function revisionPieces(row) { return uomFields(row).reduce((sum,field) => sum + uomQuantity(row[field.key]) * productUom(row,field.level).faktor_konversi, 0); }
 
 function revisionLineTotal(row) {
   return Math.max(0, revisionPieces(row) * toNumber(row.hargaorder) - toNumber(row.total_diskon));
@@ -757,6 +746,7 @@ function buildRevisionPayload() {
       id_sales_order: Number(order.id_sales_order),
       details: order.details.map((row) => ({
         id_order_detail: Number(row.id_order_detail),
+        uom_quantities: uomFields(row).map(field => ({uom_id:productUom(row,field.level)?.id,level:field.level,quantity:uomQuantity(row[field.key])})),
         pieces_order: Math.max(0, toNumber(row.pieces_order)),
         box_order: Math.max(0, toNumber(row.box_order)),
         karton_order: Math.max(0, toNumber(row.karton_order)),

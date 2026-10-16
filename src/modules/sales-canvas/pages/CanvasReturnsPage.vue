@@ -1,4 +1,6 @@
 <script setup>
+import ProductUomFields from '@/shared/components/ProductUomFields.vue';
+import { productUoms, emptyProductUomValues, productUomTotal } from '@/utils/productUom';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   approveCanvasReturn,
@@ -324,7 +326,7 @@ async function submitRejectReturn() {
 }
 
 function calculatePieces(item, qtyUom1 = 0, qtyUom2 = 0, qtyUom3 = 0) {
-  return canvasPieces(item, qtyUom1, qtyUom2, qtyUom3);
+  return productUomTotal(item, item, 'return_uom');
 }
 
 function resetRows() {
@@ -380,7 +382,8 @@ function fillAllStock() {
       ...item,
       return_uom1: quantities.qty_uom1,
       return_uom2: quantities.qty_uom2,
-      return_uom3: quantities.qty_uom3
+      return_uom3: quantities.qty_uom3,
+      ...Object.fromEntries(productUoms(item).map(u => [`return_uom${u.level}`, quantities[`qty_uom${u.level}`] || 0]))
     };
   });
 }
@@ -390,7 +393,8 @@ function clearReturnQty() {
     ...item,
     return_uom1: 0,
     return_uom2: 0,
-    return_uom3: 0
+    return_uom3: 0,
+    ...emptyProductUomValues(item, 'return_uom')
   }));
 }
 
@@ -400,7 +404,8 @@ function normalizeProduct(row) {
     id_produk: row.id_produk || row.id,
     return_uom1: 0,
     return_uom2: 0,
-    return_uom3: 0
+    return_uom3: 0,
+    ...emptyProductUomValues(row, 'return_uom')
   };
 }
 
@@ -417,16 +422,7 @@ function updateReturnQty(item, level, value) {
 }
 
 function normalizedReturnUomValues(item) {
-  const normalized = normalizeCanvasUomValues(item, {
-    qty_uom1: item.return_uom1,
-    qty_uom2: item.return_uom2,
-    qty_uom3: item.return_uom3
-  });
-  return {
-    qty_uom1: normalized.qty_uom1,
-    qty_uom2: normalized.qty_uom2,
-    qty_uom3: normalized.qty_uom3
-  };
+  return normalizeCanvasUomValues(item, Object.fromEntries(productUoms(item).map(u => [`qty_uom${u.level}`, item[`return_uom${u.level}`] || 0])));
 }
 
 async function loadHistory() {
@@ -755,9 +751,7 @@ onMounted(async () => {
               <tr>
                 <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Produk</th>
                 <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Stok Canvas</th>
-                <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Retur UOM Besar</th>
-                <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Retur UOM Tengah</th>
-                <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Retur UOM Kecil</th>
+                <th colspan="3" class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Jumlah Retur per UOM</th>
                 <th class="px-4 py-3 text-left font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Total</th>
               </tr>
             </thead>
@@ -774,17 +768,8 @@ onMounted(async () => {
                   <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ item.principal_label }}</p>
                 </td>
                 <td class="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">{{ item.stock_label }}</td>
-                <td class="px-4 py-3">
-                  <input :value="item.return_uom3" type="number" min="0" step="1" inputmode="numeric" class="field max-w-[160px]" :disabled="!isReturnUomEnabled(item, 3)" @input="updateReturnQty(item, 3, $event.target.value)" />
-                  <p class="mt-1 text-xs text-slate-500">{{ returnUomLabel(item, 3) }}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <input :value="item.return_uom2" type="number" min="0" step="1" inputmode="numeric" class="field max-w-[160px]" :disabled="!isReturnUomEnabled(item, 2)" @input="updateReturnQty(item, 2, $event.target.value)" />
-                  <p class="mt-1 text-xs text-slate-500">{{ returnUomLabel(item, 2) }}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <input :value="item.return_uom1" type="number" min="0" step="1" inputmode="numeric" class="field max-w-[160px]" :disabled="!isReturnUomEnabled(item, 1)" @input="updateReturnQty(item, 1, $event.target.value)" />
-                  <p class="mt-1 text-xs text-slate-500">{{ returnUomLabel(item, 1) }}</p>
+                <td colspan="3" class="min-w-[300px] px-4 py-3">
+                  <ProductUomFields :product="item" :values="item" prefix="return_uom" @change="updateReturnQty(item, $event.level, $event.value)" />
                 </td>
                 <td class="px-4 py-3">
                   <p class="font-black text-slate-950 dark:text-white">{{ item.return_label }}</p>

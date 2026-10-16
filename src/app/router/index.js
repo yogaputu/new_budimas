@@ -6,6 +6,7 @@ function resolvePromoLanding() {
 }
 
 const routes = [
+  { path: '/principal-portal', name: 'principal-portal', component: () => import('@/modules/purchase/pages/PrincipalPortalPage.vue') },
   {
     path: '/login',
     component: () => import('@/app/layouts/AuthLayout.vue'),
@@ -381,6 +382,9 @@ const routes = [
       { path: 'finance/tax', name: 'finance-tax', component: () => import('@/modules/finance/pages/TaxPage.vue'), meta: { permission: 'finance.recap.view' } },
       { path: 'finance/deposit-finalization', name: 'finance-deposit-finalization', component: () => import('@/modules/finance/pages/DepositFinalizationPage.vue'), meta: { permission: 'finance.recap.view', pageTitle: 'Finalisasi Setoran', pageDescription: 'Kelola grup setoran, proses kasir, dan finalisasi finance.' } },
       { path: 'reports/route-customers', name: 'reports-route-customers', component: () => import('@/modules/reports/pages/RouteCustomerReportPage.vue'), meta: { permission: 'distribution.orders.view', pageTitle: 'Rute Customer', pageDescription: 'Daftar rute, customer, polyline map, dan estimasi perjalanan.' } },
+      { path: 'purchase/principal-claims', name: 'principal-claims', component: () => import('@/modules/purchase/pages/PrincipalClaimsPage.vue'), meta: { permission: 'purchase.principal-claims.view' } },
+      { path: 'purchase/returns', name: 'principal-returns', component: () => import('@/modules/purchase/pages/PrincipalClaimsPage.vue'), meta: { permission: 'purchase.principal-claims.view' } },
+      { path: 'purchase/principal-accounts', name: 'principal-accounts', component: () => import('@/modules/purchase/pages/PrincipalClaimsPage.vue'), meta: { permission: 'purchase.principal-accounts.view' } },
       { path: 'purchase/orders', name: 'purchase-orders', component: () => import('@/modules/purchase/pages/PurchaseOrdersPage.vue'), meta: { permission: 'purchase.orders.view' } },
       { path: 'purchase/orders/create', name: 'purchase-orders-create', component: () => import('@/modules/purchase/pages/PurchaseOrderCreatePage.vue'), meta: { permission: 'purchase.orders.create' } },
       { path: 'purchase/orders/edit/:id', name: 'purchase-orders-edit', component: () => import('@/modules/purchase/pages/PurchaseOrderCreatePage.vue'), meta: { permission: 'purchase.orders.update' } },

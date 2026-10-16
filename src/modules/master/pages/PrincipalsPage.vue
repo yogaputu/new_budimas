@@ -6,6 +6,8 @@ import {
   getBranches,
   getCompanies,
   getPrincipals,
+  getPrincipalCoaTemplate,
+  getPrincipalCoaAccounts,
   getRegionsLevel1,
   getRegionsLevel2,
   getRegionsLevel3,
@@ -22,6 +24,7 @@ import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
+import PrincipalCoaTemplate from '../components/PrincipalCoaTemplate.vue';
 
 const authStore = useAuthStore();
 const filters = reactive({ search: '', aktif: '' });
@@ -39,24 +42,43 @@ const hydratingForm = ref(false);
 const feedback = ref('');
 const actionError = ref('');
 const saving = ref(false);
+const coaConfigOpen = ref(false);
+let returnToPrincipal = false;
+function openCoaConfig() {
+  returnToPrincipal = modalOpen.value;
+  modalOpen.value = false;
+  coaConfigOpen.value = true;
+}
+function closeCoaConfig() {
+  coaConfigOpen.value = false;
+  if (returnToPrincipal) modalOpen.value = true;
+  returnToPrincipal = false;
+}
+const coaLoading = ref(false), coaError = ref(''), coaTemplates = ref([]), coaAccounts = ref([]);
+let coaRequest = 0;
+const canConfigureCoa = computed(() => ['finance.coa.update', 'finance.accounting-config.update', 'm.finance.ca.update'].some(p => authStore.hasPermission(p)));
+const coaCompanyIds = computed(() => [...new Set([...parseScopeIds(form.id_perusahaan_list), ...parseScopeIds(form.id_perusahaan)])].sort());
+const coaReady = computed(() => !coaLoading.value && !coaError.value && coaTemplates.value.length === coaCompanyIds.value.length && coaTemplates.value.length > 0 && coaTemplates.value.every(t => t.ready));
+
+async function loadCoa() {
+  const current = ++coaRequest;
+  coaTemplates.value = []; coaAccounts.value = []; coaError.value = '';
+  coaLoading.value = modalOpen.value;
+  if (!modalOpen.value) return;
+  try {
+    if (mode.value === 'create') {
+      const result = await Promise.all(coaCompanyIds.value.map(id => getPrincipalCoaTemplate(id)));
+      if (current === coaRequest) coaTemplates.value = result.map(r => r.data);
+    } else {
+      const result = await getPrincipalCoaAccounts(selectedRow.value.id);
+      if (current === coaRequest) coaAccounts.value = result.data.data;
+    }
+  } catch (e) { if (current === coaRequest) coaError.value = normalizeError(e); }
+  finally { if (current === coaRequest) coaLoading.value = false; }
+}
+function companyName(id) { return companyOptions.value.find(c => c.value === String(id))?.label || `Perusahaan #${id}`; }
 const loginBranchId = computed(() => getLoginBranchId(authStore.user));
 const loginBranch = computed(() => branches.value.find((item) => String(item.id) === String(loginBranchId.value || '')));
-const selectedBranch = computed(() => branches.value.find((item) => String(item.id) === String(form.id_cabang || '')));
-const selectedBranchCompanyIds = computed(() => {
-  if (!form.id_cabang) return [];
-  const ids = new Set();
-  const branchCompanyId = getRowCompanyId(selectedBranch.value);
-
-  if (branchCompanyId) ids.add(String(branchCompanyId));
-
-  companies.value.forEach((item) => {
-    if (getRowBranchIds(item).includes(String(form.id_cabang))) {
-      ids.add(String(item.id));
-    }
-  });
-
-  return Array.from(ids);
-});
 const scopedBranchCompanyIds = computed(() => {
   if (isSuperUser(authStore) || !loginBranchId.value) return null;
   return companies.value
@@ -79,7 +101,7 @@ const form = reactive({
   npwp: '',
   no_rekening: '',
   pic: '',
-  id_cabang: '',
+  id_cabang_list: [],
   id_perusahaan: '',
   id_perusahaan_list: [],
   id_wilayah1: '',
@@ -93,9 +115,6 @@ const companyOptions = computed(() => {
   let rows = companies.value;
   if (!isSuperUser(authStore) && scopedBranchCompanyIds.value?.length) {
     rows = rows.filter((item) => scopedBranchCompanyIds.value.includes(String(item.id)));
-  }
-  if (form.id_cabang && selectedBranchCompanyIds.value.length) {
-    rows = rows.filter((item) => selectedBranchCompanyIds.value.includes(String(item.id)));
   }
   return rows.map((item) => ({
     value: String(item.id),
@@ -188,7 +207,7 @@ function resetForm() {
     npwp: '',
     no_rekening: '',
     pic: '',
-    id_cabang: '',
+    id_cabang_list: [],
     id_perusahaan: '',
     id_perusahaan_list: [],
     id_wilayah1: '',
@@ -201,8 +220,7 @@ function resetForm() {
   wilayah3Rows.value = [];
   wilayah4Rows.value = [];
   if (!isSuperUser(authStore) && loginBranchId.value) {
-    form.id_cabang = String(loginBranchId.value);
-    syncCompanyFromBranch();
+    form.id_cabang_list = [String(loginBranchId.value)];
   }
 }
 
@@ -212,10 +230,11 @@ function buildPayload() {
   if (form.id_perusahaan) companyIds.add(String(form.id_perusahaan));
 
   Object.entries(form).forEach(([key, value]) => {
-    if (key === 'id_cabang' || key === 'id_perusahaan_list') return;
+    if (key === 'id_cabang_list' || key === 'id_perusahaan_list') return;
     if (value !== '') payload[key] = value;
   });
   payload.id_perusahaan_list = Array.from(companyIds).join(',');
+  payload.id_cabang_list = parseScopeIds(form.id_cabang_list).join(',');
   return payload;
 }
 
@@ -225,23 +244,7 @@ async function loadCompanies() {
   branches.value = normalizeList(unwrapResponse(branchResponse));
   wilayah1Rows.value = normalizeList(unwrapResponse(wilayah1Response));
   if (!isSuperUser(authStore) && loginBranchId.value) {
-    form.id_cabang = String(loginBranchId.value);
-    syncCompanyFromBranch();
-  }
-}
-
-function syncCompanyFromBranch(preserveCurrent = false) {
-  if (!form.id_cabang) {
-    form.id_perusahaan = '';
-    return;
-  }
-
-  const allowedCompanyIds = selectedBranchCompanyIds.value;
-  if (form.id_cabang && (!preserveCurrent || !allowedCompanyIds.includes(String(form.id_perusahaan || '')))) {
-    form.id_perusahaan = '';
-  }
-  if (form.id_perusahaan && !parseScopeIds(form.id_perusahaan_list).includes(String(form.id_perusahaan))) {
-    form.id_perusahaan_list = [...parseScopeIds(form.id_perusahaan_list), String(form.id_perusahaan)];
+    form.id_cabang_list = [String(loginBranchId.value)];
   }
 }
 
@@ -362,20 +365,13 @@ async function openEdit(row) {
       pic: row?.pic || '',
       id_perusahaan: row?.id_perusahaan ? String(row.id_perusahaan) : '',
       id_perusahaan_list: parseScopeIds(row?.id_perusahaan_list || row?.id_perusahaan),
-      id_cabang: '',
+      id_cabang_list: parseScopeIds(row?.id_cabang_list),
       id_wilayah1: row?.id_wilayah1 ? String(row.id_wilayah1) : '',
       id_wilayah2: row?.id_wilayah2 ? String(row.id_wilayah2) : '',
       id_wilayah3: row?.id_wilayah3 ? String(row.id_wilayah3) : '',
       id_wilayah4: row?.id_wilayah4 ? String(row.id_wilayah4) : '',
       aktif: String(isPrincipalActive(row))
     });
-    const relatedBranch = branches.value.find((branch) => {
-      if (String(getRowCompanyId(branch) || '') === String(form.id_perusahaan || '')) return true;
-      const company = companies.value.find((item) => String(item.id) === String(form.id_perusahaan || ''));
-      return getRowBranchIds(company).includes(String(branch.id));
-    });
-    form.id_cabang = relatedBranch?.id ? String(relatedBranch.id) : (!isSuperUser(authStore) && loginBranchId.value ? String(loginBranchId.value) : '');
-    syncCompanyFromBranch(true);
     await loadWilayah2(form.id_wilayah1, true);
     await loadWilayah3(form.id_wilayah2, true);
     await loadWilayah4(form.id_wilayah3, true);
@@ -392,6 +388,15 @@ function closeModal() {
 }
 
 async function save() {
+  if (saving.value) return;
+  if (mode.value === 'create' && !coaReady.value) {
+    actionError.value = 'Lengkapi pemetaan 10 COA untuk seluruh perusahaan yang dipilih terlebih dahulu.';
+    return;
+  }
+  if (!parseScopeIds(form.id_cabang_list).length) {
+    actionError.value = 'Pilih minimal satu cabang principal.';
+    return;
+  }
   if (!form.nama.trim()) {
     actionError.value = 'Nama principal wajib diisi.';
     return;
@@ -402,8 +407,8 @@ async function save() {
   actionError.value = '';
   try {
     if (mode.value === 'create') {
-      await createPrincipal(buildPayload());
-      feedback.value = 'Principal berhasil ditambahkan.';
+      const response = await createPrincipal(buildPayload());
+      feedback.value = `Principal berhasil ditambahkan beserta ${response.data.coa_created} akun COA.`;
       resetForm();
     } else {
       await updatePrincipal(selectedRow.value?.id, buildPayload());
@@ -437,13 +442,6 @@ onMounted(async () => {
   await Promise.all([submit(), loadCompanies()]);
 });
 
-watch(
-  () => form.id_cabang,
-  () => {
-    if (hydratingForm.value) return;
-    syncCompanyFromBranch();
-  }
-);
 
 watch(
   () => form.id_perusahaan,
@@ -453,11 +451,13 @@ watch(
     }
   }
 );
+watch([modalOpen, mode, coaCompanyIds], loadCoa);
 </script>
 
 <template>
   <div class="space-y-4">
     <PageHeader title="Master Principal" description="Principal sekarang naik ke CRUD operasional yang lebih matang, termasuk selector wilayah bertingkat agar input tidak lagi memakai ID mentah.">
+      <button v-if="canConfigureCoa" class="rounded-xl border px-4 py-2 text-sm" @click="openCoaConfig">Pemetaan COA Principal</button>
       <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700" @click="openCreate">
         Tambah Principal
       </button>
@@ -495,7 +495,7 @@ watch(
               <option value="false">Nonaktif</option>
             </select>
           </label>
-          <AppSearchSelect v-model="form.id_cabang" label="Cabang Acuan" placeholder="Opsional untuk membatasi perusahaan" :options="branchOptions" :disabled="!isSuperUser(authStore) && !!loginBranchId" empty-text="Cabang belum tersedia." />
+          <AppSearchSelect v-model="form.id_cabang_list" label="Cabang Principal" placeholder="Pilih satu atau lebih cabang" :options="branchOptions" multiple empty-text="Cabang belum tersedia." />
           <AppSearchSelect v-model="form.id_perusahaan" label="Perusahaan Utama" placeholder="Pilih perusahaan utama" :options="companyOptions" empty-text="Perusahaan belum tersedia." />
           <AppSearchSelect v-model="form.id_perusahaan_list" label="Boleh Dipakai Perusahaan" placeholder="Pilih perusahaan pemakai" :options="companyOptions" multiple empty-text="Perusahaan belum tersedia." />
           <AppSearchSelect v-model="form.id_wilayah1" label="Wilayah 1 = Provinsi" placeholder="Pilih provinsi" :options="wilayah1Options" empty-text="Provinsi belum tersedia." />
@@ -504,11 +504,29 @@ watch(
           <AppSearchSelect v-model="form.id_wilayah4" label="Wilayah 4 = Kelurahan/Desa" placeholder="Pilih kelurahan/desa" :options="wilayah4Options" empty-text="Pilih kecamatan dahulu." />
         </div>
 
+        <section class="space-y-3 rounded-xl border border-slate-400/30 p-4">
+          <h3 class="font-semibold">COA Principal Otomatis</h3>
+          <p v-if="coaLoading" role="status">Memuat akun dan pemetaan…</p>
+          <template v-else-if="mode === 'create'">
+            <p class="text-sm">10 akun per perusahaan akan dibuat saat principal disimpan, dengan saldo nol dan cakupan cabang sesuai pilihan.</p>
+            <p v-if="!coaCompanyIds.length" class="text-sm">Pilih perusahaan terlebih dahulu.</p>
+            <p v-for="item in coaTemplates" :key="item.id_perusahaan" class="text-sm">{{ companyName(item.id_perusahaan) }}: <strong :class="item.ready ? 'text-emerald-600' : 'text-amber-500'">{{ item.ready ? '10 pemetaan siap' : 'Pemetaan belum lengkap / akun induk tidak aktif' }}</strong></p>
+            <button class="text-sm underline" @click="loadCoa">Periksa ulang pemetaan</button>
+            <button v-if="canConfigureCoa" class="ml-4 text-sm underline" @click="openCoaConfig">Atur pemetaan</button>
+          </template>
+          <template v-else>
+            <div v-if="coaAccounts.length" class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr><th class="p-2">Perusahaan</th><th class="p-2">Jenis</th><th class="p-2">Nomor / Nama COA</th></tr></thead><tbody><tr v-for="a in coaAccounts" :key="a.id_coa"><td class="p-2">{{ a.nama_perusahaan }}</td><td class="p-2">{{ a.label }}</td><td class="p-2">{{ a.nomor_akun }} — {{ a.nama_akun }} <span v-if="!a.is_active || a.is_deleted">(Nonaktif)</span></td></tr></tbody></table></div>
+            <p v-else class="text-sm">Belum ada COA otomatis untuk principal lama ini. Akun historis tidak dibuat ulang.</p>
+            <p v-if="coaAccounts.length" class="text-sm">Cakupan perusahaan/cabang akun yang sudah terbentuk tidak diubah otomatis agar riwayat tetap terjaga.</p>
+          </template>
+          <p v-if="coaError" role="alert" class="text-rose-500">{{ coaError }}</p>
+        </section>
+
         <div v-if="feedback" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ feedback }}</div>
         <div v-if="actionError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{{ actionError }}</div>
 
         <div class="flex flex-wrap gap-2">
-          <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white" :disabled="saving" @click="save">
+          <button class="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50" :disabled="saving || (mode === 'create' && !coaReady)" @click="save">
             {{ saving ? 'Menyimpan...' : mode === 'create' ? 'Simpan' : 'Update' }}
           </button>
           <button v-if="mode === 'edit'" class="rounded-xl border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700" :disabled="saving" @click="remove">
@@ -516,6 +534,9 @@ watch(
           </button>
         </div>
       </div>
+    </AppModal>
+    <AppModal :open="coaConfigOpen" title="Pemetaan COA Principal" panel-class="max-w-4xl" @close="closeCoaConfig">
+      <PrincipalCoaTemplate v-if="coaConfigOpen" :company-options="companyOptions" :principals="scopedItems" :initial-company="String(form.id_perusahaan || '')" @saved="loadCoa" />
     </AppModal>
   </div>
 </template>

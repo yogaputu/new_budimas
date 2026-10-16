@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, ref } from 'vue';
 import { askAiAssistant, getAiAnalysis, getAiSummary } from '@/api/ai';
 import { getBranches, getCompanies } from '@/api/master';
@@ -192,21 +193,21 @@ onMounted(async () => {
     <div class="grid gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-[1fr_1fr_auto_auto]">
       <label class="space-y-2">
         <span class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Cabang</span>
-        <select v-model="filters.id_cabang" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+        <AppSelect2 aria-label="Cabang" v-model="filters.id_cabang" >
           <option value="">Semua cabang</option>
           <option v-for="branch in branches" :key="branch.id" :value="branch.id">
             {{ branch.kode ? `${branch.kode} - ${branch.nama}` : branch.nama }}
           </option>
-        </select>
+        </AppSelect2>
       </label>
       <label class="space-y-2">
         <span class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Perusahaan</span>
-        <select v-model="filters.id_perusahaan" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+        <AppSelect2 aria-label="Perusahaan" v-model="filters.id_perusahaan" >
           <option value="">Semua perusahaan</option>
           <option v-for="company in companies" :key="company.id" :value="company.id">
             {{ company.kode ? `${company.kode} - ${company.nama}` : company.nama }}
           </option>
-        </select>
+        </AppSelect2>
       </label>
       <div class="flex items-end">
         <button class="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800" @click="loadSummary">

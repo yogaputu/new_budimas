@@ -53,13 +53,13 @@ try {
   await page.getByRole('button',{name:'Tambah Setoran',exact:true}).click();
   const modal=page.locator('form').filter({has:page.getByRole('button',{name:'Simpan Setoran',exact:true})});
   const selects=modal.getByPlaceholder('Pilih data',{exact:true});
-  await selects.nth(0).click();await page.getByRole('button',{name:'CO - Company Test',exact:true}).click();
-  await selects.nth(1).click();await page.getByRole('button',{name:'CB - Branch Test',exact:true}).click();
+  await selects.nth(0).click();await page.getByRole('option',{name:'CO - Company Test',exact:true}).click();
+  await selects.nth(1).click();await page.getByRole('option',{name:'CB - Branch Test',exact:true}).click();
   await selects.nth(2).click();
-  assert.equal(await page.getByRole('button',{name:'Sales 1 (Test)',exact:true}).count(),1);
+  assert.equal(await page.getByRole('option',{name:'Sales 1 (Test)',exact:true}).count(),1);
   await selects.nth(2).fill('Sales 1');
   assert.equal(await page.getByRole('button',{name:'YUNITA TRI MAHARINI',exact:true}).count(),0);
-  await page.getByRole('button',{name:'Sales 1 (Test)',exact:true}).click();
+  await page.getByRole('option',{name:'Sales 1 (Test)',exact:true}).click();
   await modal.getByLabel('Nominal (Rp)',{exact:true}).fill('1000');
   await modal.getByLabel('Deskripsi',{exact:true}).fill('Setoran pengujian lokal');
   await modal.getByRole('button',{name:'Simpan Setoran',exact:true}).click();

@@ -451,6 +451,10 @@ export function confirmCashierExpense(payload) {
   return api.post('/api/akuntansi/konfirmasi-pengeluaran', payload);
 }
 
+export const getCashierCashSources = (params) => api.get('/api/akuntansi/cashier-cash-sources', { params });
+export const saveCashierCashSource = (payload) => api.put('/api/akuntansi/cashier-cash-sources', payload);
+export const downloadCashierProof = (id) => api.get(`/api/akuntansi/cashier-expenses/${id}/proof`, { responseType: 'blob' });
+
 export function getAccountingTransactions(params) {
   return api.get('/api/akuntansi/get-list-transaksi', { params });
 }

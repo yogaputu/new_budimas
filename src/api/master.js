@@ -738,6 +738,25 @@ export function createPrincipal(payload) {
   return createBaseTableRecord('principal', payload);
 }
 
+export function getPrincipalCoaTemplate(companyId) {
+  return api.get('/api/principal/coa-template', { params: { id_perusahaan: companyId } });
+}
+
+export function savePrincipalCoaTemplate(payload) {
+  return api.put('/api/principal/coa-template', payload);
+}
+
+export function getPrincipalCoaAccounts(principalId) {
+  return api.get(`/api/principal/${principalId}/coa-accounts`);
+}
+
+export function getPrincipalExistingCoa(principalId, companyId) {
+  return api.get(`/api/principal/${principalId}/coa-existing`, { params: { id_perusahaan: companyId } });
+}
+export function linkPrincipalExistingCoa(principalId, payload) {
+  return api.put(`/api/principal/${principalId}/coa-existing`, payload);
+}
+
 export function updatePrincipal(id, payload) {
   return updateBaseTableRecord('principal', id, payload);
 }

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="id">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Select2 compatibility fixture</title></head>
+  <body>
+    <div id="select2-test"></div>
+    <script type="module">
+      import { createApp } from 'vue';
+      import { createPinia } from 'pinia';
+      import Fixture from './Select2Fixture.vue';
+      import '/src/assets/styles.css';
+      createApp(Fixture).use(createPinia()).mount('#select2-test');
+    </script>
+  </body>
+</html>

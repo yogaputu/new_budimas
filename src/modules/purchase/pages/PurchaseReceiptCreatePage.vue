@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getBranches, getCompanies } from '@/api/master';
@@ -628,12 +629,12 @@ onMounted(loadMeta);
                 </label>
                 <label class="block text-xs font-medium text-rose-900">
                   Alasan Penolakan
-                  <select v-model="manualRejectionFor(line, qty).reason_code" class="mt-1 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none">
+                  <AppSelect2 aria-label="Alasan Penolakan" v-model="manualRejectionFor(line, qty).reason_code" >
                     <option value="QUALITY_NOT_ACCEPTED">Kualitas tidak sesuai</option>
                     <option value="DAMAGED">Barang rusak</option>
                     <option value="WRONG_ITEM">Barang tidak sesuai PO</option>
                     <option value="OTHER">Lainnya</option>
-                  </select>
+                  </AppSelect2>
                 </label>
               </div>
               <label class="mt-3 block text-xs font-medium text-rose-900">

@@ -11,6 +11,7 @@ import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
 import CoaDetailModal from '../components/CoaDetailModal.vue';
+import CoaStandardImport from '../components/CoaStandardImport.vue';
 
 const authStore = useAuthStore();
 
@@ -51,6 +52,8 @@ const modalOpen = ref(false);
 const mode = ref('create');
 const selectedRow = ref(null);
 const detailAccount = ref(null);
+const standardOpen = ref(false);
+const canStandardize = computed(() => ['finance.coa.create', 'finance.accounting-config.update', 'm.finance.ca.create'].some(p => authStore.hasPermission(p)));
 
 function editFromDetail(row) {
   detailAccount.value = null;
@@ -286,14 +289,8 @@ function syncAccountNumberFromParent(force = false) {
   const nextNumber = suggestChildAccountNumber(form.parent_id);
   if (!nextNumber) return;
   const currentNumber = String(form.nomor_akun || '').trim();
-  const parent = parentCoas.value.find((item) => String(item.id_coa) === String(form.parent_id)) || rows.value.find((item) => String(item.id_coa) === String(form.parent_id));
-  const parentNumber = String(parent?.nomor_akun || '').trim();
-  const alreadyChildOfParent = parentNumber && (currentNumber.startsWith(`${parentNumber}-`) || currentNumber.startsWith(`${parentNumber}.`));
-
-  if (force || !currentNumber || !alreadyChildOfParent) {
+  if (force || !currentNumber) {
     form.nomor_akun = nextNumber;
-  } else if (parentNumber && currentNumber.startsWith(`${parentNumber}.`)) {
-    form.nomor_akun = `${parentNumber}-${currentNumber.slice(parentNumber.length + 1)}`;
   }
 }
 
@@ -463,7 +460,7 @@ watch(
   () => form.parent_id,
   (parentId, previousParentId) => {
     if (syncingFormContext || String(parentId || '') === String(previousParentId || '')) return;
-    syncAccountNumberFromParent(true);
+    syncAccountNumberFromParent(false);
   }
 );
 
@@ -512,6 +509,9 @@ onMounted(async () => {
       title="Chart of Account"
       description="Kelola struktur akun akuntansi sebagai fondasi jurnal, buku besar, dan proses accounting lanjutan."
     />
+
+    <button v-if="canStandardize" class="btn-secondary" @click="standardOpen = true">Standarisasi COA Multi-Perusahaan</button>
+    <CoaStandardImport v-if="standardOpen" :companies="filterCompanyOptions" @close="standardOpen = false" @applied="loadRows" />
 
     <section class="panel p-5">
       <div class="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr_0.9fr_auto]">

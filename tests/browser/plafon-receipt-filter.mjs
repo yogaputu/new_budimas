@@ -36,9 +36,9 @@ try {
  await page.getByPlaceholder('Pilih cabang',{exact:true}).click();
  await page.getByRole('button',{name:'SLO - Solo',exact:true}).click();
  await page.getByPlaceholder('Pilih perusahaan',{exact:true}).click();
- await page.getByRole('button',{name:'BMM - Perusahaan',exact:true}).click();
+ await page.getByRole('option',{name:'BMM - Perusahaan',exact:true}).click();
  await page.getByPlaceholder('Semua principal',{exact:true}).click();
- await page.getByRole('button',{name:'P1 - Principal',exact:true}).click();
+ await page.getByRole('option',{name:'P1 - Principal',exact:true}).click();
  await Promise.all([page.waitForResponse(r=>r.url().includes('/plafon/paginate') && new URL(r.url()).searchParams.get('id_principal')==='1'),page.getByRole('button',{name:'Cari',exact:true}).click()]);
  assert.equal(requests.at(-1).searchParams.get('id_cabang'),'1');
  assert.equal(requests.at(-1).searchParams.get('id_perusahaan'),'1');

@@ -32,8 +32,8 @@ try{
   });
   const selectScope=async()=>{
     const inputs=page.getByPlaceholder('Pilih data',{exact:true});
-    await inputs.nth(0).click();await page.getByRole('button',{name:'CO - Company Test',exact:true}).click();
-    await inputs.nth(1).click();await page.getByRole('button',{name:'CB - Branch Test',exact:true}).click();
+    await inputs.nth(0).click();await page.getByRole('option',{name:'CO - Company Test',exact:true}).click();
+    await inputs.nth(1).click();await page.getByRole('option',{name:'CB - Branch Test',exact:true}).click();
   };
   await page.goto(origin+'/finance/bank-input');
   await page.getByRole('button',{name:'Input Manual',exact:true}).click();
@@ -47,12 +47,12 @@ try{
   assert(writes.find(w=>w.p.endsWith('/file/import')).body.includes('testhash'));
   await page.goto(origin+'/finance/giro-deposits');await page.getByRole('button',{name:'Tambah Setoran',exact:true}).click();await selectScope();
   await page.getByPlaceholder('Pilih customer',{exact:true}).click();await page.getByRole('button',{name:'CA — Customer A',exact:true}).click();
-  const sales=page.getByPlaceholder('Pilih data',{exact:true}).nth(2);await sales.click();await page.getByRole('button',{name:'Sales 1',exact:true}).click();
+  const sales=page.getByPlaceholder('Pilih data',{exact:true}).nth(2);await sales.click();await page.getByRole('option',{name:'Sales 1',exact:true}).click();
   await page.getByLabel('Nomor referensi / BG').fill('BG-TEST');await page.getByLabel('Nominal (Rp)',{exact:true}).fill('1000');await page.getByLabel('Bank',{exact:true}).fill('BCA');await page.getByLabel('Jatuh Tempo Giro').fill('2026-10-30');
   await page.getByRole('button',{name:'Simpan Setoran',exact:true}).click();await page.getByText('Setoran tersimpan.',{exact:true}).waitFor();
   assert.equal(writes.filter(w=>w.p.endsWith('/workflow/funds')).at(-1).body.id_customer,'10');
   await page.goto(origin+'/finance/receipt-workflow');await page.getByRole('button',{name:'Buat Kuitansi',exact:true}).click();
-  await page.getByPlaceholder('Pilih data',{exact:true}).click();await page.getByRole('button',{name:'LPH-TEST — Sales 1',exact:true}).click();
+  await page.getByPlaceholder('Pilih data',{exact:true}).click();await page.getByRole('option',{name:'LPH-TEST — Sales 1',exact:true}).click();
   await page.getByRole('checkbox',{name:'Pilih faktur FAKTUR-A',exact:true}).check();
   for(const name of ['GIRO-A','RETUR-A','MANUAL-CASH','BANK-IN'])await page.getByRole('checkbox',{name:`FAKTUR-A sumber ${name}`,exact:true}).waitFor();
   for(const name of ['GIRO-B','UM-B','GIRO-UNKNOWN'])assert.equal(await page.getByRole('checkbox',{name:`FAKTUR-A sumber ${name}`,exact:true}).count(),0);

@@ -9,6 +9,7 @@ import AppFormField from '@/shared/components/AppFormField.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
+import { productUoms, productUom, returnUomField, returnUomFields, returnUomQuantities, returnUomTotal, uomQuantity } from '@/utils/productUom';
 
 const route = useRoute();
 const router = useRouter();
@@ -157,24 +158,9 @@ function buildAlreadyReturMessage(item, keyword) {
   return `Nomor ${requestCode} sudah dilakukan retur untuk ${orderCode} (${statusLabel}). Lanjutkan prosesnya dari menu Monitoring Retur.`;
 }
 
-function getReturUomName(item, level) {
-  return (
-    item?.[`puom${level}_nama`] ||
-    item?.[`puom${level}_kode`] ||
-    item?.[`uom_${level}`] ||
-    item?.[`uom${level}`] ||
-    ''
-  );
-}
+function getReturUomName(item, level) { return productUom(item, level)?.nama || ''; }
 
-function getReturUomConversion(item, level) {
-  const rawValue = item?.[`konversi_level${level}`] ?? item?.[`konversi_${level}`];
-  if (level === 1 && (rawValue === undefined || rawValue === null || rawValue === '')) {
-    return 1;
-  }
-
-  return toNumber(rawValue);
-}
+function getReturUomConversion(item, level) { return productUom(item, level)?.faktor_konversi || 0; }
 
 function isReturUomEnabled(item, level) {
   return hasText(getReturUomName(item, level)) && getReturUomConversion(item, level) > 0;
@@ -186,12 +172,7 @@ function formatReturUomLabel(item, level) {
   return `${name} x ${Number(getReturUomConversion(item, level) || 0).toLocaleString('id-ID')}`;
 }
 
-function getReturFieldLevel(field) {
-  if (field.includes('pieces')) return 1;
-  if (field.includes('box')) return 2;
-  if (field.includes('karton')) return 3;
-  return 0;
-}
+function getReturFieldLevel(field) { return field.includes('pieces') ? 1 : field.includes('box') ? 2 : field.includes('karton') ? 3 : Number(field.match(/^uom(\d+)/)?.[1] || 0); }
 
 function formatReturQtyLimit(item) {
   const limits = [
@@ -451,22 +432,10 @@ function normalizeReturRow(item) {
 }
 
 function recalculateReturRow(row) {
-  [
-    'pieces_retur_good',
-    'box_retur_good',
-    'karton_retur_good',
-    'pieces_retur_bad',
-    'box_retur_bad',
-    'karton_retur_bad'
-  ].forEach((field) => {
-    const level = getReturFieldLevel(field);
-    if (!isReturUomEnabled(row, level)) {
-      row[field] = 0;
-    }
-  });
-
-  row.good_total = Number(row.pieces_retur_good || 0) + Number(row.box_retur_good || 0) + Number(row.karton_retur_good || 0);
-  row.bad_total = Number(row.pieces_retur_bad || 0) + Number(row.box_retur_bad || 0) + Number(row.karton_retur_bad || 0);
+  for (const kind of ['good', 'bad']) {
+    for (const field of returnUomFields(row, kind)) row[field] = uomQuantity(row[field]);
+    row[kind + '_total'] = returnUomFields(row, kind).reduce((sum, field) => sum + row[field], 0);
+  }
   row.total_retur = row.good_total + row.bad_total;
 }
 
@@ -482,13 +451,7 @@ function updateReturField(row, field, value) {
   recalculateReturRow(row);
 }
 
-function returInputPieces(row) {
-  return qtyTotalPieces({
-    pieces: Number(row.pieces_retur_good || 0) + Number(row.pieces_retur_bad || 0),
-    box: Number(row.box_retur_good || 0) + Number(row.box_retur_bad || 0),
-    karton: Number(row.karton_retur_good || 0) + Number(row.karton_retur_bad || 0)
-  }, row);
-}
+function returInputPieces(row) { return returnUomTotal(row, 'good') + returnUomTotal(row, 'bad'); }
 
 function validateReturQuantities() {
   const invalidRow = returRows.value.find((row) => {
@@ -513,6 +476,8 @@ function buildReturPayload() {
       .filter((item) => Number(item.total_retur || 0) > 0)
       .map((item) => ({
         id_produk: Number(item.id_produk),
+        uom_quantities_good: returnUomQuantities(item, 'good'),
+        uom_quantities_bad: returnUomQuantities(item, 'bad'),
         harga_satuan: Number(item.hargaorder || item.harga_jual || item.harga || 0),
         pieces_retur_good: Number(item.pieces_retur_good || 0),
         box_retur_good: Number(item.box_retur_good || 0),
@@ -790,7 +755,7 @@ onMounted(async () => {
                   <p v-if="Number(item.already_retur_pieces || 0) > 0" class="mt-1 text-xs font-semibold text-slate-500">
                     Sudah diretur: {{ Number(item.already_retur_pieces || 0).toLocaleString('id-ID') }} PCS
                   </p>
-                  <p v-if="!isReturUomEnabled(item, 1) || !isReturUomEnabled(item, 2) || !isReturUomEnabled(item, 3)" class="mt-2 text-xs font-semibold text-amber-600 dark:text-amber-300">
+                  <p v-if="!productUoms(item).length" class="mt-2 text-xs font-semibold text-amber-600 dark:text-amber-300">
                     UOM yang belum lengkap otomatis dikunci.
                   </p>
                 </td>
@@ -812,34 +777,18 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="px-4 py-3 align-top">
-                  <div class="grid gap-2">
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 1) }}
-                      <input :value="item.pieces_retur_good" type="number" min="0" :disabled="!isReturUomEnabled(item, 1)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'pieces_retur_good', $event.target.value)">
-                    </label>
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 2) }}
-                      <input :value="item.box_retur_good" type="number" min="0" :disabled="!isReturUomEnabled(item, 2)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'box_retur_good', $event.target.value)">
-                    </label>
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 3) }}
-                      <input :value="item.karton_retur_good" type="number" min="0" :disabled="!isReturUomEnabled(item, 3)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'karton_retur_good', $event.target.value)">
+<div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));min-width:220px">
+                    <label v-for="unit in productUoms(item)" :key="unit.level" class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {{ formatReturUomLabel(item, unit.level) }}
+                      <input :value="item[returnUomField(unit.level, 'good')]" type="number" min="0" step="1" :aria-label="item.nama_produk + ' good ' + unit.nama" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white" @input="updateReturField(item, returnUomField(unit.level, 'good'), $event.target.value)">
                     </label>
                   </div>
                 </td>
                 <td class="px-4 py-3 align-top">
-                  <div class="grid gap-2">
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 1) }}
-                      <input :value="item.pieces_retur_bad" type="number" min="0" :disabled="!isReturUomEnabled(item, 1)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'pieces_retur_bad', $event.target.value)">
-                    </label>
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 2) }}
-                      <input :value="item.box_retur_bad" type="number" min="0" :disabled="!isReturUomEnabled(item, 2)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'box_retur_bad', $event.target.value)">
-                    </label>
-                    <label class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {{ formatReturUomLabel(item, 3) }}
-                      <input :value="item.karton_retur_bad" type="number" min="0" :disabled="!isReturUomEnabled(item, 3)" class="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 outline-none focus:border-brand-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500" @input="updateReturField(item, 'karton_retur_bad', $event.target.value)">
+<div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));min-width:220px">
+                    <label v-for="unit in productUoms(item)" :key="unit.level" class="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {{ formatReturUomLabel(item, unit.level) }}
+                      <input :value="item[returnUomField(unit.level, 'bad')]" type="number" min="0" step="1" :aria-label="item.nama_produk + ' bad ' + unit.nama" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white" @input="updateReturField(item, returnUomField(unit.level, 'bad'), $event.target.value)">
                     </label>
                   </div>
                 </td>

@@ -54,7 +54,7 @@ const modal = title => page.locator('section').filter({ has: page.getByRole('hea
 const next = count => page.getByRole('button', { name: `Lanjut Atur Pengiriman (${count} nota)`, exact: true });
 async function choose(label, option) {
   const input = modal('Buat Draf Kiriman').locator('label').filter({ hasText: label }).locator('input');
-  await input.fill(option); await page.getByRole('button', { name: option, exact: true }).click();
+  await input.fill(option); await page.getByRole('option', { name: option, exact: true }).click();
 }
 try {
   await page.goto(origin + '/distribution/schedules');
@@ -88,8 +88,8 @@ try {
   await choose('Driver', 'Driver Uji'); await choose('Helper / Kernet', 'Helper Uji');
   await page.getByLabel('Tanggal Pengiriman', { exact: true }).fill('2026-10-02');
   await page.getByLabel('Loading Dock', { exact: true }).fill('DOCK-A');
-  await page.getByLabel('Zona muatan', { exact: true }).selectOption('FOOD');
-  await page.getByLabel('Satuan estimasi volume', { exact: true }).selectOption('M3');
+  await choose('Zona muatan', 'FOOD');
+  await choose('Satuan estimasi volume', 'm³');
   await page.getByLabel('Catatan Pengiriman', { exact: true }).fill('Dua nota untuk rute utara');
   await modal('Buat Draf Kiriman').getByRole('heading').click();
   if (out) await page.screenshot({ path: out + '/form.png', fullPage: true, animations: 'disabled' });

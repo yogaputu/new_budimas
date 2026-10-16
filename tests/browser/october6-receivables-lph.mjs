@@ -46,7 +46,7 @@ try {
   });
   await page.goto(origin + '/finance/lph');
   await page.getByPlaceholder('Pilih perusahaan', {exact:true}).click();
-  await page.getByRole('button', {name:/BMM.*Perusahaan/}).click();
+  await page.getByRole('option', {name:/BMM.*Perusahaan/}).click();
   if (!await page.getByPlaceholder('Pilih cabang', {exact:true}).inputValue()) {
     await page.getByPlaceholder('Pilih cabang', {exact:true}).click();
     await page.getByRole('button', {name:/SLO.*Solo/}).click();
@@ -72,7 +72,7 @@ try {
   await page.goto(origin + '/finance/customer-receivable-balances');
   await page.getByRole('cell', {name:'Customer 1 (Test)',exact:true}).waitFor();
   await page.getByPlaceholder('Semua principal', {exact:true}).click();
-  await page.getByRole('button', {name:/P2.*Principal 2/}).click();
+  await page.getByRole('option', {name:/P2.*Principal 2/}).click();
   await Promise.all([page.waitForResponse(r=>r.url().includes('/customer-receivable-balances')),
     page.getByRole('button', {name:'Terapkan',exact:true}).click()]);
   await page.getByRole('cell', {name:'Customer 1 (Test)',exact:true}).click();

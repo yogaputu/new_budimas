@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { workflowGet, workflowPost, workflowPut, workflowDelete, mobileWorkflow } from '@/api/paymentWorkflow';
@@ -262,7 +263,7 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
     <section v-if="!['settings','fees','mobile'].includes(tab)" class="panel space-y-4 p-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label>Cari dokumen<input v-model="filter.search" class="field-control" placeholder="Nomor, sales, bank, catatan…"/></label>
-        <label>Status<select v-model="filter.status" class="field-control"><option value="">Semua status</option><option v-for="status in statusOptions" :key="status" :value="status">{{ labels[status] || status }}</option></select></label>
+        <label>Status<AppSelect2 aria-label="Status" v-model="filter.status" ><option value="">Semua status</option><option v-for="status in statusOptions" :key="status" :value="status">{{ labels[status] || status }}</option></AppSelect2></label>
         <label>Dari tanggal<input v-model="filter.from" type="date" class="field-control"/></label><label>Sampai tanggal<input v-model="filter.to" type="date" class="field-control"/></label>
       </div>
       <div class="flex flex-wrap gap-6 text-sm"><span>Dokumen: <b>{{ filteredList.length }}</b></span><template v-if="['cash','transfer','giro','receipts'].includes(tab)"><span>Total: <b>{{ money(listTotal) }}</b></span><span v-if="tab!=='receipts'">Belum dialokasikan: <b>{{ money(availableTotal) }}</b></span></template><template v-if="tab==='journals'"><span>Total Debit: <b>{{ money(journalTotals.debit) }}</b></span><span>Total Kredit: <b>{{ money(journalTotals.credit) }}</b></span><b>{{ Math.abs(journalTotals.debit-journalTotals.credit)<0.01 ? 'SEIMBANG' : 'ADA SELISIH' }}</b></template></div>
@@ -358,7 +359,7 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
           <label>Tanggal Penerimaan<input v-model="form.received_date" type="date" required class="field-control"/></label>
           <label>Nominal (Rp)<input v-model="form.amount" type="number" min="0.01" step="0.01" required class="field-control"/></label>
           <label v-if="form.kind!=='CASH'">Bank<input v-model="form.bank" required maxlength="160" class="field-control"/></label>
-          <label v-if="form.kind==='TRANSFER'">Tipe Mutasi<select v-model="form.transaction_type" class="field-control"><option value="DEBIT">Debit / dana masuk</option><option value="CREDIT">Kredit / dana keluar</option></select></label>
+          <label v-if="form.kind==='TRANSFER'">Tipe Mutasi<AppSelect2 aria-label="Tipe Mutasi" v-model="form.transaction_type" ><option value="DEBIT">Debit / dana masuk</option><option value="CREDIT">Kredit / dana keluar</option></AppSelect2></label>
           <template v-if="form.kind==='GIRO'"><label>Nama Rekening BG<input v-model="form.account_name" class="field-control"/></label><label>Jatuh Tempo Giro<input v-model="form.due_date" type="date" required class="field-control"/></label></template>
           <label class="md:col-span-2">Deskripsi<textarea v-model="form.description" :required="form.kind==='TRANSFER'" maxlength="2000" class="field-control"/></label>
           <label class="md:col-span-2">Catatan Tambahan<textarea v-model="form.notes" maxlength="2000" class="field-control"/></label>
@@ -375,6 +376,10 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
         <article v-for="invoice in detail.invoices" :key="invoice.id" class="rounded-xl border border-slate-400/30 p-3">
           <b>{{ invoice.no_faktur }} · {{ invoice.nama_customer }}</b><p>Alokasi {{ money(invoice.paid) }} · Kelebihan {{ money(invoice.excess) }}</p>
           <p v-for="a in detail.allocations.filter(a=>a.id_faktur===invoice.id_faktur)" :key="a.id">{{ labels[a.kind] || 'Biaya Lain' }} {{ a.reference || a.fee_name }}: {{ money(a.amount) }}</p>
+          <div v-if="detail.principal_payments?.some(p=>p.id_faktur===invoice.id_faktur)" class="mt-3 border-t border-slate-400/30 pt-2">
+            <p class="font-semibold">Pembagian pembayaran per principal</p>
+            <p v-for="part in detail.principal_payments.filter(p=>p.id_faktur===invoice.id_faktur)" :key="part.id_principal">{{ part.nama_principal }}: {{ money(part.amount) }}</p>
+          </div>
         </article>
         <h4 class="font-semibold">Riwayat / Audit</h4><p v-for="a in detail.audit" :key="a.id" class="text-sm">{{ a.action }} · {{ a.nama }} · {{ shownDate(a.created_at) }}</p>
         <button v-if="canFinalize(detail)" class="btn-primary" :disabled="busy" @click="ask(detail,'finalize')">Konfirmasi Rekonsiliasi & Finalisasi</button>
@@ -431,8 +436,8 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
           <div v-for="(label,key) in {total:'Total Klaim',CASH:'Tunai',TRANSFER:'Transfer',GIRO:'Giro'}" :key="key" class="rounded-xl border border-slate-400/30 p-3"><p>{{ label }}</p><b>{{ money(collectionSummary[key]) }}</b></div>
         </section>
         <template v-if="lp.status_dokumen === 'AKTIF'">
-          <label>Faktur<select v-model="form.id_faktur" class="field-control"><option value="">Pilih faktur</option><option v-for="i in lp.invoices" :key="i.id" :value="i.id">{{ i.no_faktur }}</option></select></label>
-          <label>Metode<select v-model="form.method" class="field-control"><option value="CASH">Cash</option><option value="TRANSFER">Transfer</option><option value="GIRO">Giro</option></select></label>
+          <label>Faktur<AppSelect2 aria-label="Faktur" v-model="form.id_faktur" ><option value="">Pilih faktur</option><option v-for="i in lp.invoices" :key="i.id" :value="i.id">{{ i.no_faktur }}</option></AppSelect2></label>
+          <label>Metode<AppSelect2 aria-label="Metode" v-model="form.method" ><option value="CASH">Cash</option><option value="TRANSFER">Transfer</option><option value="GIRO">Giro</option></AppSelect2></label>
           <label>Nominal klaim<input v-model="form.amount" type="number" min="0.01" step="0.01" class="field-control"/></label>
           <div v-if="form.method === 'GIRO'" class="grid gap-3 md:grid-cols-3"><label>No. BG<input v-model="form.giro_number" class="field-control"/></label><label>Bank<input v-model="form.bank" class="field-control"/></label><label>Jatuh tempo<input v-model="form.due_date" type="date" class="field-control"/></label></div>
           <button class="btn-primary" :disabled="busy" @click="action(() => mobileWorkflow('post',`lphs/${lp.id}/claims`,{...form}), 'Klaim dicatat, belum dianggap uang masuk.')">Catat Klaim</button>

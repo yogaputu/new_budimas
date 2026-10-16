@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import QRCode from 'qrcode';
@@ -58,7 +59,7 @@ import PageHeader from '@/shared/components/PageHeader.vue';
 const route = useRoute();
 // The first page remains compact, while the remote WMS endpoint searches the
 // complete product master (including products that have never moved in WMS).
-const PRODUCT_OPTION_LIMIT = 100;
+const PRODUCT_OPTION_LIMIT = 0;
 const PRODUCT_OPTION_FETCH_LIMIT = 1000;
 const NOTE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const activeTab = ref('inventory');
@@ -115,6 +116,7 @@ const filters = reactive({
   palletSearch: '',
   palletStatus: '',
   palletActive: 'true',
+  palletAvailability: '',
   incomingKodePallet: '',
   incomingBeratPerPcsKg: '',
   placementSearch: '',
@@ -254,7 +256,8 @@ function createPalletForm() {
     nama_barang: '',
     default_qty_pcs: 0,
     default_qty_karton: 0,
-    status_pallet: 'Nonaktif',
+    status_pallet: 'Aktif',
+    availability: 'Kosong',
     active: true,
     notes: ''
   };
@@ -420,6 +423,12 @@ const palletActiveOptions = [
   { value: '', label: 'Semua pallet' },
   { value: 'true', label: 'Layak digunakan' },
   { value: 'false', label: 'Tidak layak / rusak' }
+];
+
+const palletAvailabilityOptions = [
+  { value: '', label: 'Semua ketersediaan' },
+  { value: 'Terisi', label: 'Terisi' },
+  { value: 'Kosong', label: 'Kosong' }
 ];
 
 const principalOptions = computed(() =>
@@ -860,6 +869,7 @@ const palletColumns = [
   { key: 'tipe_pallet', label: 'Tipe' },
   { key: 'nama_barang', label: 'Produk / Isi', render: (row) => palletProductLabel(row) },
   { key: 'status_pallet', label: 'Status', render: (row) => statusBadge(row.status_pallet) },
+  { key: 'availability', label: 'Ketersediaan', render: (row) => statusBadge(row.availability || (Number(row.used_qty_pcs) > 0 ? 'Terisi' : 'Kosong')) },
   { key: 'used_qty_pcs', label: 'Isi PCS', render: (row) => numberLabel(row.used_qty_pcs) },
   { key: 'max_qty_pcs', label: 'Max PCS', render: (row) => row.max_qty_pcs ? numberLabel(row.max_qty_pcs) : 'Tidak dibatasi' },
   { key: 'used_qty_karton', label: 'Isi Karton', render: (row) => numberLabel(row.used_qty_karton) },
@@ -2894,14 +2904,13 @@ function editPallet(row) {
     nama_barang: row.nama_barang || '',
     default_qty_pcs: row.default_qty_pcs ?? 0,
     default_qty_karton: row.default_qty_karton ?? 0,
-    status_pallet: row.status_pallet || 'Nonaktif',
+    status_pallet: row.active === false ? 'Nonaktif' : 'Aktif',
+    availability: row.availability || (Number(row.used_qty_pcs) > 0 ? 'Terisi' : 'Kosong'),
     active: row.active !== false,
     notes: row.notes || ''
   });
   palletModalOpen.value = true;
-  if (row.kode_barang || row.nama_barang) {
-    loadProductOptions(row.kode_barang || row.nama_barang);
-  }
+  loadProductOptions();
   setFeedback(`Pallet ${row.kode_pallet} siap diedit.`);
 }
 
@@ -2951,7 +2960,7 @@ async function loadPallets() {
       id_cabang: rackBranchId(),
       search: filters.palletSearch || undefined,
       status: filters.palletStatus || undefined,
-      active: filters.palletActive || undefined
+      availability: filters.palletAvailability || undefined
     });
     palletRows.value = payloadRows(response);
     if (!palletForm.id && !palletForm.kode_pallet) {
@@ -2973,7 +2982,7 @@ async function savePallet() {
   }
   loading.action = true;
   try {
-    const payload = { ...palletForm };
+    const payload = { ...palletForm, status_pallet: palletForm.active ? 'Aktif' : 'Nonaktif' };
     if (palletForm.id) {
       await updateWmsPallet(palletForm.id, payload);
       setFeedback(`Pallet ${palletForm.kode_pallet} berhasil diperbarui.`);
@@ -3140,11 +3149,25 @@ async function loadProductOptions(search = '') {
     let rows = [];
 
     try {
-      const response = await getWmsProductOptions({
-        limit: PRODUCT_OPTION_FETCH_LIMIT,
-        search: keyword || undefined
-      });
-      rows = normalizeList(unwrapResponse(response));
+      const seen = new Set();
+      let offset = 0;
+      while (requestId === productLoadSequence) {
+        const response = await getWmsProductOptions({
+          limit: PRODUCT_OPTION_FETCH_LIMIT,
+          offset,
+          search: keyword || undefined
+        });
+        const page = normalizeList(unwrapResponse(response));
+        const fresh = page.filter(item => {
+          const id = String(item.id || item.id_produk || item.produk_id || item.kode_sku);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        rows.push(...fresh);
+        if (page.length < PRODUCT_OPTION_FETCH_LIMIT || !fresh.length) break;
+        offset += page.length;
+      }
     } catch (error) {
       optionError = error;
     }
@@ -3337,7 +3360,8 @@ async function submitChecker(row) {
       task_id: row.id,
       checker_name: filters.checkerName,
       dock_code: filters.checkerDock,
-      items: (row.details || []).map((detail) => ({
+      quantity_mode: 'LOOSE_PCS',
+      items: (row.details || []).filter(detail => Number(detail.checker_required_quantity ?? detail.picked_quantity) > 0).map((detail) => ({
         detail_id: detail.id,
         checked_quantity: detail.actualQty === '' ? null : detail.actualQty,
         condition: detail.actualCondition,
@@ -4082,7 +4106,7 @@ onBeforeUnmount(stopQrScanner);
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="workflow-ui space-y-6">
     <PageHeader
       :title="pageHeaderTitle"
       :description="pageHeaderDescription"
@@ -4097,10 +4121,10 @@ onBeforeUnmount(stopQrScanner);
       </div>
     </PageHeader>
 
-    <section v-if="errorMessage" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+    <section v-if="errorMessage" class="workflow-notice workflow-notice-error">
       {{ errorMessage }}
     </section>
-    <section v-if="feedback" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+    <section v-if="feedback" class="workflow-notice workflow-notice-success">
       {{ feedback }}
     </section>
 
@@ -4123,7 +4147,7 @@ onBeforeUnmount(stopQrScanner);
             v-for="(step, index) in flowSteps"
             :key="step.number"
             type="button"
-            class="group relative rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            class="workflow-flow-step group relative rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30"
             :class="[
               step.tone,
               activeTab === step.tab ? 'ring-2 ring-brand-500/25' : ''
@@ -4135,27 +4159,27 @@ onBeforeUnmount(stopQrScanner);
               class="pointer-events-none absolute left-[calc(100%+0.25rem)] top-8 hidden h-px w-2 bg-slate-300 dark:bg-slate-700 xl:block"
             ></span>
             <div class="flex items-start justify-between gap-3">
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-xs font-black text-slate-900 shadow-sm dark:bg-slate-950/60 dark:text-white">
+              <span class="workflow-step-number flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
                 {{ step.number }}
               </span>
-              <span class="rounded-full bg-white/80 px-2 py-1 text-xs font-bold text-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
+              <span class="workflow-badge">
                 {{ step.metric }}
               </span>
             </div>
-            <h3 class="mt-4 text-base font-black leading-5 text-slate-950 dark:text-white">{{ step.title }}</h3>
-            <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">{{ step.metricLabel }}</p>
+            <h3 class="mt-4 text-base font-semibold leading-5">{{ step.title }}</h3>
+            <p class="workflow-step-caption mt-1 text-xs">{{ step.metricLabel }}</p>
             <dl class="mt-4 space-y-2 text-xs leading-5">
               <div>
-                <dt class="font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Sumber</dt>
-                <dd class="break-words font-semibold text-slate-800 dark:text-slate-100">{{ step.source }}</dd>
+                <dt class="workflow-step-caption font-semibold uppercase tracking-wide">Sumber</dt>
+                <dd class="break-words font-medium">{{ step.source }}</dd>
               </div>
               <div>
-                <dt class="font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Aksi</dt>
-                <dd class="break-words font-semibold text-slate-800 dark:text-slate-100">{{ step.action }}</dd>
+                <dt class="workflow-step-caption font-semibold uppercase tracking-wide">Aksi</dt>
+                <dd class="break-words font-medium">{{ step.action }}</dd>
               </div>
               <div>
-                <dt class="font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Hasil</dt>
-                <dd class="break-words font-semibold text-slate-800 dark:text-slate-100">{{ step.result }}</dd>
+                <dt class="workflow-step-caption font-semibold uppercase tracking-wide">Hasil</dt>
+                <dd class="break-words font-medium">{{ step.result }}</dd>
               </div>
             </dl>
           </button>
@@ -4246,9 +4270,9 @@ onBeforeUnmount(stopQrScanner);
             <AppFormField v-model="filters.inventorySearch" label="Cari Inventory" placeholder="Kode atau nama barang" />
             <label class="block">
               <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-              <select v-model="filters.inventoryStatus" class="field">
+              <AppSelect2 aria-label="Status" v-model="filters.inventoryStatus" >
                 <option v-for="option in inventoryStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              </AppSelect2>
             </label>
             <div class="flex items-end">
               <button class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.inventory" @click="loadInventory">
@@ -4274,21 +4298,21 @@ onBeforeUnmount(stopQrScanner);
               <AppFormField v-model="filters.rackSearch" label="Cari Rak" placeholder="Kode, tipe, status" />
               <label class="block">
                 <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipe Rak</span>
-                <select v-model="filters.rackType" class="field">
+                <AppSelect2 aria-label="Tipe Rak" v-model="filters.rackType" >
                   <option v-for="option in rackTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
+                </AppSelect2>
               </label>
               <label class="block">
                 <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Rak</span>
-                <select v-model="filters.rackStatus" class="field">
+                <AppSelect2 aria-label="Status Rak" v-model="filters.rackStatus" >
                   <option v-for="option in rackStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
+                </AppSelect2>
               </label>
               <label class="block">
                 <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Aktif</span>
-                <select v-model="filters.rackActive" class="field">
+                <AppSelect2 aria-label="Aktif" v-model="filters.rackActive" >
                   <option v-for="option in rackActiveOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
+                </AppSelect2>
               </label>
               <button class="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.racks" @click="loadRacks">
                 Muat Rak
@@ -4331,15 +4355,15 @@ onBeforeUnmount(stopQrScanner);
             <AppFormField v-model="filters.palletSearch" label="Cari Pallet" placeholder="Kode, tipe, catatan" />
             <label class="block">
               <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Pallet</span>
-              <select v-model="filters.palletStatus" class="field">
+              <AppSelect2 aria-label="Status Pallet" v-model="filters.palletStatus" >
                 <option v-for="option in palletStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              </AppSelect2>
             </label>
             <label class="block">
-              <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Aktif</span>
-              <select v-model="filters.palletActive" class="field">
-                <option v-for="option in palletActiveOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Ketersediaan</span>
+              <AppSelect2 aria-label="Ketersediaan" v-model="filters.palletAvailability" >
+                <option v-for="option in palletAvailabilityOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </AppSelect2>
             </label>
             <button class="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.pallets" @click="loadPallets">
               Muat Pallet
@@ -4369,9 +4393,9 @@ onBeforeUnmount(stopQrScanner);
               />
               <label class="block">
                 <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-                <select v-model="filters.placementStatus" class="field">
+                <AppSelect2 aria-label="Status" v-model="filters.placementStatus" >
                   <option v-for="option in placementStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
+                </AppSelect2>
               </label>
               <button class="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.placements" @click="loadPlacements">
                 Muat Penempatan
@@ -4419,9 +4443,9 @@ onBeforeUnmount(stopQrScanner);
             <AppFormField v-model="filters.incomingProduct" label="Produk" placeholder="Kode atau nama produk" />
             <label class="block">
               <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Konfirmasi</span>
-              <select v-model="filters.incomingStatus" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+              <AppSelect2 aria-label="Status Konfirmasi" v-model="filters.incomingStatus" >
                 <option v-for="option in incomingStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              </AppSelect2>
             </label>
             <AppSearchSelect
               v-model="filters.incomingKodePallet"
@@ -4561,7 +4585,7 @@ onBeforeUnmount(stopQrScanner);
                 <div>
                   <p class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ task.shipment_reference || 'Draf lama' }} · {{ task.nota || `Task ${task.id}` }}</p>
                   <h3 class="mt-1 text-lg font-bold text-slate-950 dark:text-white">{{ numberLabel(task.total_item) }} barang</h3>
-                  <p class="mt-1 text-sm text-slate-500">Cocokkan hasil scan picking dengan meja checker sebelum ke loading dock.</p>
+                  <p class="mt-1 text-sm text-slate-500">Karton penuh otomatis ke loading. Periksa jumlah dan kondisi PCS lepas.</p>
                 </div>
                 <button class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60" :disabled="loading.action" @click="submitChecker(task)">
                   Simpan Hasil Checker OK / NG
@@ -4570,13 +4594,15 @@ onBeforeUnmount(stopQrScanner);
               <div class="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                 <div v-for="detail in task.details" :key="detail.id" class="grid gap-3 px-3 py-2 text-sm md:grid-cols-2">
                   <span><strong>{{ detail.kode_barang }}</strong> · {{ detail.nama_barang }}</span>
-                  <span class="font-bold">{{ numberLabel(detail.picked_quantity) }} PCS · {{ detail.handling_class }}</span>
-                  <template v-if="detail">
-                    <label>Jumlah aktual (PCS)<input v-model="detail.actualQty" class="field" type="number" min="0" step="1" placeholder="Hasil hitung fisik" /></label>
-                    <label>Kondisi<select v-model="detail.actualCondition" aria-label="Kondisi" class="field"><option value="">Pilih kondisi</option><option value="GOOD">Baik</option><option value="DAMAGED">Rusak (NG)</option></select></label>
+                  <span v-if="detail.requires_full_recheck" class="font-bold">Hasil NG sebelumnya: hitung ulang seluruh {{ numberLabel(detail.checker_required_quantity) }} PCS; tidak otomatis diloloskan.</span>
+                  <span v-else class="font-bold">{{ numberLabel(detail.auto_checked_quantity || 0) }} PCS dalam karton otomatis · {{ numberLabel(detail.checker_required_quantity ?? detail.picked_quantity) }} PCS perlu dicek</span>
+                  <template v-if="Number(detail.checker_required_quantity ?? detail.picked_quantity) > 0">
+                    <label>{{ detail.requires_full_recheck ? 'Jumlah aktual PCS (periksa ulang NG)' : 'Jumlah aktual PCS lepas' }}<input v-model="detail.actualQty" class="field" type="number" min="0" step="1" :placeholder="detail.requires_full_recheck ? 'Hasil hitung ulang seluruh PCS' : 'Hasil hitung fisik PCS lepas'" /></label>
+                    <label>Kondisi<AppSelect2 v-model="detail.actualCondition" aria-label="Kondisi" ><option value="">Pilih kondisi</option><option value="GOOD">Baik</option><option value="DAMAGED">Rusak (NG)</option></AppSelect2></label>
                     <label class="md:col-span-2">Catatan (wajib untuk NG)<input v-model="detail.actualNote" class="field" maxlength="1000" /></label>
                     <p v-if="task.status === 'CHECKER_HOLD'" class="font-semibold text-rose-600 md:col-span-2">Ditahan: hasil sebelumnya {{ detail.checked_quantity }} PCS / {{ detail.checker_status }}. Perbaiki lalu hitung ulang.</p>
                   </template>
+                  <p v-else class="font-semibold text-emerald-700 dark:text-emerald-300 md:col-span-2">Karton penuh otomatis lolos checker.</p>
                 </div>
               </div>
             </article>
@@ -4612,12 +4638,12 @@ onBeforeUnmount(stopQrScanner);
             <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <label class="block">
                 <span class="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Manifest yang akan dicetak</span>
-                <select v-model="selectedManifestNo" class="field" :disabled="loading.dropping || !manifestTableRows.length">
+                <AppSelect2 aria-label="Manifest yang akan dicetak" v-model="selectedManifestNo"  :disabled="loading.dropping || !manifestTableRows.length">
                   <option value="">{{ manifestTableRows.length ? 'Pilih manifest' : 'Cari manifest terlebih dahulu' }}</option>
                   <option v-for="manifest in manifestTableRows" :key="manifestNumber(manifest)" :value="manifestNumber(manifest)">
                     {{ manifestNumber(manifest) }} · {{ manifest.driver || '-' }} · {{ manifest.vehicle_no || '-' }}
                   </option>
-                </select>
+                </AppSelect2>
               </label>
               <button
                 type="button"
@@ -4864,9 +4890,9 @@ onBeforeUnmount(stopQrScanner);
             <AppFormField v-model="filters.transactionSearch" label="Cari Transaksi" placeholder="Nota, produk, kode" />
             <label class="block">
               <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipe</span>
-              <select v-model="filters.transactionType" class="field">
+              <AppSelect2 aria-label="Tipe" v-model="filters.transactionType" >
                 <option v-for="option in transactionTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
+              </AppSelect2>
             </label>
             <div class="flex items-end">
               <button class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.transactions" @click="loadTransactions">
@@ -4903,30 +4929,30 @@ onBeforeUnmount(stopQrScanner);
         <AppFormField v-model="rackForm.max_qty_pcs" label="Kapasitas PCS" type="number" min="0" />
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipe Rak</span>
-          <select v-model="rackForm.type_rak" class="field">
+          <AppSelect2 aria-label="Tipe Rak" v-model="rackForm.type_rak" >
             <option value="Tetap">Tetap</option>
             <option value="Titipan">Titipan</option>
             <option value="Lorong">Lorong</option>
-          </select>
+          </AppSelect2>
           <p class="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
             Tetap: level 0-1. Titipan: level 2+. Lorong: level 0.
           </p>
         </label>
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Mode Principal</span>
-          <select v-model="rackForm.mix_mode" class="field">
+          <AppSelect2 aria-label="Mode Principal" v-model="rackForm.mix_mode" >
             <option v-for="option in rackMixModeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
           <p class="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
             Single hanya satu principal. Mixed mengikuti group principal.
           </p>
         </label>
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Group Principal</span>
-          <select v-model="rackForm.id_principal_group" class="field" :disabled="rackForm.mix_mode !== 'mixed_group'">
+          <AppSelect2 aria-label="Group Principal" v-model="rackForm.id_principal_group"  :disabled="rackForm.mix_mode !== 'mixed_group'">
             <option value="">Pilih group</option>
             <option v-for="option in principalGroupOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
           <button
             type="button"
             class="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
@@ -4937,11 +4963,11 @@ onBeforeUnmount(stopQrScanner);
         </label>
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Rak</span>
-          <select v-model="rackForm.status_rak" class="field">
+          <AppSelect2 aria-label="Status Rak" v-model="rackForm.status_rak" >
             <option value="Kosong">Kosong</option>
             <option value="Isi">Isi</option>
             <option value="Nonaktif">Nonaktif</option>
-          </select>
+          </AppSelect2>
         </label>
         <label class="flex min-h-[68px] items-end gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
           <input v-model="rackForm.active" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
@@ -5000,15 +5026,14 @@ onBeforeUnmount(stopQrScanner);
           </div>
           <label class="block">
             <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Principal dalam Group</span>
-            <select
+            <AppSelect2 aria-label="Principal dalam Group"
               v-model="principalGroupForm.principal_ids"
               multiple
-              class="field min-h-[180px]"
             >
               <option v-for="option in principalOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
+            </AppSelect2>
             <p class="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Tahan Ctrl/Cmd untuk memilih beberapa principal.
+              Cari dan pilih beberapa principal. Klik kembali untuk membatalkan pilihan.
             </p>
           </label>
           <AppFormField v-model="principalGroupForm.notes" label="Catatan" placeholder="Opsional" />
@@ -5104,6 +5129,8 @@ onBeforeUnmount(stopQrScanner);
           :options="productOptions"
           :loading="loading.products"
           :remote-search="true"
+          :clear-search-on-open="true"
+          :option-page-size="100"
           :max-visible-options="PRODUCT_OPTION_LIMIT"
           empty-text="Produk tidak ditemukan."
           @update:model-value="selectPalletProduct"
@@ -5113,12 +5140,13 @@ onBeforeUnmount(stopQrScanner);
         <AppFormField v-model="palletForm.default_qty_pcs" label="Isi Otomatis PCS" type="number" min="0" />
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Pallet</span>
-          <div class="field">{{ palletForm.active && palletForm.status_pallet === 'Aktif' ? 'Aktif' : 'Nonaktif' }}</div>
-          <span class="text-xs text-slate-500">Otomatis: Aktif jika berisi; Nonaktif jika kosong atau tidak layak digunakan.</span>
+          <AppSelect2 aria-label="Status Pallet" v-model="palletForm.active" ><option :value="true">Aktif</option><option :value="false">Nonaktif</option></AppSelect2>
+          <span class="text-xs text-slate-500">Status menentukan apakah pallet dapat digunakan.</span>
         </label>
-        <label class="flex min-h-[68px] items-end gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
-          <input v-model="palletForm.active" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-          Pallet layak digunakan (hapus centang jika rusak)
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Ketersediaan</span>
+          <div class="field">{{ palletForm.availability }}</div>
+          <span class="text-xs text-slate-500">Terisi/Kosong mengikuti jumlah barang di pallet.</span>
         </label>
         <AppFormField v-model="palletForm.notes" label="Catatan" placeholder="Opsional" />
       </div>
@@ -5312,12 +5340,12 @@ onBeforeUnmount(stopQrScanner);
         />
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-          <select v-model="placementForm.status" class="field">
+          <AppSelect2 aria-label="Status" v-model="placementForm.status" >
             <option value="READY">READY</option>
             <option value="LOW">LOW</option>
             <option value="EMPTY">EMPTY</option>
             <option value="INACTIVE">INACTIVE</option>
-          </select>
+          </AppSelect2>
         </label>
       </div>
       <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -5362,6 +5390,7 @@ onBeforeUnmount(stopQrScanner);
                     :options="productOptions"
                     :loading="loading.products"
                     :remote-search="true"
+                    :option-page-size="100"
                     :max-visible-options="PRODUCT_OPTION_LIMIT"
                     empty-text="Produk tidak ditemukan."
                     @update:model-value="(value) => selectPlacementItemProduct(item, value)"

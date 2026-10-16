@@ -1,8 +1,10 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onDeactivated, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { createFleetScheduleFromSalesOrders, getFleetSchedules, updateFleetSchedule, getDraftVariantPickingNote } from '@/api/distribution';
 import { MAX_PRINT_DRAFTS, shipmentKey, shipmentReference, shipmentPrintError, prepareShipmentDocument, buildShipmentDraftsHtml } from '@/utils/shipmentDraftPrint';
+import { buildPickingReferenceHtml } from '@/utils/pickingReferencePrint';
 import { formatPrintDate, openPrintHtml, reservePrintWindow } from '@/utils/printTemplates';
 import { getBranches, getCompanies, getDrivers, getFleets, getHelpers } from '@/api/master';
 import { useAuthStore } from '@/stores/auth';
@@ -92,10 +94,12 @@ function selectAllDrafts(event) {
   checkedDrafts.value = checked ? Object.fromEntries(draftRows.value.map(row => [shipmentKey(row), true])) : {};
   errorMessage.value = '';
 }
+const printFormat = ref('variant');
 async function printDrafts(rows) {
   if (!selectionReady.value || !rows.length) return;
   if (rows.length > MAX_PRINT_DRAFTS) { errorMessage.value = `Maksimal ${MAX_PRINT_DRAFTS} draf per cetakan.`; return; }
   const snapshot = rows.map(row => ({ ...row }));
+  const format = printFormat.value;
   const popup = reservePrintWindow({ width: 1280, height: 820 });
   if (!popup) { errorMessage.value = 'Popup cetak diblokir. Izinkan popup untuk ERP lalu coba kembali.'; return; }
   printing.value = true; feedback.value = ''; errorMessage.value = '';
@@ -113,7 +117,7 @@ async function printDrafts(rows) {
     }
     if (popup.closed) throw new Error('Jendela cetak ditutup. Silakan cetak kembali.');
     popup.document.open();
-    openPrintHtml(`Draf Kiriman (${documents.length})`, buildShipmentDraftsHtml(documents), { printWindow: popup, delay: 500 });
+    openPrintHtml(`Draf Kiriman (${documents.length})`, format === 'recap' ? buildShipmentDraftsHtml(documents) : buildPickingReferenceHtml(documents, format, { printedBy: authStore.userName }), { printWindow: popup, delay: 500 });
     feedback.value = `${documents.length} draf siap dicetak dalam satu jendela, setiap draf dimulai pada halaman baru. Stok dan status tidak berubah.`;
   } catch (error) {
     if (!popup.closed) popup.close();
@@ -728,7 +732,7 @@ watch(
         <p v-if="loadedScope !== scopeKey && !loading" class="mt-1 text-sm text-amber-700">Klik Terapkan untuk memuat perusahaan/cabang yang dipilih.</p>
         <p v-if="printProgress" role="status" class="mt-1 text-sm">{{ printProgress }}</p>
       </div>
-      <div class="flex gap-2"><button class="btn-erp-secondary" :disabled="printing || !selectedDrafts.length" @click="checkedDrafts = {}">Kosongkan Pilihan</button>
+      <div class="flex flex-wrap gap-2"><label>Format cetak <AppSelect2 aria-label="Format cetak" v-model="printFormat"  :disabled="printing"><option value="qr">Label QR Draf</option><option value="nota">Draft By Nota</option><option value="variant">Draft By Variant</option><option value="recap">Rekap lengkap</option></AppSelect2></label><button class="btn-erp-secondary" :disabled="printing || !selectedDrafts.length" @click="checkedDrafts = {}">Kosongkan Pilihan</button>
         <button class="btn-erp-primary" :disabled="!selectionReady || !selectedDrafts.length" @click="printDrafts(selectedDrafts)">{{ printing ? 'Menyiapkan…' : `Cetak Terpilih (${selectedDrafts.length})` }}</button></div>
     </section>
 
@@ -800,13 +804,13 @@ watch(
           <AppFormField v-model="scheduleForm.tanggal_pengiriman" label="Tanggal Pengiriman" type="date" />
           <AppFormField v-model="scheduleForm.dock_code" label="Loading Dock" placeholder="Contoh: DOCK-A" maxlength="60" />
           <label class="block text-sm">Zona muatan
-            <select v-model="scheduleForm.cargo_zone" class="field mt-1">
+            <AppSelect2 aria-label="Zona muatan" v-model="scheduleForm.cargo_zone" >
               <option value="">Pilih zona</option><option value="FOOD">FOOD</option><option value="NON_FOOD">NON-FOOD</option>
-            </select>
+            </AppSelect2>
           </label>
           <AppFormField v-model="scheduleForm.delivery_notes" label="Catatan Pengiriman" maxlength="2000" />
           <label class="block text-sm">Satuan estimasi volume
-            <select v-model="scheduleForm.volume_unit" class="field mt-1"><option value="">Pilih satuan sumber data produk</option><option value="CM3">cm³</option><option value="M3">m³</option></select>
+            <AppSelect2 aria-label="Satuan estimasi volume" v-model="scheduleForm.volume_unit" ><option value="">Pilih satuan sumber data produk</option><option value="CM3">cm³</option><option value="M3">m³</option></AppSelect2>
             <span class="text-xs text-slate-500">Kapasitas armada memakai m³. Jangan campurkan satuan produk dalam satu jadwal.</span>
           </label>
         </section>

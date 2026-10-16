@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -1348,23 +1349,23 @@ onBeforeUnmount(() => {
       <div class="wms3d-toolbar">
         <label class="wms3d-field">
           <span>Perusahaan</span>
-          <select v-model="filters.companyId">
+          <AppSelect2 aria-label="Perusahaan" v-model="filters.companyId">
             <option v-for="option in companyOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <label class="wms3d-field">
           <span>Cabang</span>
-          <select v-model="filters.branchId" :disabled="!filters.companyId">
+          <AppSelect2 aria-label="Cabang" v-model="filters.branchId" :disabled="!filters.companyId">
             <option v-for="option in branchOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <label class="wms3d-field">
           <span>Gudang</span>
-          <select v-model="filters.warehouse" :disabled="!warehouseOptions.length">
+          <AppSelect2 aria-label="Gudang" v-model="filters.warehouse" :disabled="!warehouseOptions.length">
             <option v-for="option in warehouseOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <label class="wms3d-field wms3d-field-wide">
@@ -1374,23 +1375,23 @@ onBeforeUnmount(() => {
 
         <label class="wms3d-field">
           <span>Tipe Rak</span>
-          <select v-model="filters.type">
+          <AppSelect2 aria-label="Tipe Rak" v-model="filters.type">
             <option v-for="option in rackTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <label class="wms3d-field">
           <span>Status</span>
-          <select v-model="filters.status">
+          <AppSelect2 aria-label="Status" v-model="filters.status">
             <option v-for="option in rackStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
 
         <label class="wms3d-field">
           <span>Aktif</span>
-          <select v-model="filters.active">
+          <AppSelect2 aria-label="Aktif" v-model="filters.active">
             <option v-for="option in rackActiveOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
+          </AppSelect2>
         </label>
       </div>
 

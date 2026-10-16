@@ -1,0 +1,61 @@
+{
+  "release": "Mobile Sales revisi 15/10/2026 poin 1-4",
+  "deployment_date": "2026-10-15",
+  "status": "deployed_and_verified",
+  "server": "103.86.117.35",
+  "api_root": "/www/wwwroot/API",
+  "backup": "/www/backup/budimas-mobile-collections-20261015.ciU4cj",
+  "migration": "tools/migrations/20261015_mobile_sales_collections.sql",
+  "migration_effect": "Additive context table, foreign keys, checks and four indexes; no balance or existing business-data updates.",
+  "reload": "Graceful SIGHUP of verified API uWSGI master 559494; unrelated services untouched.",
+  "apk": {
+    "package": "com.budimas.app",
+    "version_name": "1.0.11",
+    "version_code": 12,
+    "build_type": "debug",
+    "filename": "BudimasMobile-v1.0.11-revisi-20261015-debug.apk",
+    "bytes": 30400334,
+    "sha256": "1921bcb345e91bc6f4643a3fde2e25557b659d13418e5985a9c1141fe5814c66",
+    "url": "https://erp.budimas.swakarya.my.id:9092/downloads/BudimasMobile-v1.0.11-revisi-20261015-debug.apk",
+    "alias": "BudimasMobile-debug.apk",
+    "published_directories": [
+      "/www/wwwroot/new_budimas/downloads",
+      "/www/wwwroot/new_budimas/dist/downloads"
+    ],
+    "client_action": "Install/update this APK; a server update does not replace the installed native app."
+  },
+  "api_changes": [
+    "GET /api/mobile/workflow/collection-options",
+    "GET /api/mobile/workflow/collections",
+    "GET /api/payment/history: optional exact id_customer",
+    "POST /api/mobile/workflow/lphs/{id}/claims: optional entry_origin, id_kunjungan, payment_reference; backward-compatible old request shape"
+  ],
+  "source_scope": [
+    "apps/lib/mobile_collections.py",
+    "apps/routes/payment_workflow.py: two added routes only",
+    "apps/services/FinanceWorkflow/service.py: mobile_claim only",
+    "apps/routes/mobile_gateway.py: payment_history only",
+    "tools/migrations/20261015_mobile_sales_collections.sql",
+    "tools/openapi/overrides.json: collection contracts and claim context fields only",
+    "docs/openapi.json: corresponding contracts only"
+  ],
+  "verification": {
+    "staged_app_import_and_read_only_database_checks": "passed",
+    "live_https_checks_before_apk": 15,
+    "live_https_checks_after_apk": 21,
+    "checks_cover": [
+      "New routes: CORS OPTIONS 200, missing token 401, token-bound Sales GET 200",
+      "Existing LPH list and customer payment history remain accessible",
+      "Foreign keys, four indexes and deployed API source checksums",
+      "ERP principal, branch and notification read endpoints",
+      "API docs and published OpenAPI checksum",
+      "Versioned APK and generic alias checksum over HTTPS on ports 443 and 9092",
+      "Both ERP index.html files unchanged"
+    ],
+    "available_customer_count_for_test_sales_session": 0,
+    "invoice_rows_checked_for_test_sales_session": 0,
+    "new_business_transactions_created": false,
+    "physical_android_acceptance_test": "not performed"
+  },
+  "rollback": "Protected source and APK alias backups plus schema-before.sql and workflow-before.dump are in the server backup directory. Restore only release files and reload the verified API master if needed. The additive migration may remain for backward compatibility; do not restore the whole live database over concurrent transactions."
+}

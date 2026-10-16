@@ -1,4 +1,5 @@
 <script setup>
+import { balanceSheetHtml, reportContext, showFinancialPrint } from '@/utils/financialReportPrint';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies } from '@/api/master';
 import { getBalanceSheet } from '@/api/finance';
@@ -81,7 +82,19 @@ const reportSections = computed(() => [
   { key: 'lainnya', title: 'Akun Belum Terklasifikasi', rows: sections.value.lainnya || [], total: summary.value.total_lainnya, totalLabel: 'Total Lainnya' }
 ]);
 
-const isBalanced = computed(() => Math.abs(Number(summary.value.selisih || 0)) < 1);
+const isBalanced = computed(() => Math.abs(Number(summary.value.selisih || 0)) < 0.01);
+
+
+const printPayload = ref(null);
+const loadedPrintContext = ref(null);
+const loadedPrintFilters = ref('');
+const canPrint = computed(() => !!printPayload.value && !loading.report && loadedPrintFilters.value === JSON.stringify(filters));
+function printReport() {
+  if (!canPrint.value) return;
+  const html = balanceSheetHtml({ ...loadedPrintContext.value, printedAt: new Date().toLocaleString('id-ID') }, printPayload.value);
+  if (!showFinancialPrint('Neraca', html)) errorMessage.value = 'Izinkan pop-up untuk membuka pratinjau cetak.';
+}
+
 
 function formatCurrency(value) {
   const amount = Number(value || 0);
@@ -110,6 +123,9 @@ async function loadReferences() {
 }
 
 async function loadReport() {
+  const filterSnapshot = JSON.stringify(filters);
+  const contextSnapshot = reportContext(filters, companyRows.value, branchRows.value, authStore.user);
+  printPayload.value = null;
   loading.report = true;
   feedback.value = '';
   errorMessage.value = '';
@@ -123,6 +139,9 @@ async function loadReport() {
     const payload = unwrapResponse(response);
     const data = payload?.result || payload || {};
 
+    printPayload.value = data;
+    loadedPrintFilters.value = filterSnapshot;
+    loadedPrintContext.value = contextSnapshot;
     sections.value = {
       aset: normalizeList(data.sections?.aset),
       kewajiban: normalizeList(data.sections?.kewajiban),
@@ -140,6 +159,7 @@ async function loadReport() {
       total_lainnya: Number(data.summary?.total_lainnya || 0)
     };
 
+    if (data.warnings?.length) feedback.value = data.warnings.join(' ');
     const rowCount = reportSections.value.reduce((acc, section) => acc + section.rows.length, 0);
     if (!rowCount) {
       feedback.value = 'Belum ada jurnal neraca untuk filter ini.';
@@ -193,6 +213,12 @@ onMounted(async () => {
       title="Neraca"
       description="Laporan posisi keuangan berdasarkan jurnal sampai tanggal tertentu, lengkap dengan validasi Aset = Kewajiban + Ekuitas."
     />
+    <div class="flex flex-wrap items-center gap-3">
+      <button class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="!canPrint" @click="printReport">Cetak / Simpan PDF</button>
+      <span class="text-xs text-slate-500">Cetak seluruh hasil filter. Setelah mengubah filter, muat laporan kembali.</span>
+    </div>
+
+
 
     <section class="panel p-5">
       <div class="grid gap-4 xl:grid-cols-[1.1fr_1.1fr_0.9fr_auto_auto]">

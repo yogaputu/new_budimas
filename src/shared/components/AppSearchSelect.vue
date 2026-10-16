@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, useId, watch } from 'vue';
 import { useAppStore } from '@/app/stores/app';
 
 const props = defineProps({
   modelValue: {
-    type: [String, Number, Array],
+    type: [String, Number, Boolean, Array],
     default: ''
   },
   options: {
@@ -51,19 +51,79 @@ const props = defineProps({
     type: Number,
     default: 0
   },
+  optionPageSize: {
+    type: Number,
+    default: 0
+  },
   clearSearchOnOpen: {
     type: Boolean,
     default: false
-  }
+  },
+  clearable: {
+    type: Boolean,
+    default: true
+  },
+  ariaLabel: { type: String, default: '' },
+  labelledBy: { type: String, default: undefined },
+  inputId: { type: String, default: undefined },
+  dropdownPortal: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['update:modelValue', 'search']);
+const emit = defineEmits(['update:modelValue', 'search', 'focus', 'blur']);
 const app = useAppStore();
 
 const open = ref(false);
 const search = ref('');
 const searchInput = ref(null);
+const anchor = ref(null);
+const listbox = ref(null);
+const dropdownStyle = ref(null);
+const activeIndex = ref(-1);
+const listId = `search-select-${useId()}`;
+const visibleCount = ref(Number(props.optionPageSize) || 0);
 let searchTimer = null;
+let blurTimer = null;
+
+function updateDropdownPosition() {
+  if (!props.dropdownPortal || !open.value || !anchor.value) return;
+  const rect = anchor.value.getBoundingClientRect();
+  const width = Math.min(rect.width, window.innerWidth - 16);
+  const below = window.innerHeight - rect.bottom;
+  const above = rect.top;
+  const upwards = below < 200 && above > below;
+  dropdownStyle.value = {
+    position: 'fixed', width: `${width}px`,
+    left: `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`,
+    top: upwards ? 'auto' : `${rect.bottom + 8}px`,
+    bottom: upwards ? `${window.innerHeight - rect.top + 8}px` : 'auto',
+    maxHeight: `${Math.max(48, Math.min(256, (upwards ? above : below) - 16))}px`
+  };
+}
+
+function stopPositioning() {
+  window.removeEventListener('resize', updateDropdownPosition);
+  window.removeEventListener('scroll', updateDropdownPosition, true);
+  document.removeEventListener('pointerdown', closeOutside, true);
+}
+
+function closeOutside(event) {
+  if (anchor.value?.contains(event.target) || listbox.value?.contains(event.target)) return;
+  open.value = false;
+  search.value = props.multiple ? '' : selectedLabel.value;
+}
+
+watch(open, async value => {
+  stopPositioning();
+  dropdownStyle.value = null;
+  if (!value) return;
+  document.addEventListener('pointerdown', closeOutside, true);
+  if (!props.dropdownPortal) return;
+  await nextTick();
+  if (!open.value) return;
+  updateDropdownPosition();
+  window.addEventListener('resize', updateDropdownPosition);
+  window.addEventListener('scroll', updateDropdownPosition, true);
+});
 
 const controlDisabled = computed(() => props.disabled || (!props.remoteSearch && props.loading));
 
@@ -95,7 +155,7 @@ const selectedOptions = computed(() =>
   props.options.filter((option) => selectedValues.value.includes(String(option.value)))
 );
 
-const hasSelection = computed(() => props.multiple ? selectedOptions.value.length > 0 : Boolean(props.modelValue));
+const hasSelection = computed(() => props.multiple ? selectedOptions.value.length > 0 : selectedValues.value.length > 0);
 
 const selectedLabel = computed(() => {
   if (props.displayValue) return props.displayValue;
@@ -129,12 +189,23 @@ const filteredOptions = computed(() => {
   });
 });
 const displayedOptions = computed(() => {
-  const limit = Number(props.maxVisibleOptions || 0);
+  const limit = props.optionPageSize > 0 ? visibleCount.value : Number(props.maxVisibleOptions || 0);
   if (!limit) {
     return filteredOptions.value;
   }
   return filteredOptions.value.slice(0, limit);
 });
+
+watch([search, open], () => { visibleCount.value = Number(props.optionPageSize) || 0; activeIndex.value = -1; });
+watch(controlDisabled, value => { if (value) open.value = false; });
+
+function interactionDisabled() {
+  return controlDisabled.value || searchInput.value?.matches(':disabled');
+}
+
+function showMoreOptions() {
+  visibleCount.value += Number(props.optionPageSize) || 0;
+}
 
 watch(
   () => props.modelValue,
@@ -168,7 +239,7 @@ function scheduleSearch(value = '') {
 }
 
 function openDropdown() {
-  if (controlDisabled.value) return;
+  if (interactionDisabled()) return;
   if (!open.value && props.clearSearchOnOpen) search.value = '';
   open.value = true;
   if (props.remoteSearch) {
@@ -177,13 +248,13 @@ function openDropdown() {
 }
 
 function handleControlClick(event) {
-  if (controlDisabled.value || event.target?.closest?.('button')) return;
+  if (interactionDisabled() || event.target?.closest?.('button')) return;
   openDropdown();
   searchInput.value?.focus?.();
 }
 
 function toggle() {
-  if (controlDisabled.value) return;
+  if (interactionDisabled()) return;
   open.value = !open.value;
   if (open.value) {
     search.value = props.multiple || props.clearSearchOnOpen ? '' : selectedLabel.value;
@@ -194,7 +265,7 @@ function toggle() {
 }
 
 function selectOption(option) {
-  if (controlDisabled.value) return;
+  if (interactionDisabled() || option.disabled) return;
 
   if (props.multiple) {
     const optionValue = String(option.value);
@@ -222,14 +293,16 @@ function selectOption(option) {
 }
 
 function clearValue() {
-  if (controlDisabled.value) return;
+  if (interactionDisabled()) return;
   emit('update:modelValue', props.multiple ? [] : '');
   search.value = '';
   open.value = false;
 }
 
-function handleBlur() {
-  window.setTimeout(() => {
+function handleBlur(event) {
+  emit('blur', event);
+  window.clearTimeout(blurTimer);
+  blurTimer = window.setTimeout(() => {
     if (props.multiple) {
       search.value = '';
       open.value = false;
@@ -245,25 +318,69 @@ function handleBlur() {
   }, 150);
 }
 
-function handleFocus() {
+function handleFocus(event) {
+  window.clearTimeout(blurTimer);
+  emit('focus', event);
   openDropdown();
 }
+
+function handleInput() {
+  // Selecting keeps focus in the search field; typing again must reopen it.
+  if (!interactionDisabled()) open.value = true;
+}
+
+async function handleKeydown(event) {
+  if (interactionDisabled()) return;
+  if (event.key === 'Escape' || event.key === 'Tab') {
+    if (event.key === 'Escape' && open.value) { event.preventDefault(); event.stopPropagation(); }
+    open.value = false;
+    search.value = props.multiple ? '' : selectedLabel.value;
+    return;
+  }
+  if (event.key === 'Enter' && open.value) {
+    event.preventDefault();
+    const option = displayedOptions.value[activeIndex.value] || displayedOptions.value.find(o => !o.disabled);
+    if (option) selectOption(option);
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+  event.preventDefault();
+  openDropdown();
+  await nextTick();
+  const options = displayedOptions.value;
+  const step = event.key === 'ArrowDown' ? 1 : -1;
+  let index = activeIndex.value < 0 && step < 0 ? options.length : activeIndex.value;
+  for (let count = 0; count < options.length; count++) {
+    index = (index + step + options.length) % options.length;
+    if (!options[index].disabled) {
+      activeIndex.value = index;
+      nextTick(() => listbox.value?.querySelector(`[data-option-index="${index}"]`)?.scrollIntoView({ block: 'nearest' }));
+      break;
+    }
+  }
+}
+
+defineExpose({ focus: () => searchInput.value?.focus() });
 
 function optionSelected(option) {
   return selectedValues.value.includes(String(option.value));
 }
 
 onUnmounted(() => {
+  open.value = false;
   window.clearTimeout(searchTimer);
+  window.clearTimeout(blurTimer);
+  stopPositioning();
 });
 </script>
 
 <template>
-  <label class="block">
+  <component :is="label ? 'label' : 'div'" class="block min-w-0">
     <span v-if="label" :class="['mb-1 block text-xs font-medium uppercase tracking-wide', app.isDark ? 'text-slate-400' : 'text-slate-500']">{{ label }}</span>
 
     <div class="relative min-w-0">
       <div
+        ref="anchor"
         :class="[
           'flex min-h-[46px] min-w-0 items-center gap-2 rounded-xl px-3 py-2.5',
           multiple ? 'flex-wrap' : '',
@@ -300,6 +417,15 @@ onUnmounted(() => {
           ref="searchInput"
           v-model="search"
           type="text"
+          :id="inputId"
+          role="combobox"
+          :aria-label="ariaLabel || label || undefined"
+          :aria-labelledby="labelledBy"
+          :aria-expanded="open"
+          :aria-controls="listId"
+          :aria-activedescendant="activeIndex >= 0 && open ? `${listId}-${activeIndex}` : undefined"
+          aria-autocomplete="list"
+          autocomplete="off"
           :placeholder="multiple && selectedOptions.length ? 'Cari lagi' : placeholder"
           :disabled="controlDisabled"
           :class="[
@@ -309,11 +435,13 @@ onUnmounted(() => {
             app.isDark ? 'text-slate-100 placeholder:text-slate-500' : 'text-slate-900 placeholder:text-slate-400'
           ]"
           @focus="handleFocus"
+          @input="handleInput"
           @blur="handleBlur"
+          @keydown="handleKeydown"
         />
 
         <button
-          v-if="hasSelection"
+          v-if="hasSelection && clearable"
           type="button"
           :disabled="controlDisabled"
           :class="[
@@ -340,26 +468,43 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <Teleport to="body" :disabled="!dropdownPortal">
       <div
-        v-if="open"
+        v-if="open && (!dropdownPortal || dropdownStyle)"
+        ref="listbox"
+        :id="listId"
+        role="listbox"
+        :aria-multiselectable="multiple || undefined"
+        :style="dropdownPortal ? dropdownStyle : undefined"
         :class="[
-          'absolute z-[9999] mt-2 max-h-64 w-full overflow-auto rounded-2xl p-2 shadow-xl',
+          'z-[9999] max-h-64 overflow-auto rounded-2xl p-2 shadow-xl',
+          dropdownPortal ? 'fixed' : 'absolute mt-2 w-full',
           app.isDark
             ? 'border border-slate-700 bg-slate-900'
             : 'border border-slate-200 bg-white'
         ]"
       >
         <button
-          v-for="option in displayedOptions"
+          v-for="(option, index) in displayedOptions"
           :key="option.value"
+          :id="`${listId}-${index}`"
+          role="option"
+          tabindex="-1"
+          :aria-selected="optionSelected(option)"
+          :disabled="controlDisabled || option.disabled"
+          :data-option-index="index"
+          :title="option.label"
           type="button"
           :class="[
             'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors',
+            option.disabled ? 'cursor-not-allowed opacity-50' : '',
+            activeIndex === index ? app.isDark ? 'bg-slate-800' : 'bg-slate-100' : '',
             app.isDark
               ? 'text-slate-100 hover:bg-slate-800'
               : 'text-slate-700 hover:bg-slate-50'
           ]"
-          @mousedown.prevent="selectOption(option)"
+          @mousedown.prevent
+          @click="selectOption(option)"
         >
           <span
             v-if="multiple"
@@ -378,7 +523,13 @@ onUnmounted(() => {
         <div v-if="!displayedOptions.length" :class="['px-3 py-2 text-sm', app.isDark ? 'text-slate-500' : 'text-slate-400']">
           {{ loading ? 'Memuat...' : emptyText }}
         </div>
+        <button v-if="optionPageSize > 0 && displayedOptions.length < filteredOptions.length" type="button"
+          :class="['mt-1 w-full rounded-xl px-3 py-3 text-left text-sm font-semibold', app.isDark ? 'text-brand-200 hover:bg-slate-800' : 'text-brand-700 hover:bg-brand-50']"
+          @mousedown.prevent @click="showMoreOptions">
+          Tampilkan {{ optionPageSize }} berikutnya · {{ displayedOptions.length.toLocaleString('id-ID') }} / {{ filteredOptions.length.toLocaleString('id-ID') }} pilihan
+        </button>
       </div>
+      </Teleport>
     </div>
-  </label>
+  </component>
 </template>

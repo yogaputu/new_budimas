@@ -1,4 +1,5 @@
 <script setup>
+import ProductUomFields from '@/shared/components/ProductUomFields.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   confirmCanvasRequest,
@@ -36,6 +37,7 @@ import {
 } from '@/modules/sales-canvas/utils/canvasFormat';
 import {
   canvasPieces,
+  canvasUoms,
   canvasUomValue,
   formatCanvasQty,
   formatCanvasUomLabel,
@@ -201,7 +203,7 @@ const productOptions = computed(() =>
 const validRequestItems = computed(() =>
   requestItems.value.filter((item) =>
     item.id_produk &&
-    canvasPieces(getSelectedProduct(item.id_produk), item.qty_uom1, item.qty_uom2, item.qty_uom3) > 0
+    canvasPieces(getSelectedProduct(item.id_produk), item) > 0
   )
 );
 
@@ -984,18 +986,7 @@ onMounted(async () => {
               empty-text="Produk canvas belum tersedia."
               @update:model-value="updateRequestProduct(item, $event)"
             />
-            <label class="block">
-              <span class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ requestUomLabel(item, 1) }}</span>
-              <input :value="item.qty_uom1" type="number" min="0" step="1" inputmode="numeric" class="field mt-1" :disabled="!isRequestUomEnabled(item, 1)" @input="updateRequestQty(item, 1, $event.target.value)" />
-            </label>
-            <label class="block">
-              <span class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ requestUomLabel(item, 2) }}</span>
-              <input :value="item.qty_uom2" type="number" min="0" step="1" inputmode="numeric" class="field mt-1" :disabled="!isRequestUomEnabled(item, 2)" @input="updateRequestQty(item, 2, $event.target.value)" />
-            </label>
-            <label class="block">
-              <span class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{{ requestUomLabel(item, 3) }}</span>
-              <input :value="item.qty_uom3" type="number" min="0" step="1" inputmode="numeric" class="field mt-1" :disabled="!isRequestUomEnabled(item, 3)" @input="updateRequestQty(item, 3, $event.target.value)" />
-            </label>
+            <ProductUomFields class="md:col-span-2 xl:col-span-4" :product="getSelectedProduct(item.id_produk) || {}" :values="item" @change="updateRequestQty(item, $event.level, $event.value)" />
             <div class="rounded-2xl border border-slate-200 p-4 text-sm dark:border-slate-700">
               <p class="font-bold text-slate-900 dark:text-white">Info Produk</p>
               <p class="mt-1 text-slate-500 dark:text-slate-400">Stok gudang: {{ Number(getSelectedProduct(item.id_produk)?.stock_gudang || 0).toLocaleString('id-ID') }} pcs</p>

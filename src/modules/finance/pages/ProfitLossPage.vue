@@ -1,4 +1,5 @@
 <script setup>
+import { profitLossHtml, reportContext, showFinancialPrint } from '@/utils/financialReportPrint';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { getBranches, getCompanies } from '@/api/master';
 import { getProfitLoss } from '@/api/finance';
@@ -98,8 +99,22 @@ const reportSections = computed(() => [
   { key: 'pendapatan', title: 'Pendapatan / Penjualan', rows: sections.value.pendapatan || [], total: summary.value.total_pendapatan, totalLabel: 'Total Pendapatan' },
   { key: 'hpp', title: 'Harga Pokok Penjualan', rows: sections.value.hpp || [], total: summary.value.total_hpp, totalLabel: 'Total HPP' },
   { key: 'beban', title: 'Beban / Biaya Operasional', rows: sections.value.beban || [], total: summary.value.total_beban, totalLabel: 'Total Beban' },
+  { key: 'pendapatan_lain', title: 'Pendapatan Lainnya', rows: sections.value.pendapatan_lain || [], total: summary.value.total_pendapatan_lain || 0, totalLabel: 'Total Pendapatan Lainnya' },
+  { key: 'beban_lain', title: 'Beban Lainnya', rows: sections.value.beban_lain || [], total: summary.value.total_beban_lain || 0, totalLabel: 'Total Beban Lainnya' },
   { key: 'lainnya', title: 'Akun Lainnya Belum Terklasifikasi', rows: sections.value.lainnya || [], total: summary.value.total_lainnya, totalLabel: 'Total Lainnya' }
 ]);
+
+
+const printPayload = ref(null);
+const loadedPrintContext = ref(null);
+const loadedPrintFilters = ref('');
+const canPrint = computed(() => !!printPayload.value && !loading.report && loadedPrintFilters.value === JSON.stringify(filters));
+function printReport() {
+  if (!canPrint.value) return;
+  const html = profitLossHtml({ ...loadedPrintContext.value, printedAt: new Date().toLocaleString('id-ID') }, printPayload.value);
+  if (!showFinancialPrint('Laba Rugi', html)) errorMessage.value = 'Izinkan pop-up untuk membuka pratinjau cetak.';
+}
+
 
 function formatCurrency(value) {
   const amount = Number(value || 0);
@@ -128,6 +143,9 @@ async function loadReferences() {
 }
 
 async function loadReport() {
+  const filterSnapshot = JSON.stringify(filters);
+  const contextSnapshot = reportContext(filters, companyRows.value, branchRows.value, authStore.user);
+  printPayload.value = null;
   loading.report = true;
   feedback.value = '';
   errorMessage.value = '';
@@ -143,10 +161,15 @@ async function loadReport() {
     const payload = unwrapResponse(response);
     const data = payload?.result || payload || {};
 
+    printPayload.value = data;
+    loadedPrintFilters.value = filterSnapshot;
+    loadedPrintContext.value = contextSnapshot;
     sections.value = {
       pendapatan: normalizeList(data.sections?.pendapatan),
       hpp: normalizeList(data.sections?.hpp),
       beban: normalizeList(data.sections?.beban),
+      pendapatan_lain: normalizeList(data.sections?.pendapatan_lain),
+      beban_lain: normalizeList(data.sections?.beban_lain),
       lainnya: normalizeList(data.sections?.lainnya)
     };
     summary.value = {
@@ -154,6 +177,9 @@ async function loadReport() {
       total_hpp: Number(data.summary?.total_hpp || 0),
       laba_kotor: Number(data.summary?.laba_kotor || 0),
       total_beban: Number(data.summary?.total_beban || 0),
+      laba_operasional: Number(data.summary?.laba_operasional || 0),
+      total_pendapatan_lain: Number(data.summary?.total_pendapatan_lain || 0),
+      total_beban_lain: Number(data.summary?.total_beban_lain || 0),
       laba_bersih: Number(data.summary?.laba_bersih || 0),
       total_lainnya: Number(data.summary?.total_lainnya || 0)
     };
@@ -224,6 +250,12 @@ onMounted(async () => {
       title="Laba Rugi"
       description="Ringkasan pendapatan, HPP, beban, dan laba bersih dengan pilihan metode HPP jurnal, FIFO, atau moving average."
     />
+    <div class="flex flex-wrap items-center gap-3">
+      <button class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" :disabled="!canPrint" @click="printReport">Cetak / Simpan PDF</button>
+      <span class="text-xs text-slate-500">Cetak seluruh hasil filter. Setelah mengubah filter, muat laporan kembali.</span>
+    </div>
+
+
 
     <section class="panel p-5">
       <div class="grid gap-4 xl:grid-cols-[1.1fr_1.1fr_0.9fr_0.9fr_1fr_auto_auto]">

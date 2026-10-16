@@ -40,7 +40,7 @@ try {
   await branch.click();
   await page.getByRole('button', { name: 'SLO - Solo', exact: true }).click();
   await page.getByPlaceholder('Pilih perusahaan', { exact: true }).last().click();
-  await page.getByRole('button', { name: 'BMM - Perusahaan', exact: true }).click();
+  await page.getByRole('option', { name: 'BMM - Perusahaan', exact: true }).click();
   const customer = page.getByPlaceholder('Pilih customer', { exact: true });
   await customer.fill('Customer baru');
   await page.getByRole('button', { name: 'NEW - Customer baru', exact: true }).waitFor();

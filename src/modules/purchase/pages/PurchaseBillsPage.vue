@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getBranches, getCompanies, getPrincipals } from '@/api/master';
@@ -26,6 +27,7 @@ import AppFormField from '@/shared/components/AppFormField.vue';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
+import PrincipalCreditPayment from '../components/PrincipalCreditPayment.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -261,6 +263,17 @@ const selectedPayableMeta = computed(() => {
 
 const paymentHistoryRows = computed(() => {
   if (!selectedPayable.value) return [];
+  const payable = selectedPayable.value;
+  if (Number(payable.principal_credit_amount || 0) > 0) {
+    return [
+      { row_key: `${payable.surat_tagihan}-claim`, tanggal_bayar: payable.tanggal_bayar,
+        nominal_label: formatCurrency(payable.principal_credit_amount), status_label: resolveBillStatus(payable.status_bayar),
+        metode: 'Potongan klaim principal', keterangan: `Potongan klaim principal · ${payable.keterangan || ''}` },
+      ...(Number(payable.cash_payment_amount || 0) > 0 ? [{ row_key: `${payable.surat_tagihan}-cash`, tanggal_bayar: payable.tanggal_bayar,
+        nominal_label: formatCurrency(payable.cash_payment_amount), status_label: resolveBillStatus(payable.status_bayar),
+        metode: payable.tipe_setoran, keterangan: `Uang dibayar (${payable.tipe_setoran}) · ${payable.keterangan || ''}` }] : [])
+    ];
+  }
   return [
     {
       row_key: `${selectedPayable.value.id_tagihan || selectedPayable.value.surat_tagihan}-history`,
@@ -440,6 +453,7 @@ function resetPaymentForm() {
 }
 
 async function loadPrincipals() {
+  if (typeof route.query.search === 'string') filters.search = route.query.search;
   const [companyResponse, branchResponse, principalResponse] = await Promise.all([getCompanies(), getBranches(), getPrincipals()]);
   companyRows.value = normalizeList(unwrapResponse(companyResponse));
   branchRows.value = normalizeList(unwrapResponse(branchResponse));
@@ -571,6 +585,14 @@ async function openPayable(row) {
 
 function closePayableModal() {
   payableModalOpen.value = false;
+}
+
+async function refreshAfterClaimPayment() {
+  const number = selectedPayable.value?.surat_tagihan;
+  await loadAll();
+  const updated = payableRows.value.find(item => item.surat_tagihan === number);
+  if (updated) selectedPayable.value = updated;
+  else { selectedPayable.value = null; payableModalOpen.value = false; }
 }
 
 function toggleCandidate(row) {
@@ -1011,9 +1033,10 @@ watch(
           </div>
         </div>
 
+        <PrincipalCreditPayment v-if="selectedPayable?.surat_tagihan" :number="selectedPayable.surat_tagihan" :unpaid="canSubmitPayment" @paid="refreshAfterClaimPayment" />
         <div class="rounded-2xl border border-slate-200 px-4 py-4">
           <div class="mb-3">
-            <h4 class="text-sm font-semibold text-slate-900">Input Pembayaran Tagihan</h4>
+            <h4 class="text-sm font-semibold text-slate-900">Input Pembayaran Tagihan (Tanpa Klaim)</h4>
             <p class="mt-1 text-xs text-slate-500">Pelunasan penuh akan mengunci tagihan dan transaksi sumber, mencatat audit Finance, lalu mengirim jurnal pembayaran.</p>
           </div>
 
@@ -1021,12 +1044,12 @@ watch(
             <AppFormField v-model="paymentForm.tanggal_bayar" label="Tanggal Bayar" type="date" />
             <label class="block">
               <span class="mb-1.5 block text-sm font-medium text-slate-700">Metode Pembayaran</span>
-              <select v-model="paymentForm.tipe_setoran" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-400">
+              <AppSelect2 aria-label="Metode Pembayaran" v-model="paymentForm.tipe_setoran" >
                 <option value="TRANSFER">Transfer</option>
                 <option value="TUNAI">Tunai</option>
                 <option value="GIRO">Bilyet Giro</option>
                 <option value="LAINNYA">Lainnya</option>
-              </select>
+              </AppSelect2>
             </label>
             <AppFormField v-model="paymentForm.keterangan" label="Keterangan Pembayaran" placeholder="Catatan pembayaran / referensi transfer" />
           </div>

@@ -165,7 +165,11 @@ function formatDateLabel(value) {
 }
 
 function resolveJournalDetailRows(row) {
-  return Array.isArray(row?.info_jurnal) ? row.info_jurnal : [];
+  return debitFirst(Array.isArray(row?.info_jurnal) ? row.info_jurnal : []);
+}
+
+function debitFirst(lines) {
+  return [...lines].sort((a,b)=>Number(Number(b.debit||0)>0)-Number(Number(a.debit||0)>0));
 }
 
 function resolveJournalSummary(row) {
@@ -342,7 +346,7 @@ async function openDetail(row) {
         : [];
 
     selectedDetailMeta.value = payload && typeof payload === 'object' ? payload : response?.data || null;
-    selectedDetail.value = detailInfo;
+    selectedDetail.value = debitFirst(detailInfo);
   } catch (error) {
     if (requestId !== detailRequestId) return;
     selectedDetailMeta.value = null;

@@ -13,7 +13,7 @@ const suggestions = ref({}), notice = ref(''), linkBusy = ref(false);
 let requestId = 0;
 const options = computed(() => accounts.value.map(a => ({ value: String(a.id_coa), label: `${a.nomor_akun} — ${a.nama_akun} (${a.nama_kategori})` })));
 const validIds = computed(() => new Set(options.value.map(a => a.value)));
-const complete = computed(() => roles.value.length === 10 && roles.value.every(r => validIds.value.has(mapping[r.kind])));
+const complete = computed(() => roles.value.length > 0 && roles.value.every(r => validIds.value.has(mapping[r.kind])));
 async function load() {
   const current = ++requestId;
   error.value = ''; success.value = ''; roles.value = []; accounts.value = [];
@@ -61,7 +61,7 @@ function suggest() {
     <p v-if="company && !loading && roles.length" class="text-sm text-slate-500 dark:text-slate-300">Nomor otomatis: nomor induk-P[ID principal]-[jenis akun]. Nama: jenis akun - nama principal. Akun induk harus mencakup cabang yang dipilih pada principal.</p>
     <p v-if="error" role="alert" class="text-rose-500">{{ error }}</p>
     <p v-if="success" role="status" class="text-emerald-600">{{ success }}</p>
-    <button class="rounded-xl bg-brand-600 px-4 py-2 text-white disabled:opacity-50" :disabled="saving || loading || linkBusy || !complete" @click="save">{{ saving ? 'Menyimpan…' : 'Simpan 10 Pemetaan' }}</button>
+    <button class="rounded-xl bg-brand-600 px-4 py-2 text-white disabled:opacity-50" :disabled="saving || loading || linkBusy || !complete" @click="save">{{ saving ? 'Menyimpan…' : `Simpan ${roles.length} Pemetaan` }}</button>
     <PrincipalExistingCoa v-if="company && !loading && !saving" :key="company" :company="company" :principals="principals" :roles="roles" @busy="linkBusy = $event" @saved="emit('saved')" />
   </div>
 </template>

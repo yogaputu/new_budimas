@@ -611,12 +611,8 @@ async function remove() {
   feedback.value = '';
   actionError.value = '';
   try {
-    for (const item of assignmentRows.value) {
-      await deleteSalesPrincipalAssignment(item.id);
-    }
-    if (detailRow.value?.id) {
-      await deleteSalesDetail(detailRow.value.id);
-    }
+    // The API deletes owned details atomically with the Sales record.
+    // A rejected parent delete must leave all assignments untouched.
     await deleteSales(salesId);
     modalOpen.value = false;
     await load();

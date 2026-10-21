@@ -553,7 +553,7 @@ async function selectInvoice(row) {
     const payload = unwrapResponse(response) || {};
     const detail = extractInvoiceDetail(payload);
     invoiceHeader.value = detail.header;
-    detailRows.value = detail.rows.map(normalizeDetailRow);
+    detailRows.value = detail.rows.filter(item => !item.accounting_frozen).map(normalizeDetailRow);
     if (invoiceHeader.value.picking_revision) {
       for (const item of detailRows.value) {
         if (item.picking_actual_pcs == null) continue;
@@ -721,6 +721,7 @@ watch(
     </section>
 
     <section class="panel p-5">
+      <p v-if="invoiceHeader.accounting_frozen_orders?.length" class="mb-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">SO anak yang sudah selesai dan berjurnal dikunci. Formulir ini hanya menampilkan bagian yang menunggu revisi; nilai bagian yang sudah final tetap dipertahankan pada total faktur.</p>
       <p v-if="invoiceHeader.picking_revision" class="mb-4 rounded-xl bg-amber-50 p-4 font-semibold text-amber-800">Revisi kekurangan picking: qty disiapkan sesuai fisik picked. Periksa harga dan diskon. Qty di atas picked akan menunggu picking stok susulan. Nota seluruhnya 0 PCS tetap ditahan; tidak otomatis dibatalkan atau dianggap terkirim.</p>
       <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto]">
         <AppSearchSelect

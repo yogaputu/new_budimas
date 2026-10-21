@@ -1,11 +1,8 @@
 <script setup>
-import AppSelect2 from '@/shared/components/AppSelect2.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getBranches, getCompanies, getPrincipals } from '@/api/master';
 import {
-  createPurchaseBill,
-  createPurchaseBillPayment,
   getPurchaseBillCandidateTransactions,
   getPurchaseBillDetail,
   getPurchaseBillingQueue,
@@ -23,14 +20,14 @@ import {
 } from '@/modules/purchase/utils/purchaseScope';
 import { useAuthStore } from '@/stores/auth';
 import AppFilterBar from '@/shared/components/AppFilterBar.vue';
-import AppFormField from '@/shared/components/AppFormField.vue';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
-import PrincipalCreditPayment from '../components/PrincipalCreditPayment.vue';
+import PurchasePaymentPlan from '../components/PurchasePaymentPlan.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();
+const paymentPlanOpen = ref(false);
 
 const filters = reactive({
   branchId: '',
@@ -66,14 +63,7 @@ const successToast = ref('');
 const selectedPayable = ref(null);
 const payableModalOpen = ref(false);
 const selectedCandidateIds = ref([]);
-const paymentProofFile = ref(null);
 let toastTimer = null;
-
-const paymentForm = reactive({
-  tanggal_bayar: '',
-  tipe_setoran: 'TRANSFER',
-  keterangan: ''
-});
 const fallbackBranchId = computed(() => getPurchaseFallbackBranchId(authStore));
 const fallbackCompanyId = computed(() => getPurchaseFallbackCompanyId(authStore));
 const canAccessAllBranches = computed(() => canAccessAllPurchaseBranches(authStore));
@@ -445,13 +435,6 @@ function resetBuilderSelection() {
   selectedCandidateIds.value = [];
 }
 
-function resetPaymentForm() {
-  paymentForm.tanggal_bayar = '';
-  paymentForm.tipe_setoran = 'TRANSFER';
-  paymentForm.keterangan = '';
-  paymentProofFile.value = null;
-}
-
 async function loadPrincipals() {
   if (typeof route.query.search === 'string') filters.search = route.query.search;
   const [companyResponse, branchResponse, principalResponse] = await Promise.all([getCompanies(), getBranches(), getPrincipals()]);
@@ -570,7 +553,6 @@ async function openPayable(row) {
   selectedPayable.value = row;
   payableModalOpen.value = true;
   payableDetailRows.value = [];
-  resetPaymentForm();
   loading.payableDetail = true;
   try {
     const response = await getPurchaseBillDetail(row.surat_tagihan);
@@ -632,79 +614,14 @@ async function submitCreateBill() {
     return;
   }
 
-  loading.submit = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-  try {
-    const payload = {
-      purchase_transaksis: candidateRows.value
-        .filter((item) => selectedCandidateIds.value.includes(String(item.id_purchase_transaksi)))
-        .map((item) => ({
-          id_purchase_transaksi: item.id_purchase_transaksi,
-          subtotal: item.subtotal
-        }))
-    };
-    await createPurchaseBill(payload);
-    successMessage.value = 'Tagihan purchase berhasil dibuat dari transaksi terpilih.';
-    showToast(successMessage.value);
-    await Promise.all([loadAll(), loadCandidateTransactions()]);
-    selectedPayable.value = null;
-    payableModalOpen.value = false;
-  } catch (error) {
-    errorMessage.value = normalizeError(error, 'Tagihan purchase belum berhasil dibuat.');
-  } finally {
-    loading.submit = false;
-  }
+  paymentPlanOpen.value = true;
 }
 
-function onPaymentProofChange(event) {
-  const [file] = event?.target?.files || [];
-  paymentProofFile.value = file || null;
-}
-
-async function submitPayment() {
-  if (!selectedPayable.value) {
-    errorMessage.value = 'Pilih tagihan purchase terlebih dahulu.';
-    return;
-  }
-  if (!canSubmitPayment.value) {
-    errorMessage.value = 'Tagihan ini sudah dibayar atau tidak valid untuk pembayaran.';
-    return;
-  }
-  if (!paymentForm.tanggal_bayar) {
-    errorMessage.value = 'Tanggal bayar wajib diisi.';
-    return;
-  }
-
-  loading.payment = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-  try {
-    const formData = new FormData();
-    formData.append('no_tagihan', selectedPayable.value.surat_tagihan);
-    formData.append('tanggal_bayar', paymentForm.tanggal_bayar);
-    formData.append('tipe_setoran', paymentForm.tipe_setoran);
-    formData.append('keterangan', paymentForm.keterangan || '');
-    if (paymentProofFile.value) {
-      formData.append('bukti_bayar', paymentProofFile.value);
-    }
-
-    await createPurchaseBillPayment(formData);
-    successMessage.value = `Pembayaran tagihan ${selectedPayable.value.surat_tagihan} berhasil diproses.`;
-    showToast(successMessage.value);
-    await loadAll();
-    const refreshed = payableRows.value.find((item) => item.surat_tagihan === selectedPayable.value?.surat_tagihan);
-    if (refreshed) {
-      await openPayable(refreshed);
-    } else {
-      selectedPayable.value = null;
-      payableDetailRows.value = [];
-    }
-  } catch (error) {
-    errorMessage.value = normalizeError(error, 'Pembayaran tagihan purchase belum berhasil diproses.');
-  } finally {
-    loading.payment = false;
-  }
+async function paymentPlanCreated(plan) {
+  paymentPlanOpen.value = false;
+  selectedCandidateIds.value = [];
+  await Promise.all([loadAll(), loadCandidateTransactions()]);
+  successMessage.value = `Pengajuan ${plan.no_tagihan} tersimpan. Cocokkan KU saat pelunasan.`;
 }
 
 function ensurePrintableBill() {
@@ -912,8 +829,8 @@ watch(
     </div>
 
     <PageHeader
-      title="Tagihan Purchase Order"
-      description="Monitoring hutang purchase yang sudah terbentuk, daftar transaksi siap tagihan, dan alur pembuatan tagihan purchase yang tervalidasi berdasarkan scope serta audit Finance."
+      title="Tagihan & Pengajuan Pembayaran PO"
+      description="Susun pembayaran per principal dari beberapa nota, pilih komposisi dana, lalu cocokkan Kas/Bank dengan KU bank keluar sebelum pelunasan."
     />
 
     <AppFilterBar :model-value="filters" :fields="filterFields" @update:model-value="updateFilters" @submit="loadPayables" @reset="resetFilters" />
@@ -1033,44 +950,7 @@ watch(
           </div>
         </div>
 
-        <PrincipalCreditPayment v-if="selectedPayable?.surat_tagihan" :number="selectedPayable.surat_tagihan" :unpaid="canSubmitPayment" @paid="refreshAfterClaimPayment" />
-        <div class="rounded-2xl border border-slate-200 px-4 py-4">
-          <div class="mb-3">
-            <h4 class="text-sm font-semibold text-slate-900">Input Pembayaran Tagihan (Tanpa Klaim)</h4>
-            <p class="mt-1 text-xs text-slate-500">Pelunasan penuh akan mengunci tagihan dan transaksi sumber, mencatat audit Finance, lalu mengirim jurnal pembayaran.</p>
-          </div>
-
-          <div class="grid gap-3 md:grid-cols-3">
-            <AppFormField v-model="paymentForm.tanggal_bayar" label="Tanggal Bayar" type="date" />
-            <label class="block">
-              <span class="mb-1.5 block text-sm font-medium text-slate-700">Metode Pembayaran</span>
-              <AppSelect2 aria-label="Metode Pembayaran" v-model="paymentForm.tipe_setoran" >
-                <option value="TRANSFER">Transfer</option>
-                <option value="TUNAI">Tunai</option>
-                <option value="GIRO">Bilyet Giro</option>
-                <option value="LAINNYA">Lainnya</option>
-              </AppSelect2>
-            </label>
-            <AppFormField v-model="paymentForm.keterangan" label="Keterangan Pembayaran" placeholder="Catatan pembayaran / referensi transfer" />
-          </div>
-          <div class="mt-3">
-            <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Bukti Bayar</label>
-            <input type="file" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none" @change="onPaymentProofChange" />
-            <p class="mt-2 text-xs text-slate-500">{{ paymentProofFile?.name || 'Belum ada file dipilih.' }}</p>
-          </div>
-          <div class="mt-4 flex flex-wrap gap-3">
-            <button
-              class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white"
-              :disabled="loading.payment || !canSubmitPayment"
-              @click="submitPayment"
-            >
-              {{ loading.payment ? 'Memproses...' : 'Proses Pembayaran' }}
-            </button>
-            <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="resetPaymentForm">
-              Reset Form
-            </button>
-          </div>
-        </div>
+        <PurchasePaymentPlan v-if="selectedPayable?.surat_tagihan" :key="selectedPayable.surat_tagihan" :bill-number="selectedPayable.surat_tagihan" @updated="refreshAfterClaimPayment" />
       </div>
     </AppModal>
 
@@ -1172,7 +1052,7 @@ watch(
           :disabled="loading.submit || !canCreateBill"
           @click="submitCreateBill"
         >
-          {{ loading.submit ? 'Memproses...' : 'Buat Tagihan Purchase Order' }}
+          {{ loading.submit ? 'Memproses...' : 'Ajukan Pembayaran ke Principal' }}
         </button>
         <button class="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700" @click="loadAll">
           Refresh Tagihan
@@ -1199,6 +1079,10 @@ watch(
         />
       </section>
     </section>
+
+    <AppModal :open="paymentPlanOpen" title="Pengajuan Pembayaran PO" size="6xl" @close="paymentPlanOpen=false">
+      <PurchasePaymentPlan v-if="paymentPlanOpen" :receipt-ids="selectedCandidateIds" @created="paymentPlanCreated" />
+    </AppModal>
 
     <section class="space-y-3">
       <h3 class="text-lg font-semibold text-slate-900">Transaksi Proses Tagihan</h3>

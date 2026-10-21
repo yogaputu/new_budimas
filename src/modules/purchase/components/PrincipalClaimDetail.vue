@@ -35,7 +35,14 @@ async function loadBills() {
       <div class="workflow-inset"><small class="workflow-caption">Disetujui</small><p class="mt-2 text-lg font-semibold tabular-nums">{{ rupiah(claim.approved_amount) }}</p><small class="workflow-caption">{{ claimMethod[claim.approved_method] || 'Belum ada keputusan' }}</small></div>
     </div>
     <p v-if="claim.status === 'APPROVED'" class="workflow-notice workflow-notice-warning">{{ claim.settlement_status === 'SEBAGIAN_DIPAKAI' ? 'Sebagian saldo klaim sudah dipakai.' : 'Approval bukan bukti pelunasan atau penerimaan stok.' }} {{ claim.approved_method === 'CREDIT' ? 'Gunakan saldo melalui pembayaran Tagihan Purchase Order.' : 'Catat penerimaan aktual melalui Klaim Principal. Barang pengganti masuk Titipan sebelum penempatan WMS.' }}</p>
-    <section v-if="claim.approved_method === 'CREDIT' && claim.credit_remaining !== undefined"><h3 class="font-semibold">Sisa potongan: {{ rupiah(claim.credit_remaining) }}</h3><p v-for="(use, i) in claim.credit_uses" :key="i" class="mt-2 text-sm">{{ use.no_tagihan }} · {{ rupiah(use.amount) }} · {{ use.payment_date }} · Jurnal #{{ use.id_jurnal }}</p></section>
+    <section v-if="claim.approved_method === 'CREDIT' && claim.credit_remaining !== undefined">
+      <h3 class="font-semibold">Sisa potongan tersedia: {{ rupiah(claim.credit_remaining) }}</h3>
+      <p v-for="(use, i) in claim.credit_uses" :key="'legacy-'+i" class="mt-2 text-sm">{{ use.no_tagihan }} · {{ rupiah(use.amount) }} · {{ use.payment_date }} · Jurnal #{{ use.id_jurnal }}</p>
+      <p v-for="use in claim.payment_request_uses" :key="use.payment_request_id" class="mt-2 text-sm">
+        {{use.no_tagihan}} · {{rupiah(use.amount)}} · {{use.status==='SUBMITTED'?'Ditahan pengajuan — belum dibayar':'Sudah digunakan'}}
+        <span v-if="use.id_jurnal"> · {{use.paid_date}} · Jurnal #{{use.id_jurnal}}</span>
+      </p>
+    </section>
     <p>Catatan pengajuan: {{ claim.note || '—' }}</p>
     <p v-if="claim.decision_note">Keputusan principal: {{ claim.decision_note }} · Referensi {{ claim.approval_reference || '—' }}</p>
     <div v-if="claim.kind==='PROMO'" class="overflow-x-auto workflow-table-wrap"><table class="w-full text-left text-sm workflow-table">

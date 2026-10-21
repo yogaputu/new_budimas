@@ -19,6 +19,8 @@ import {
 } from '@/modules/purchase/utils/purchaseScope';
 import AppFilterBar from '@/shared/components/AppFilterBar.vue';
 import AppFormField from '@/shared/components/AppFormField.vue';
+import AppSelect2 from '@/shared/components/AppSelect2.vue';
+import { purchasePricing } from '../utils/purchasePricing';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppTable from '@/shared/components/AppTable.vue';
 import PageHeader from '@/shared/components/PageHeader.vue';
@@ -38,9 +40,11 @@ const filters = reactive({
 
 const form = reactive({
   jatuh_tempo: '',
-  potongan: '',
+  discount_type: 'AMOUNT',
+  discount_value: '',
   biaya_lainnya: ''
 });
+const lineDiscounts = reactive({});
 
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -148,29 +152,18 @@ const detailRows = computed(() =>
   }))
 );
 
-const projectedTotal = computed(() => {
-  const subtotal = Number(selectedDetail.value?.subtotal || selectedRow.value?.subtotal || 0);
-  const potongan = Number(form.potongan || 0);
-  const biayaLain = Number(form.biaya_lainnya || 0);
-  const beforePpn = subtotal - potongan;
-  const ppn = beforePpn * 0.11;
-  return beforePpn + ppn + biayaLain;
-});
-
-const projectedBreakdown = computed(() => {
-  const subtotal = Number(selectedDetail.value?.subtotal || selectedRow.value?.subtotal || 0);
-  const potongan = Number(form.potongan || 0);
-  const biayaLain = Number(form.biaya_lainnya || 0);
-  const dpp = Math.max(0, subtotal - potongan);
-  const ppn = dpp * 0.11;
-  return {
-    subtotal,
-    potongan,
-    biayaLain,
-    dpp,
-    ppn,
-    total: dpp + ppn + biayaLain
-  };
+const projectedBreakdown = computed(() => purchasePricing(detailRows.value, form, lineDiscounts));
+const pricedRows = computed(() => detailRows.value.map(row => ({ ...row,
+  pricing: projectedBreakdown.value.lines.find(p => p.detail_id === Number(row.detail_id ?? row.id)) || {}
+})));
+const totalCards = computed(() => {
+  const p = projectedBreakdown.value;
+  return [
+    ['DPP sebelum diskon', p.dpp_gross], ['Diskon produk', p.product_discount_total],
+    ['Diskon keseluruhan', p.header_discount_amount], ['Total diskon', p.discount_total],
+    ['DPP bersih', p.dpp_net], ['PPN setelah diskon', p.ppn], ['Biaya lainnya', p.other_cost],
+    ['Total tagihan', p.total]
+  ].map(([label, value]) => ({ label, value: formatCurrency(value) }));
 });
 
 const canConfirm = computed(() => canProcessPurchaseAction.value && Number(selectedRow.value?.proses_id_berjalan || selectedDetail.value?.proses_id_berjalan || 0) === 2);
@@ -215,14 +208,21 @@ function resetFilters() {
 
 function resetForm() {
   form.jatuh_tempo = '';
-  form.potongan = '';
+  form.discount_type = 'AMOUNT';
+  form.discount_value = '';
   form.biaya_lainnya = '';
+  for (const key of Object.keys(lineDiscounts)) delete lineDiscounts[key];
+  for (const row of detailRows.value) lineDiscounts[row.detail_id ?? row.id] = { discount_type: 'AMOUNT', discount_value: '' };
 }
 
 function hydrateFormFromDetail() {
   form.jatuh_tempo = selectedDetail.value?.jatuh_tempo || '';
-  form.potongan = Number(selectedDetail.value?.potongan || 0) ? String(selectedDetail.value.potongan) : '';
+  form.discount_type = selectedDetail.value?.financials?.discount_type || 'AMOUNT';
+  form.discount_value = selectedDetail.value?.financials?.discount_value || '';
   form.biaya_lainnya = Number(selectedDetail.value?.biaya_lainnya || 0) ? String(selectedDetail.value.biaya_lainnya) : '';
+  for (const row of detailRows.value) lineDiscounts[row.detail_id ?? row.id] = {
+    discount_type: row.discount_type || 'AMOUNT', discount_value: row.discount_value || ''
+  };
 }
 
 async function loadMeta() {
@@ -344,12 +344,8 @@ async function submitConfirmation() {
     errorMessage.value = 'Jatuh tempo wajib diisi sebelum konfirmasi purchase.';
     return;
   }
-  if (Number(form.potongan || 0) < 0 || Number(form.biaya_lainnya || 0) < 0) {
-    errorMessage.value = 'Potongan dan biaya lainnya tidak boleh bernilai negatif.';
-    return;
-  }
-  if (Number(form.potongan || 0) > Number(selectedDetail.value?.subtotal || selectedRow.value?.subtotal || 0)) {
-    errorMessage.value = 'Potongan tidak boleh lebih besar dari subtotal transaksi.';
+  if (projectedBreakdown.value.error) {
+    errorMessage.value = projectedBreakdown.value.error;
     return;
   }
 
@@ -362,8 +358,11 @@ async function submitConfirmation() {
       user_id: normalizeNullableNumber(authStore.user?.id ?? authStore.user?.id_user),
       user_jabatan_id: normalizeNullableNumber(authStore.user?.id_jabatan ?? authStore.user?.jabatan_id),
       jatuh_tempo: form.jatuh_tempo || undefined,
-      potongan: Number(form.potongan || 0),
-      biaya_lainnya: Number(form.biaya_lainnya || 0)
+      discount_type: form.discount_type,
+      discount_value: String(form.discount_value || 0),
+      line_discounts: Object.entries(lineDiscounts).map(([id, value]) => ({ detail_id: Number(id),
+        discount_type: value.discount_type, discount_value: String(value.discount_value || 0) })),
+      biaya_lainnya: String(form.biaya_lainnya || 0)
     });
     successMessage.value = `Transaksi ${selectedRow.value.no_transaksi || selectedRow.value.id} berhasil dikonfirmasi purchase.`;
     showToast(successMessage.value);
@@ -461,7 +460,7 @@ onMounted(async () => {
         Detail transaksi belum tersedia.
       </div>
 
-      <div v-else class="space-y-5">
+      <div v-else class="purchase-finalization-detail space-y-5">
           <div
             :class="[
               'rounded-2xl border px-4 py-3 text-sm',
@@ -473,62 +472,90 @@ onMounted(async () => {
             {{ statusHint }}
           </div>
 
-          <div class="grid gap-3 md:grid-cols-2">
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Subtotal</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.subtotal) }}</p>
-            </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Estimasi Total</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.total) }}</p>
-            </div>
+          <div class="rounded-2xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-800 dark:border-brand-800 dark:bg-brand-950 dark:text-brand-100">
+            Diskon produk dihitung lebih dahulu. Diskon keseluruhan dihitung dari sisa DPP setelah diskon produk,
+            lalu dialokasikan proporsional. PPN mengikuti tarif tiap produk dari DPP bersih.
+            Diskon rupiah produk adalah total potongan baris tersebut, bukan potongan per PCS.
+            Jumlah dan harga penerimaan diverifikasi ulang oleh server saat finalisasi.
           </div>
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <AppFormField v-model="form.jatuh_tempo" label="Jatuh Tempo" type="date" :readonly="!canConfirm" />
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Jenis diskon keseluruhan
+              <AppSelect2 v-model="form.discount_type" class="mt-1.5" aria-label="Jenis diskon keseluruhan" :disabled="!canConfirm">
+                <option value="AMOUNT">Rupiah (Rp)</option><option value="PERCENT">Persen (%)</option>
+              </AppSelect2>
+            </label>
+            <AppFormField v-model="form.discount_value" :label="form.discount_type === 'PERCENT' ? 'Diskon keseluruhan (%)' : 'Diskon keseluruhan (Rp)'"
+              type="number" min="0" :max="form.discount_type === 'PERCENT' ? 100 : undefined" step="0.01" :readonly="!canConfirm" />
+            <AppFormField v-model="form.biaya_lainnya" label="Biaya Lainnya (Rp)" type="number" min="0" step="0.01" :readonly="!canConfirm" />
+          </div>
+          <p v-if="errorMessage || projectedBreakdown.error" role="alert" class="rounded-xl bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
+            {{ projectedBreakdown.error || errorMessage }}
+          </p>
 
-          <div class="grid gap-3 md:grid-cols-3">
-            <AppFormField v-model="form.jatuh_tempo" label="Jatuh Tempo" type="date" :readonly="!canProcessPurchaseAction" />
-            <AppFormField v-model="form.potongan" label="Potongan" type="number" min="0" :readonly="!canProcessPurchaseAction" />
-            <AppFormField v-model="form.biaya_lainnya" label="Biaya Lainnya" type="number" min="0" :readonly="!canProcessPurchaseAction" />
-          </div>
-
-          <div class="grid gap-3 md:grid-cols-4">
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">DPP</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.dpp) }}</p>
+          <section aria-label="Rincian diskon per produk" class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="font-semibold text-slate-900 dark:text-slate-100">Rincian barang dan diskon produk</h3>
+              <span class="rounded-full bg-brand-100 px-3 py-1 text-sm font-bold text-brand-800 dark:bg-brand-950 dark:text-brand-100" data-testid="total-pcs">
+                Total {{ Number(projectedBreakdown.total_pcs || 0).toLocaleString('id-ID') }} PCS
+              </span>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">PPN 11%</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.ppn) }}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Geser tabel ke samping untuk melihat seluruh kolom, termasuk Harga Bersih.</p>
+            <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+              <table class="min-w-[1400px] w-full text-left text-sm" aria-label="Tabel finalisasi produk">
+                <thead class="bg-slate-100 text-xs uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr>
+                  <th class="p-3">Kode Produk</th><th class="p-3">Nama Produk</th><th class="p-3">Batch</th>
+                  <th class="p-3">Expired</th><th class="p-3">Rincian UOM</th><th class="p-3 text-right">TOTAL (PCS)</th>
+                  <th class="p-3 text-right">Harga Pricelist</th><th class="p-3 min-w-[240px]">Diskon</th><th class="p-3 text-right">Harga Bersih</th>
+                </tr></thead>
+                <tbody class="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900">
+                  <tr v-for="(row,index) in pricedRows" :key="row.row_key" :data-testid="'discount-line-' + row.id">
+                    <td class="p-3 align-top font-semibold">{{ row.produk_kode }}</td>
+                    <td class="p-3 align-top min-w-[170px]">{{ row.produk_nama }}</td>
+                    <td class="p-3 align-top">{{ row.batch_number || '-' }}</td>
+                    <td class="p-3 align-top whitespace-nowrap">{{ String(row.tanggal_expired || '-').slice(0,10) }}</td>
+                    <td class="p-3 align-top min-w-[150px]"><p v-for="(uom,u) in normalizeList(row.jumlah)" :key="u" class="whitespace-nowrap">
+                      {{ Number(uom.jumlah || 0).toLocaleString('id-ID') }} {{ uom.uom_kode || uom.uom_nama }}
+                      <span class="text-xs text-slate-500">× {{ uom.uom_faktor_konversi || 1 }} PCS</span>
+                    </p></td>
+                    <td class="p-3 align-top text-right font-semibold">{{ Number(row.quantity_pcs || 0).toLocaleString('id-ID') }}</td>
+                    <td class="p-3 align-top text-right whitespace-nowrap"><p v-for="(uom,u) in normalizeList(row.jumlah)" :key="u">{{formatCurrency(uom.uom_harga_beli)}}<span class="text-xs text-slate-500"> / {{uom.uom_kode||uom.uom_nama}} · DPP</span></p>
+                      <p class="mt-2 text-xs">Total {{ formatCurrency(row.pricing.dpp_gross) }}</p></td>
+                    <td class="p-3 align-top space-y-2">
+                      <AppSelect2 v-model="lineDiscounts[row.detail_id ?? row.id].discount_type" :aria-label="'Jenis diskon produk ' + (index + 1)" :disabled="!canConfirm">
+                        <option value="AMOUNT">Rupiah (Rp)</option><option value="PERCENT">Persen (%)</option>
+                      </AppSelect2>
+                      <AppFormField v-model="lineDiscounts[row.detail_id ?? row.id].discount_value"
+                        :label="'Diskon produk ' + (index + 1) + (lineDiscounts[row.detail_id ?? row.id].discount_type === 'PERCENT' ? ' (%)' : ' (Rp/baris)')"
+                        type="number" min="0" step="0.01" :max="lineDiscounts[row.detail_id ?? row.id].discount_type === 'PERCENT' ? 100 : undefined" :readonly="!canConfirm" />
+                      <p class="text-xs text-emerald-700 dark:text-emerald-300">Produk {{ formatCurrency(row.pricing.product_discount) }}<br>Global {{ formatCurrency(row.pricing.header_discount_allocated) }}</p>
+                    </td>
+                    <td class="p-3 align-top text-right whitespace-nowrap font-semibold">{{ formatCurrency(row.pricing.unit_dpp_net) }}<p class="text-xs font-normal text-slate-500">/ PCS · sebelum PPN</p>
+                      <p class="mt-2">{{ formatCurrency(row.pricing.dpp_net) }}</p><p class="text-xs font-normal">Total DPP bersih</p>
+                      <p class="mt-2 text-xs font-normal text-slate-500">PPN {{ Number(row.tax_rate || 0) }}%: {{ formatCurrency(row.pricing.ppn) }}<br>Total {{ formatCurrency(row.pricing.total) }}</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Potongan</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.potongan) }}</p>
+          </section>
+          <section aria-label="Total finalisasi" class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+            <h3 class="mb-4 font-semibold text-slate-900 dark:text-slate-100">Total seluruh barang</h3>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div v-for="card in totalCards" :key="card.label"><p class="text-xs text-slate-500 dark:text-slate-400">{{ card.label }}</p>
+                <p class="mt-1 font-semibold text-slate-900 dark:text-slate-100">{{ card.value }}</p></div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Biaya Lainnya</p>
-              <p class="mt-2 text-sm font-semibold text-slate-900">{{ formatCurrency(projectedBreakdown.biayaLain) }}</p>
-            </div>
-          </div>
-
-          <div>
-            <p class="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Rincian Barang</p>
-            <AppTable
-              :rows="detailRows"
-              :columns="[
-                { key: 'produk_kode', label: 'Kode Produk' },
-                { key: 'produk_nama', label: 'Nama Produk' },
-                { key: 'batch_number', label: 'Batch' },
-                { key: 'subtotal_label', label: 'Subtotal' },
-                { key: 'jumlah_ringkas', label: 'Rincian UOM' }
-              ]"
-              empty-message="Belum ada rincian barang."
-            />
-          </div>
+            <p class="mt-4 border-t border-slate-200 pt-3 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">
+              Jurnal: debit Pembelian (DPP awal) dan PPN; kredit Diskon Produk, Diskon Global, dan Hutang Usaha.
+              Biaya lainnya dibukukan terpisah ke Biaya Pembelian dan menambah hutang.
+            </p>
+          </section>
 
           <div class="flex flex-wrap gap-3">
             <button
               v-if="canConfirm"
               class="rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white"
-              :disabled="submitLoading"
+              :disabled="submitLoading || !!projectedBreakdown.error || detailLoading"
               @click="submitConfirmation"
             >
               {{ submitLoading ? 'Memproses...' : 'Finalisasi Purchase Order' }}
@@ -548,3 +575,10 @@ onMounted(async () => {
     </AppModal>
   </div>
 </template>
+
+<style>
+/* Theme follows the ERP's explicit setting, independent of OS color scheme. */
+[data-theme='dark'] .purchase-finalization-detail .text-brand-700 { color: #b2cb9d; }
+[data-theme='dark'] .purchase-finalization-detail .bg-brand-50 { background: #182111; color: #d4e1c7; border-color: #3c5124; }
+[data-theme='dark'] .purchase-finalization-detail .bg-brand-100 { background: #29371a; color: #d4e1c7; }
+</style>

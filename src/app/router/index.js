@@ -162,6 +162,18 @@ const routes = [
         }
       },
       {
+        path: 'data-tools/import-dua-kelinci',
+        name: 'data-tools-import-dua-kelinci',
+        component: () => import('@/modules/data-tools/pages/DuaKelinciImportPage.vue'),
+        meta: { permission: 'distribution.orders.view', pageTitle: 'Import Dua Kelinci', stableQueryState: true }
+      },
+      {
+        path: 'purchase/import-dua-kelinci',
+        name: 'purchase-import-dua-kelinci',
+        component: () => import('@/modules/data-tools/pages/DuaKelinciPurchaseImportPage.vue'),
+        meta: { permission: 'purchase.orders.view', pageTitle: 'Import PO Dua Kelinci', stableQueryState: true }
+      },
+      {
         path: 'data-tools/import-ufit',
         name: 'data-tools-import-ufit',
         component: () => import('@/modules/data-tools/pages/AkashaSalesOrderImportPage.vue'),

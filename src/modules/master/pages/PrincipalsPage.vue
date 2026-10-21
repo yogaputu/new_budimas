@@ -390,7 +390,7 @@ function closeModal() {
 async function save() {
   if (saving.value) return;
   if (mode.value === 'create' && !coaReady.value) {
-    actionError.value = 'Lengkapi pemetaan 10 COA untuk seluruh perusahaan yang dipilih terlebih dahulu.';
+    actionError.value = 'Lengkapi seluruh pemetaan COA untuk perusahaan yang dipilih terlebih dahulu.';
     return;
   }
   if (!parseScopeIds(form.id_cabang_list).length) {
@@ -508,9 +508,9 @@ watch([modalOpen, mode, coaCompanyIds], loadCoa);
           <h3 class="font-semibold">COA Principal Otomatis</h3>
           <p v-if="coaLoading" role="status">Memuat akun dan pemetaan…</p>
           <template v-else-if="mode === 'create'">
-            <p class="text-sm">10 akun per perusahaan akan dibuat saat principal disimpan, dengan saldo nol dan cakupan cabang sesuai pilihan.</p>
+            <p class="text-sm">Akun sesuai seluruh jenis pemetaan per perusahaan akan dibuat saat principal disimpan, dengan saldo nol dan cakupan cabang sesuai pilihan.</p>
             <p v-if="!coaCompanyIds.length" class="text-sm">Pilih perusahaan terlebih dahulu.</p>
-            <p v-for="item in coaTemplates" :key="item.id_perusahaan" class="text-sm">{{ companyName(item.id_perusahaan) }}: <strong :class="item.ready ? 'text-emerald-600' : 'text-amber-500'">{{ item.ready ? '10 pemetaan siap' : 'Pemetaan belum lengkap / akun induk tidak aktif' }}</strong></p>
+            <p v-for="item in coaTemplates" :key="item.id_perusahaan" class="text-sm">{{ companyName(item.id_perusahaan) }}: <strong :class="item.ready ? 'text-emerald-600' : 'text-amber-500'">{{ item.ready ? `${item.roles.length} pemetaan siap` : 'Pemetaan belum lengkap / akun induk tidak aktif' }}</strong></p>
             <button class="text-sm underline" @click="loadCoa">Periksa ulang pemetaan</button>
             <button v-if="canConfigureCoa" class="ml-4 text-sm underline" @click="openCoaConfig">Atur pemetaan</button>
           </template>

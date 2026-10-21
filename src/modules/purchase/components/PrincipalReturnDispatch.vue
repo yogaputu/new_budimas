@@ -31,10 +31,11 @@ watch(()=>props.claim.id,load,{immediate:true});
     <p>Nilai persediaan {{rupiah(claim.requested_amount)}} · Disetujui {{rupiah(claim.approved_amount)}}. Stok berkurang satu kali setelah konfirmasi.</p>
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="workflow-label">Tanggal aktual<input v-model="form.movement_date" class="field-control workflow-input" type="date" required></label><label class="workflow-label">Nomor surat jalan / berita acara<input v-model="form.reference" class="field-control workflow-input" maxlength="200" required></label>
-      <AppSearchSelect v-model="form.inventory_coa_id" label="COA Persediaan (kredit)" :options="options" /><AppSearchSelect v-model="form.claim_coa_id" label="COA Piutang Klaim Principal (debit)" :options="options" />
+      <template v-if="!detail.accounting"><AppSearchSelect v-model="form.inventory_coa_id" label="COA Persediaan (kredit)" :options="options" /><AppSearchSelect v-model="form.claim_coa_id" label="COA Piutang Klaim Principal (debit)" :options="options" /></template>
+      <p v-else class="text-sm sm:col-span-2">Jurnal pengajuan #{{detail.accounting.id_jurnal}}: Retur Beli {{rupiah(detail.accounting.gross)}} · DPP {{rupiah(detail.accounting.dpp)}} · PPN {{rupiah(detail.accounting.ppn)}}. Akun mengikuti principal; Persediaan tidak dikredit ulang.</p>
       <AppSearchSelect v-if="Number(claim.requested_amount)>Number(claim.approved_amount)" v-model="form.loss_coa_id" label="COA Kerugian / Selisih Tidak Disetujui" :options="options" />
       <label class="workflow-label">Bukti PDF / PNG / JPEG, maksimal 5 MB<input :key="form.client_key" type="file" class="field-control" accept="application/pdf,image/png,image/jpeg" :required="claim.kind==='DESTRUCTION'" @change="file"></label>
-    </div><button class="rounded-xl bg-blue-600 px-4 py-3 text-white workflow-btn workflow-btn-primary" :disabled="busy||!form.inventory_coa_id||!form.claim_coa_id">Konfirmasi Mutasi Stok &amp; Jurnal</button>
+    </div><button class="rounded-xl bg-blue-600 px-4 py-3 text-white workflow-btn workflow-btn-primary" :disabled="busy||(!detail.accounting&&(!form.inventory_coa_id||!form.claim_coa_id))||(Number(claim.requested_amount)>Number(claim.approved_amount)&&!form.loss_coa_id)">Konfirmasi Mutasi Stok &amp; Jurnal</button>
   </fieldset></form>
   <p v-else-if="detail && !detail.dispatch">Menunggu approval principal atau hak Approve untuk mencatat mutasi aktual.</p>
 </section></template>

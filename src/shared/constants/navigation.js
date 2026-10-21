@@ -45,6 +45,7 @@ const rawNavigationSections = [
       { label: 'Approval Request Cabang', to: '/purchase/branch-requests', icon: 'RC', permission: 'purchase.branch-requests.approve', menuPermission: 'm.purchase.rc.view' },
       { label: 'Purchase Order', to: '/purchase/orders', icon: 'PO', permission: 'purchase.orders.view', menuPermission: 'm.purchase.po.view' },
       { label: 'Buat Purchase Order', to: '/purchase/orders/create', icon: 'IP', permission: 'purchase.orders.create', menuPermission: 'm.purchase.ip.view' },
+      { label: 'Import PO Dua Kelinci', to: '/purchase/import-dua-kelinci', icon: 'DK', permission: 'purchase.orders.view' },
       { label: 'Approval Purchase Order', to: '/purchase/order-confirmations', icon: 'KO', permission: 'purchase.order-confirmations.approve', menuPermission: 'm.purchase.ko.view' },
       { label: 'Penerimaan Barang', to: '/purchase/receipts', icon: 'PB', permission: 'purchase.receipts.view', menuPermission: 'm.purchase.pb.view' },
       { label: 'Input Penerimaan Barang', to: '/purchase/receipts/create', icon: 'IB', permission: 'purchase.receipts.create', menuPermission: 'm.purchase.ib.view' },
@@ -244,6 +245,7 @@ const rawNavigationSections = [
       { label: 'ONESKY : Sosro', to: '/data-tools/import-onesky-sosro', icon: 'OS', permission: 'distribution.orders.view' },
       { label: 'Godrej', to: '/data-tools/import-godrej', icon: 'GD', permission: 'distribution.orders.view' },
       { label: 'Bosnet Hidro', to: '/data-tools/import-bosnet-hidro', icon: 'BH', permission: 'distribution.orders.view' },
+      { label: 'Import Dua Kelinci', to: '/data-tools/import-dua-kelinci', icon: 'DK', permission: 'distribution.orders.view' },
       { label: 'UFIT', to: '/data-tools/import-ufit', icon: 'UF', permission: 'distribution.orders.view' }
     ]
   },

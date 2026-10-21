@@ -154,6 +154,11 @@ const detailRows = computed(() =>
     ...item,
     row_key: `${item.id || item.order_detail_id || index}`,
     subtotal_label: formatCurrency(item.subtotal || 0),
+    pcs_label: `${Number(item.quantity_pcs || 0).toLocaleString('id-ID')} PCS`,
+    discount_label: formatCurrency(item.discount_total || 0),
+    net_label: formatCurrency(item.dpp_net ?? item.subtotal ?? 0),
+    ppn_label: formatCurrency(item.ppn || 0),
+    final_label: formatCurrency(item.total ?? item.subtotal ?? 0),
     jumlah_ringkas: normalizeList(item.jumlah)
       .map((qty) => `${qty.jumlah || 0} ${qty.uom_kode || qty.uom_nama || ''}`.trim())
       .join(', ')
@@ -168,7 +173,11 @@ const detailMetaCards = computed(() => {
     { label: 'Status', value: resolveReceiptStatus(source.proses_id_berjalan) },
     { label: 'Subtotal', value: formatCurrency(source.subtotal || 0) },
     { label: 'Total', value: formatCurrency(source.total || 0) },
-    { label: 'Jumlah Detail', value: String(normalizeList(selectedDetail.value?.detail).length || 0) }
+    { label: 'Jumlah Detail', value: String(normalizeList(selectedDetail.value?.detail).length || 0) },
+    { label: 'Total PCS', value: `${Number(selectedDetail.value?.financials?.total_pcs || 0).toLocaleString('id-ID')} PCS` },
+    { label: 'Total Diskon', value: formatCurrency(selectedDetail.value?.financials?.discount_total || 0) },
+    { label: 'DPP Bersih', value: formatCurrency(selectedDetail.value?.financials?.dpp_net || 0) },
+    { label: 'PPN', value: formatCurrency(selectedDetail.value?.financials?.ppn || 0) }
   ];
 });
 
@@ -462,7 +471,12 @@ onMounted(async () => {
                 { key: 'batch_number', label: 'Batch' },
                 { key: 'tanggal_expired', label: 'Expired' },
                 { key: 'subtotal_label', label: 'Subtotal' },
-                { key: 'jumlah_ringkas', label: 'Rincian UOM' }
+                { key: 'jumlah_ringkas', label: 'Rincian UOM' },
+                { key: 'pcs_label', label: 'Total PCS' },
+                { key: 'discount_label', label: 'Semua Diskon' },
+                { key: 'net_label', label: 'DPP Bersih' },
+                { key: 'ppn_label', label: 'PPN' },
+                { key: 'final_label', label: 'Total Produk' }
               ]"
               empty-message="Belum ada detail produk pada transaksi ini."
             />

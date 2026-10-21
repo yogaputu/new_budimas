@@ -1,0 +1,1 @@
+import{x as t}from"./index--H8Z3pM2.js";function o(i){return t.get("/api/supervisor-audit/logs",{params:i})}function s(i){return t.get("/api/supervisor-audit/options",{params:i})}export{s as a,o as g};

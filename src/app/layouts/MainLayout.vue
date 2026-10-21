@@ -1111,7 +1111,7 @@ watch(
         <main class="min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6">
           <RouterView v-slot="{ Component, route }">
             <KeepAlive>
-              <component :is="Component" :key="route.fullPath" />
+              <component :is="Component" :key="route.meta.stableQueryState ? route.path : route.fullPath" />
             </KeepAlive>
           </RouterView>
         </main>

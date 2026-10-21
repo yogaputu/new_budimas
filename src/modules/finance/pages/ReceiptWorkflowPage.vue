@@ -52,7 +52,7 @@ let accountsSequence = 0;
 const accountOptions = computed(() => accounts.value
   .filter(a => String(a.id_perusahaan) === String(settings.company) && a.is_active !== false)
   .map(a => ({ value: String(a.id_coa), label: `${a.nomor_akun} — ${a.nama_akun}` })));
-const purposes = { CASH: 'Kas', BANK: 'Bank', GIRO: 'Piutang Giro', CLEARING: 'Dana Belum Teridentifikasi', RECEIVABLE: 'Piutang Usaha', ADVANCE: 'Uang Muka', RETURN: 'Retur', FEE: 'Biaya Lain' };
+const purposes = { CASH: 'Kas', BANK: 'Bank', GIRO: 'Piutang Giro', CLEARING: 'Penerimaan Belum Teridentifikasi (bank masuk)', OUTGOING_CLEARING: 'Pembayaran Belum Teridentifikasi (bank keluar)', RECEIVABLE: 'Piutang Usaha', ADVANCE: 'Uang Muka', RETURN: 'Retur', FEE: 'Biaya Lain' };
 const labels = { CASH: 'Tunai', TRANSFER: 'Non Tunai', GIRO: 'Giro', ADVANCE: 'Uang Muka', RETURN: 'Retur', PENDING: 'Menunggu approval', APPROVED: 'Disetujui', DRAFT: 'Draft', FINALIZED: 'Finalized', CANCEL_REQUESTED: 'Pengajuan batal', CANCELLED: 'Cancelled', REJECTED: 'Ditolak', NOT_CLEARED: 'Belum cair', CLEARED: 'Cair', BOUNCED: 'Ditolak bank', ALLOCATED:'Terpakai', PARTIAL:'Terpakai sebagian', UNIDENTIFIED:'Belum dialokasikan', DEBIT:'Debit / dana masuk', CREDIT:'Kredit / dana keluar', MANUAL:'Manual', IMPORT:'Import', LPH:'Pengembalian LPH' };
 const money = v => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(Number(v || 0));
 const shownDate = v => v ? new Date(v).toLocaleDateString('id-ID') : '—';
@@ -90,7 +90,9 @@ async function refresh() {
     else response = await workflowGet(mode === 'cancel' ? 'cancellations' : mode === 'journals' ? 'journals' : fundKind.value ? 'funds' : 'receipts');
     if (seq !== refreshSequence) return;
     list.value = normalizeList(unwrapResponse(response));
-    if(mode==='journals') list.value=list.value.map(r=>({...r,journal_type:{FUND:'Penerimaan Setoran',RECEIPT:'Penerimaan Pembayaran',CLEAR:'Pencairan Giro',BOUNCE:'Giro Ditolak',CANCEL:'Pembatalan Pembayaran'}[r.reference.split(':')[0]] || 'Koreksi Setoran'}));
+    if(mode==='journals') list.value=list.value.map(r=>({...r,journal_type:r.reference.startsWith('FUND:')&&r.fund_kind==='TRANSFER'
+      ? (r.fund_transaction_type==='CREDIT'?'Mutasi Bank Keluar':'Mutasi Bank Masuk')
+      : ({FUND:'Penerimaan Setoran',RECEIPT:'Penerimaan Pembayaran',CLEAR:'Pencairan Giro',BOUNCE:'Giro Ditolak',CANCEL:'Pembatalan Pembayaran'}[r.reference.split(':')[0]] || 'Koreksi Setoran')}));
     checkedReceipts.value=[];
     if (fundKind.value) {
       list.value = list.value.filter(r => r.kind === fundKind.value && (mode !== 'transfer' || r.transaction_type !== 'CREDIT'));
@@ -303,7 +305,8 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
       </div>
       <label class="block">Batas Biaya Lain per faktur (Rp)<input v-model="settings.max_fee" type="number" min="0" step="0.01" class="field-control"/></label>
       <label class="flex items-center gap-2"><input v-model="settings.enabled" type="checkbox"/>Aktifkan alur kuitansi untuk perusahaan ini</label>
-      <button class="btn-primary" :disabled="busy || !settings.company || accountsLoading || !!accountsError" @click="action(() => workflowPut('settings', { id_perusahaan:settings.company,accounts:settings.accounts,enabled:settings.enabled,max_fee:settings.max_fee }), 'Pengaturan tersimpan.')">Simpan Pengaturan</button>
+      <p class="text-sm">Bank masuk: debit Bank, kredit Penerimaan Belum Teridentifikasi. Bank keluar: debit Pembayaran Belum Teridentifikasi, kredit Bank. Kedua akun clearing wajib berbeda.</p>
+      <button class="btn-primary" :disabled="busy || !settings.company || accountsLoading || !!accountsError || Object.keys(purposes).some(p=>!settings.accounts[p])" @click="action(() => workflowPut('settings', { id_perusahaan:settings.company,accounts:settings.accounts,enabled:settings.enabled,max_fee:settings.max_fee }), 'Pengaturan tersimpan.')">Simpan Pengaturan</button>
     </section>
     <section v-if="tab==='journals'" class="panel space-y-4 p-5">
       <article v-for="row in pageRows" :key="row.id_jurnal" class="rounded-xl border border-slate-400/30 p-4">
@@ -364,7 +367,7 @@ onMounted(async () => { await refresh(); if (['settings','fees'].includes(tab.va
           <label class="md:col-span-2">Deskripsi<textarea v-model="form.description" :required="form.kind==='TRANSFER'" maxlength="2000" class="field-control"/></label>
           <label class="md:col-span-2">Catatan Tambahan<textarea v-model="form.notes" maxlength="2000" class="field-control"/></label>
         </fieldset>
-        <p class="mt-4 text-sm">Tunai menunggu approval Kasir. Setoran berdiri sendiri sampai dialokasikan ke faktur. Mutasi dana keluar tidak dapat dipakai untuk pembayaran.</p>
+        <p class="mt-4 text-sm">Tunai menunggu approval Kasir. Dana masuk dapat dialokasikan ke faktur customer. Mutasi Kredit / dana keluar dapat dicocokkan untuk pelunasan PO, bukan pembayaran customer. Untuk PO, bank harus cocok dengan satu rekening aktif pada perusahaan/cabang yang sama dan nominal harus persis sama.</p>
         <button class="btn-primary mt-4" :disabled="busy || !form.id_perusahaan || !form.id_cabang || (['CASH','GIRO'].includes(form.kind) && !form.id_sales) || (form.kind==='GIRO' && (!form.id_customer || customersLoading))">Simpan Setoran</button>
       </form><p v-if="error" role="alert" class="mt-3 text-rose-600">{{ error }}</p>
     </AppModal>

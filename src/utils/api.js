@@ -54,6 +54,7 @@ export function normalizeList(payload) {
 export function normalizeError(error, fallback = 'Terjadi kesalahan saat memproses permintaan.') {
   return (
     error?.response?.data?.message ||
+    error?.response?.data?.result?.[0]?.message ||
     error?.response?.data?.error ||
     error?.message ||
     fallback

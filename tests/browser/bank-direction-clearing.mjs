@@ -39,8 +39,8 @@ try{
     await page.goto(origin+'/finance/payment-workflow-settings');
     await page.getByRole('combobox',{name:'Perusahaan',exact:true}).click();
     await page.getByRole('option',{name:'BMM - BMM',exact:true}).click();
-    await page.getByRole('combobox',{name:'Penerimaan Belum Teridentifikasi (bank masuk)',exact:true}).waitFor();
-    await page.getByRole('combobox',{name:'Pembayaran Belum Teridentifikasi (bank keluar)',exact:true}).waitFor();
+    await page.getByRole('combobox',{name:'Penerimaan Belum Teridentifikasi (pemetaan lama)',exact:true}).waitFor();
+    await page.getByRole('combobox',{name:'Pembayaran Belum Teridentifikasi (bank masuk/keluar & pembayaran SO)',exact:true}).waitFor();
     const save=page.getByRole('button',{name:'Simpan Pengaturan',exact:true});
     await save.click();await page.getByText('Pengaturan tersimpan.',{exact:true}).waitFor();
     assert.equal(posts.length,1);assert.notEqual(posts[0].accounts.CLEARING,posts[0].accounts.OUTGOING_CLEARING);
@@ -59,6 +59,6 @@ try{
       await Promise.all(el.getAnimations({subtree:true}).map(a=>a.finished.catch(()=>{})));
     });
     await page.screenshot({path:`/tmp/bank-clearing-journal-${theme}.png`,fullPage:true});
-    assert.deepEqual(errors,[]);await page.close();console.log(`PASS ${theme}: separate searchable mappings, outgoing journal label, debit-first general journal`);
+    assert.deepEqual(errors,[]);await page.close();console.log(`PASS ${theme}: shared new payment clearing label, preserved historical mapping, outgoing journal label, debit-first general journal`);
   }
 }finally{await browser.close();}

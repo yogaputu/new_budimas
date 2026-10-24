@@ -275,7 +275,7 @@ function addProduct() {
     nama_principal: principal.nama || principal.nama_principal || principal.text || `Principal ${productForm.id_principal}`,
     nama_produk: product.nama || product.nama_produk || 'Produk',
     kode_sku: product.kode_sku || product.kode || '-',
-    stock_ready: selectedStockReady.value ?? product.stok_ready ?? product.jumlah_ready ?? '-',
+    stock_ready: selectedStockReady.value ?? product.stok_efektif ?? product.stok_ready ?? product.jumlah_ready ?? '-',
     ...Object.fromEntries(productUomFields.value.map(field => [field.key, normalizeTransferQuantity(productForm[field.key])])),
     uom_quantities: selectedProductUoms.value.map(unit => ({ uom_id: unit.id, level: unit.level, quantity: normalizeTransferQuantity(productForm[`uom_${unit.level}`]) })),
     uom_1: Number(productForm.uom_1 || 0),
@@ -450,7 +450,7 @@ async function loadSelectedStockReady() {
       id_produk: productForm.id_produk
     });
     const payload = unwrapResponse(response);
-    selectedStockReady.value = Number(payload?.jumlah_ready ?? payload?.result?.jumlah_ready ?? payload?.[0]?.jumlah_ready ?? 0);
+    selectedStockReady.value = Number(payload?.stok_efektif ?? payload?.jumlah_ready ?? payload?.result?.stok_efektif ?? payload?.result?.jumlah_ready ?? payload?.[0]?.stok_efektif ?? payload?.[0]?.jumlah_ready ?? 0);
   } catch {
     selectedStockReady.value = 0;
   }

@@ -5,6 +5,8 @@ import { useRoute } from 'vue-router';
 import QRCode from 'qrcode';
 import ShipmentPickingPanel from '../components/ShipmentPickingPanel.vue';
 import ShipmentLoadingPanel from '../components/ShipmentLoadingPanel.vue';
+import WmsInventorySummary from '../components/WmsInventorySummary.vue';
+import { groupInventoryLots } from '../inventorySummary';
 import {
   completeWmsDelivery,
   confirmWmsChecker,
@@ -46,7 +48,9 @@ import {
   updateWmsPrincipalGroup,
   updateWmsPlacement,
   updateWmsPallet,
-  updateWmsRack
+  updateWmsRack,
+  setWmsRackActive,
+  setWmsPalletActive
 } from '@/api/wms';
 import { getPrincipals, getProducts } from '@/api/master';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
@@ -113,6 +117,7 @@ const filters = reactive({
   rackType: '',
   rackStatus: '',
   rackActive: 'true',
+  rackMix: '',
   palletSearch: '',
   palletStatus: '',
   palletActive: 'true',
@@ -122,6 +127,9 @@ const filters = reactive({
   placementSearch: '',
   placementRack: '',
   placementStatus: '',
+  placementPallet: '',
+  placementType: '',
+  placementSource: '',
   barcodeProduct: '',
   transactionSearch: '',
   transactionType: '',
@@ -236,7 +244,8 @@ function createPlacementForm() {
     qty_pieces: 0,
     batch_number: '',
     expired_date: '',
-    status: 'READY'
+    status: 'READY',
+    kode_pallet: ''
   };
 }
 
@@ -273,6 +282,8 @@ function createPlacementItem(seed = {}) {
     qty_pcs: seed.qty_pcs ?? 0,
     qty_karton: seed.qty_karton ?? 0,
     qty_pieces: seed.qty_pieces ?? 0,
+    per_unit: seed.per_unit || 1,
+    uoms: seed.uoms || [],
     batch_number: seed.batch_number || '',
     // Date inputs only accept YYYY-MM-DD. API rows can contain a timestamp,
     // so normalize it before an existing placement is edited again.
@@ -401,10 +412,9 @@ const rackMixModeOptions = [
 ];
 
 const rackStatusOptions = [
-  { value: '', label: 'Semua status' },
+  { value: '', label: 'Semua ketersediaan' },
   { value: 'Kosong', label: 'Kosong' },
-  { value: 'Isi', label: 'Isi' },
-  { value: 'Nonaktif', label: 'Nonaktif' }
+  { value: 'Terisi', label: 'Terisi' }
 ];
 
 const rackActiveOptions = [
@@ -455,7 +465,8 @@ const placementStatusOptions = [
   { value: 'READY', label: 'Ready' },
   { value: 'LOW', label: 'Low' },
   { value: 'EMPTY', label: 'Empty' },
-  { value: 'INACTIVE', label: 'Inactive' }
+  { value: 'INACTIVE', label: 'Inactive' },
+  { value: 'PENDING_WAREHOUSE', label: 'Menunggu konfirmasi incoming' }
 ];
 
 function productOptionFromRow(item = {}) {
@@ -731,7 +742,7 @@ const inventoryTitipanCt = computed(() =>
 );
 
 const summaryCards = computed(() => [
-  { label: 'SKU WMS', value: numberLabel(inventoryRows.value.length) },
+  { label: 'SKU WMS', value: numberLabel(groupInventoryLots(inventoryRows.value).length) },
   { label: 'Rak Aktif', value: numberLabel(rackRows.value.filter((item) => item.active !== false).length) },
   { label: 'Pallet Aktif', value: numberLabel(palletRows.value.filter((item) => item.active !== false).length) },
   { label: 'Ready Gudang', value: numberLabel(inventoryReadyGudangCt.value) },
@@ -853,12 +864,12 @@ const inventoryColumns = [
 const rackColumns = [
   { key: 'kode_rak', label: 'Kode Rak' },
   { key: 'type_rak', label: 'Tipe' },
-  { key: 'status_rak', label: 'Status', render: (row) => statusBadge(row.status_rak) },
-  { key: 'active', label: 'Aktif', render: (row) => statusBadge(row.active === false ? 'Nonaktif' : 'Aktif') },
-  { key: 'qty_pcs', label: 'Qty PCS', render: (row) => numberLabel(row.qty_pcs) },
-  { key: 'max_qty_pcs', label: 'Kapasitas PCS', render: (row) => row.max_qty_pcs ? numberLabel(row.max_qty_pcs) : 'Tidak dibatasi' },
-  { key: 'mix_mode', label: 'Mix', render: (row) => row.mix_mode === 'mixed_group' ? 'Mixed Group' : 'Single Principal' },
-  { key: 'principal_group_name', label: 'Group Principal', render: (row) => row.principal_group_name || '-' },
+  { key: 'availability', label: 'Ketersediaan', render: (row) => statusBadge(row.availability || (Number(row.qty_pcs)>0?'Terisi':'Kosong')) },
+  { key: 'active', label: 'Status', render: (row) => statusBadge(row.active === false ? 'Nonaktif' : 'Aktif') },
+  { key: 'qty_pcs', label: 'Jumlah Produk (PCS)', render: (row) => numberLabel(row.qty_pcs) },
+  { key: 'max_qty_karton', label: 'Kapasitas Jumlah (CT)', render: (row) => Number(row.max_qty_karton)>0 ? numberLabel(row.max_qty_karton) : 'Tidak dibatasi' },
+  { key: 'mix_mode', label: 'Principal', render: (row) => row.mix_mode === 'mixed_group' ? 'Mixed Group' : 'Single Principal' },
+  { key: 'principal_group_name', label: 'Group', render: (row) => row.mix_mode==='mixed_group' ? row.principal_group_name || '-' : '-' },
   { key: 'placement_count', label: 'Penempatan', render: (row) => numberLabel(row.placement_count) },
   { key: 'posisi', label: 'Posisi', render: (row) => rackPositionLabel(row) },
   { key: 'source_type', label: 'Sumber' }
@@ -866,30 +877,26 @@ const rackColumns = [
 
 const palletColumns = [
   { key: 'kode_pallet', label: 'Kode Pallet' },
-  { key: 'tipe_pallet', label: 'Tipe' },
-  { key: 'nama_barang', label: 'Produk / Isi', render: (row) => palletProductLabel(row) },
-  { key: 'status_pallet', label: 'Status', render: (row) => statusBadge(row.status_pallet) },
+  { key: 'tipe_pallet', label: 'Tipe Pallet' },
+  { key: 'nama_barang', label: 'Produk', render: (row) => palletProductLabel(row) },
   { key: 'availability', label: 'Ketersediaan', render: (row) => statusBadge(row.availability || (Number(row.used_qty_pcs) > 0 ? 'Terisi' : 'Kosong')) },
-  { key: 'used_qty_pcs', label: 'Isi PCS', render: (row) => numberLabel(row.used_qty_pcs) },
-  { key: 'max_qty_pcs', label: 'Max PCS', render: (row) => row.max_qty_pcs ? numberLabel(row.max_qty_pcs) : 'Tidak dibatasi' },
-  { key: 'used_qty_karton', label: 'Isi Karton', render: (row) => numberLabel(row.used_qty_karton) },
-  { key: 'max_qty_karton', label: 'Max Karton', render: (row) => row.max_qty_karton ? numberLabel(row.max_qty_karton) : 'Tidak dibatasi' },
-  { key: 'default_qty_karton', label: 'Bagi/Karton', render: (row) => row.default_qty_karton ? numberLabel(row.default_qty_karton) : '-' },
-  { key: 'default_qty_pcs', label: 'Bagi/PCS', render: (row) => row.default_qty_pcs ? numberLabel(row.default_qty_pcs) : '-' },
-  { key: 'used_berat_kg', label: 'Berat Isi', render: (row) => `${numberLabel(row.used_berat_kg)} kg` },
-  { key: 'max_berat_kg', label: 'Max Berat', render: (row) => row.max_berat_kg ? `${numberLabel(row.max_berat_kg)} kg` : 'Tidak dibatasi' },
-  { key: 'kode_rak_list', label: 'Rak' },
-  { key: 'active', label: 'Layak Digunakan', render: (row) => row.active === false ? 'Tidak / rusak' : 'Ya' }
+  { key: 'status_pallet', label: 'Status', render: (row) => statusBadge(row.status_pallet) },
+  { key: 'used_qty_pcs', label: 'Jumlah Produk (PCS)', render: (row) => numberLabel(row.used_qty_pcs) },
+  { key: 'max_qty_karton', label: 'Kapasitas Jumlah (CT)', render: (row) => Number(row.max_qty_karton)>0 ? numberLabel(row.max_qty_karton) : 'Tidak dibatasi' },
+  { key: 'max_berat_kg', label: 'Kapasitas Berat (Kg)', render: (row) => Number(row.max_berat_kg)>0 ? numberLabel(row.max_berat_kg) : 'Tidak dibatasi' },
+  { key: 'kode_rak_list', label: 'Posisi Rak' },
+  { key: 'source_type', label: 'Sumber' }
 ];
 
 const placementColumns = [
   { key: 'kode_rak', label: 'Rak' },
+  { key: 'kode_pallet', label: 'Pallet' },
   { key: 'kode_barang', label: 'Kode Barang' },
   { key: 'nama_barang', label: 'Produk' },
-  { key: 'qty_pcs', label: 'Jumlah Ready (UOM)', render: (row) => formatUomQuantity(row.available_qty_pcs ?? row.qty_pcs, row) },
-  { key: 'qty_pcs_total', label: 'Total PCS Ready', render: (row) => numberLabel(row.available_qty_pcs ?? row.qty_pcs) },
   { key: 'batch_number', label: 'Batch' },
   { key: 'expired_date', label: 'Expired' },
+  { key: 'qty_uom', label: 'Rincian UOM', render: (row) => formatUomQuantity(row.physical_qty_pcs ?? row.qty_pcs, row) },
+  { key: 'qty_pcs', label: 'Jumlah Produk (PCS)', render: (row) => numberLabel(row.physical_qty_pcs ?? row.qty_pcs) },
   { key: 'status', label: 'Status', render: (row) => statusBadge(row.status) },
   { key: 'source_type', label: 'Sumber' }
 ];
@@ -1376,11 +1383,12 @@ function rowPerUnit(row) {
 }
 
 function normalizedUomLevels(row) {
-  const levels = [
+  const dynamic=Array.isArray(row?.uoms)?row.uoms.map(u=>({level:Number(u.level),name:u.nama||u.name,factor:Number(u.faktor_konversi||u.factor)})):[];
+  const levels = (dynamic.length?dynamic:[
     { level: 3, name: row?.uom3_nama, factor: Number(row?.uom3_factor) },
     { level: 2, name: row?.uom2_nama, factor: Number(row?.uom2_factor) },
     { level: 1, name: row?.uom1_nama || 'PCS', factor: Number(row?.uom1_factor || 1) },
-  ].filter((item) => item.name && Number.isFinite(item.factor) && item.factor > 0)
+  ]).filter((item) => item.name && Number.isFinite(item.factor) && item.factor > 0)
     .sort((a, b) => b.factor - a.factor);
 
   // Jika dua nama UOM memiliki faktor yang sama, jumlah fisiknya tidak dapat
@@ -2721,8 +2729,9 @@ async function loadRacks() {
     const response = await getWmsRacks({
       search: filters.rackSearch || undefined,
       type_rak: filters.rackType || undefined,
-      status_rak: filters.rackStatus || undefined,
+      availability: filters.rackStatus || undefined,
       active: filters.rackActive || undefined,
+      mix_mode: filters.rackMix || undefined,
       id_cabang: rackBranchId(),
       limit: 500
     });
@@ -2835,6 +2844,7 @@ async function saveRack() {
     const payload = { ...rackForm };
     if (rackForm.id) {
       await updateWmsRack(rackForm.id, payload);
+      filters.rackActive = String(Boolean(payload.active));
       setFeedback(`Rak ${rackForm.kode_rak} berhasil diperbarui.`);
     } else {
       await createWmsRack(payload);
@@ -2856,23 +2866,39 @@ async function removeRack() {
   if (!rackForm.id) {
     return;
   }
-  const force = !placementRows.value.some((item) => item.kode_rak === rackForm.kode_rak);
-  const confirmed = window.confirm(`Nonaktifkan rak ${rackForm.kode_rak}?`);
+  const confirmed = window.confirm(`Hapus rak ${rackForm.kode_rak} dari daftar master? Hanya rak kosong yang dapat dihapus. Riwayat tetap disimpan. Ini berbeda dengan Nonaktifkan.`);
   if (!confirmed) {
     return;
   }
   loading.action = true;
   try {
-    await deleteWmsRack(rackForm.id, { force });
-    setFeedback(`Rak ${rackForm.kode_rak} berhasil diproses.`);
+    await deleteWmsRack(rackForm.id, { confirm_delete: true });
     rackModalOpen.value = false;
     resetRackForm();
     await Promise.all([loadRacks(), loadInventory(), loadPlacements()]);
+    setFeedback('Rak dihapus dari daftar master. Riwayat tetap disimpan.');
   } catch (error) {
-    setError(error, 'Rak belum berhasil dihapus/dinonaktifkan.');
+    setError(error, 'Rak belum berhasil dihapus.');
   } finally {
     loading.action = false;
   }
+}
+
+async function changeRackActive() {
+  if (!rackForm.id) return;
+  const active = !rackForm.active;
+  const code = rackForm.kode_rak;
+  if (!window.confirm(`${active ? 'Aktifkan' : 'Nonaktifkan'} rak ${code}? Data dan jumlah barang tidak dihapus.`)) return;
+  loading.action = true;
+  try {
+    await setWmsRackActive(rackForm.id, active);
+    filters.rackActive = String(active);
+    rackModalOpen.value = false;
+    resetRackForm();
+    await loadRacks();
+    setFeedback(`Rak ${code} ${active ? 'diaktifkan' : 'dinonaktifkan'}; filter Status menampilkan rak ${active ? 'Aktif' : 'Nonaktif'}.`);
+  } catch (error) { setError(error, 'Status rak belum berhasil diperbarui.'); }
+  finally { loading.action = false; }
 }
 
 function resetPalletForm() {
@@ -2985,6 +3011,7 @@ async function savePallet() {
     const payload = { ...palletForm, status_pallet: palletForm.active ? 'Aktif' : 'Nonaktif' };
     if (palletForm.id) {
       await updateWmsPallet(palletForm.id, payload);
+      filters.palletStatus = payload.active ? 'Aktif' : 'Nonaktif';
       setFeedback(`Pallet ${palletForm.kode_pallet} berhasil diperbarui.`);
     } else {
       await createWmsPallet(payload);
@@ -3006,22 +3033,40 @@ async function removePallet() {
   if (!palletForm.id) {
     return;
   }
-  const confirmed = window.confirm(`Nonaktifkan pallet ${palletForm.kode_pallet}?`);
+  const confirmed = window.confirm(`Hapus pallet ${palletForm.kode_pallet} dari daftar master? Hanya pallet kosong tanpa alokasi incoming yang dapat dihapus. Riwayat tetap disimpan. Ini berbeda dengan Nonaktifkan.`);
   if (!confirmed) {
     return;
   }
   loading.action = true;
   try {
-    await deleteWmsPallet(palletForm.id);
-    setFeedback(`Pallet ${palletForm.kode_pallet} berhasil dinonaktifkan.`);
+    await deleteWmsPallet(palletForm.id, { confirm_delete: true });
     palletModalOpen.value = false;
     resetPalletForm();
     await loadPallets();
+    setFeedback('Pallet dihapus dari daftar master. Riwayat tetap disimpan.');
   } catch (error) {
-    setError(error, 'Pallet belum berhasil dinonaktifkan.');
+    setError(error, 'Pallet belum berhasil dihapus.');
   } finally {
     loading.action = false;
   }
+}
+
+async function changePalletActive() {
+  if (!palletForm.id) return;
+  const active = !palletForm.active;
+  const code = palletForm.kode_pallet;
+  if (!window.confirm(`${active ? 'Aktifkan' : 'Nonaktifkan'} pallet ${code}? Data dan jumlah barang tidak dihapus.`)) return;
+  loading.action = true;
+  try {
+    await setWmsPalletActive(palletForm.id, active);
+    filters.palletActive = String(active);
+    filters.palletStatus = active ? 'Aktif' : 'Nonaktif';
+    palletModalOpen.value = false;
+    resetPalletForm();
+    await loadPallets();
+    setFeedback(`Pallet ${code} ${active ? 'diaktifkan' : 'dinonaktifkan'}; filter menampilkan status yang sama.`);
+  } catch (error) { setError(error, 'Status pallet belum berhasil diperbarui.'); }
+  finally { loading.action = false; }
 }
 
 function resetPlacementForm() {
@@ -3052,6 +3097,8 @@ function selectPlacementItemProduct(item, value) {
   item.id_produk = option.value;
   item.kode_barang = option.code || option.raw?.kode_sku || option.raw?.kode_barang || option.raw?.kode_ean || option.value;
   item.nama_barang = option.name || option.raw?.nama || option.raw?.nama_produk || option.raw?.nama_barang || item.nama_barang;
+  item.per_unit = Number(option.raw?.per_unit || 1);
+  item.uoms = option.raw?.uoms || [];
 }
 
 function addPlacementItem() {
@@ -3100,11 +3147,14 @@ function editPlacement(row) {
     qty_pcs: row.qty_pcs ?? 0,
     qty_karton: row.qty_karton ?? 0,
     qty_pieces: 0,
+    per_unit: row.per_unit || 1,
+    uoms: row.uoms || [],
     batch_number: row.batch_number || '',
     // Placement API returns an ISO calendar date.  Keep aliases from legacy
     // incoming rows too, so a recorded expiry is always visible in Edit.
     expired_date: rowExpired(row),
-    status: row.status || 'READY'
+    status: row.status || 'READY',
+    kode_pallet: row.kode_pallet || ''
   });
   setPlacementItems([placementForm]);
   placementModalOpen.value = true;
@@ -3123,7 +3173,9 @@ async function loadPlacements(silent = false) {
       status: filters.placementStatus || undefined,
       id_cabang: rackBranchId(),
       limit: 5000,
-      availability: 'ready',
+      kode_pallet: filters.placementPallet || undefined,
+      shelf_type: filters.placementType || undefined,
+      source_type: filters.placementSource || undefined,
     });
     if (sequence !== placementLoadSequence) return;
     placementRows.value = payloadRows(response);
@@ -4288,8 +4340,8 @@ onBeforeUnmount(stopQrScanner);
             </button>
           </div>
 
-          <AppTable :rows="inventoryRows" :columns="inventoryColumns" :loading="loading.inventory" row-key="product_code" />
-          <AppTable v-if="barcodeRows.length || loading.barcode" :rows="barcodeRows" :columns="inventoryColumns" :loading="loading.barcode" row-key="product_code" empty-message="Barcode tidak menemukan stok." />
+          <WmsInventorySummary :rows="inventoryRows" :lot-columns="inventoryColumns" :loading="loading.inventory" />
+          <WmsInventorySummary v-if="barcodeRows.length || loading.barcode" :rows="barcodeRows" :lot-columns="inventoryColumns" :loading="loading.barcode" empty-message="Barcode tidak menemukan stok." />
         </section>
 
         <section v-else-if="activeTab === 'racks'" class="space-y-6">
@@ -4303,17 +4355,18 @@ onBeforeUnmount(stopQrScanner);
                 </AppSelect2>
               </label>
               <label class="block">
-                <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Rak</span>
-                <AppSelect2 aria-label="Status Rak" v-model="filters.rackStatus" >
+                <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Ketersediaan Rak</span>
+                <AppSelect2 aria-label="Ketersediaan Rak" v-model="filters.rackStatus" >
                   <option v-for="option in rackStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </AppSelect2>
               </label>
               <label class="block">
-                <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Aktif</span>
-                <AppSelect2 aria-label="Aktif" v-model="filters.rackActive" >
+                <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Rak</span>
+                <AppSelect2 aria-label="Status Rak" v-model="filters.rackActive" >
                   <option v-for="option in rackActiveOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </AppSelect2>
               </label>
+              <label class="block"><span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Principal</span><AppSelect2 aria-label="Principal Rak" v-model="filters.rackMix"><option value="">Semua mode</option><option value="single_principal">Single Principal</option><option value="mixed_group">Mixed Group</option></AppSelect2></label>
               <button class="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-brand-600 dark:hover:bg-brand-700" :disabled="loading.racks" @click="loadRacks">
                 Muat Rak
               </button>
@@ -4433,7 +4486,12 @@ onBeforeUnmount(stopQrScanner);
             </div>
           </div>
 
-          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah Ready mengikuti saldo yang masih tersedia setelah pesanan, dengan urutan batch FEFO. Pengambilan picking/canvas mengurangi stok fisik rak. Klik baris untuk mengedit jumlah fisik, bukan jumlah ready. Data diperbarui otomatis setiap 30 detik.</p>
+          <div class="grid gap-4 md:grid-cols-3">
+            <AppFormField v-model="filters.placementPallet" label="Pallet" placeholder="Cari kode pallet" />
+            <label class="block"><span class="mb-1.5 block text-sm font-medium">Tipe Rak</span><AppSelect2 aria-label="Tipe Rak Penempatan" v-model="filters.placementType"><option value="">Semua tipe</option><option value="Tetap">Tetap</option><option value="Titipan">Titipan</option><option value="Lorong">Lorong</option></AppSelect2></label>
+            <label class="block"><span class="mb-1.5 block text-sm font-medium">Sumber</span><AppSelect2 aria-label="Sumber Penempatan" v-model="filters.placementSource"><option value="">Semua sumber</option><option value="manual_placement">Penempatan manual</option><option value="purchase_putaway">Incoming PO terkonfirmasi</option><option value="purchase_receipt_pending">Penerimaan PO belum terkonfirmasi</option></AppSelect2></label>
+          </div>
+          <p class="text-sm text-slate-600 dark:text-slate-300">Jumlah produk adalah stok fisik dalam PCS, termasuk yang sudah dipesan; bukan saldo ready. Penerimaan belum dikonfirmasi tidak dihitung sebagai fisik gudang. Rincian UOM mengikuti master produk. Pallet mengikuti lot incoming/transfer yang masih bersaldo. Saldo stok efektif untuk transaksi tersedia di Laporan Stok Gudang. Data diperbarui otomatis setiap 30 detik.</p>
           <AppTable :rows="placementRows" :columns="placementColumns" :loading="loading.placements" :clickable-rows="true" row-key="id" :selected-key="selectedPlacementId" empty-message="Penempatan barang belum tersedia." @row-click="editPlacement" />
         </section>
 
@@ -4925,8 +4983,8 @@ onBeforeUnmount(stopQrScanner);
         <AppFormField v-model="rackForm.level" label="Level" type="number" min="0" />
         <AppFormField v-model="rackForm.kolom" label="Kolom" type="number" min="1" />
         <AppFormField v-model="rackForm.nomor_urut" label="Nomor Urut" type="number" min="1" />
-        <AppFormField v-model="rackForm.max_qty_karton" label="Kapasitas Karton" type="number" min="0" />
-        <AppFormField v-model="rackForm.max_qty_pcs" label="Kapasitas PCS" type="number" min="0" />
+        <AppFormField v-model="rackForm.max_qty_karton" label="Kapasitas Jumlah (CT/Carton)" type="number" min="0" />
+        <AppFormField v-model="rackForm.max_qty_pcs" label="Batas tambahan PCS (opsional)" type="number" min="0" />
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipe Rak</span>
           <AppSelect2 aria-label="Tipe Rak" v-model="rackForm.type_rak" >
@@ -4962,32 +5020,27 @@ onBeforeUnmount(stopQrScanner);
           </button>
         </label>
         <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status Rak</span>
-          <AppSelect2 aria-label="Status Rak" v-model="rackForm.status_rak" >
-            <option value="Kosong">Kosong</option>
-            <option value="Isi">Isi</option>
-            <option value="Nonaktif">Nonaktif</option>
-          </AppSelect2>
+          <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Ketersediaan</span>
+          <div class="field">{{rackForm.status_rak==='Isi'?'Terisi':'Kosong'}}</div><p class="text-xs text-slate-500">Otomatis mengikuti jumlah fisik penempatan.</p>
         </label>
-        <label class="flex min-h-[68px] items-end gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
-          <input v-model="rackForm.active" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-          Rak aktif
-        </label>
+        <label class="block"><span class="mb-1.5 block text-sm font-medium">Status Rak</span><AppSelect2 aria-label="Status Rak" v-model="rackForm.active"><option :value="true">Aktif</option><option :value="false">Nonaktif</option></AppSelect2></label>
       </div>
 
       <template #footer>
         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div v-if="rackForm.id" class="grid grid-cols-2 gap-2 lg:flex">
           <button
-            v-if="rackForm.id"
-            class="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
+            class="rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-500/40 dark:text-amber-200 dark:hover:bg-amber-500/10"
             :disabled="loading.action"
-            @click="removeRack"
+            @click="changeRackActive"
           >
-            Nonaktifkan Rak
+            {{ rackForm.active ? 'Nonaktifkan Rak' : 'Aktifkan Rak' }}
           </button>
+          <button class="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 dark:text-rose-200 disabled:opacity-50" :disabled="loading.action" @click="removeRack">Hapus Rak</button>
+          </div>
           <span v-else class="hidden lg:block"></span>
 
-          <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-row">
+          <div class="grid grid-cols-2 gap-2 lg:flex lg:flex-row">
             <button class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900" :disabled="!rackForm.kode_rak" @click="printSelectedRackQr">
               Cetak QR Rak
             </button>
@@ -5119,9 +5172,9 @@ onBeforeUnmount(stopQrScanner);
         />
         <AppFormField v-model="palletForm.tipe_pallet" label="Tipe Pallet" placeholder="Standard / Plastik / Kayu" />
         <AppFormField v-model="palletForm.berat_kosong_kg" label="Berat Kosong (kg)" type="number" min="0" step="0.001" />
-        <AppFormField v-model="palletForm.max_berat_kg" label="Max Berat (kg)" type="number" min="0" step="0.001" />
-        <AppFormField v-model="palletForm.max_qty_karton" label="Max Karton" type="number" min="0" />
-        <AppFormField v-model="palletForm.max_qty_pcs" label="Max PCS" type="number" min="0" />
+        <AppFormField v-model="palletForm.max_berat_kg" label="Kapasitas Berat (Kg)" type="number" min="0" step="0.001" />
+        <AppFormField v-model="palletForm.max_qty_karton" label="Kapasitas Jumlah (CT/Carton)" type="number" min="0" />
+        <AppFormField v-model="palletForm.max_qty_pcs" label="Batas tambahan PCS (opsional)" type="number" min="0" />
         <AppSearchSelect
           v-model="palletForm.selectedProductId"
           label="Produk"
@@ -5156,17 +5209,19 @@ onBeforeUnmount(stopQrScanner);
 
       <template #footer>
         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div v-if="palletForm.id" class="grid grid-cols-2 gap-2 lg:flex">
           <button
-            v-if="palletForm.id"
-            class="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
+            class="rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-500/40 dark:text-amber-200 dark:hover:bg-amber-500/10"
             :disabled="loading.action"
-            @click="removePallet"
+            @click="changePalletActive"
           >
-            Nonaktifkan Pallet
+            {{ palletForm.active ? 'Nonaktifkan Pallet' : 'Aktifkan Pallet' }}
           </button>
+          <button class="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 dark:text-rose-200 disabled:opacity-50" :disabled="loading.action" @click="removePallet">Hapus Pallet</button>
+          </div>
           <span v-else class="hidden lg:block"></span>
 
-          <div class="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-row">
+          <div class="grid grid-cols-2 gap-2 lg:flex lg:flex-row">
             <button class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900" :disabled="loading.nextPallet || Boolean(palletForm.id)" @click="loadNextPalletCode">
               {{ loading.nextPallet ? 'Mengambil...' : 'Ambil Kode Pallet' }}
             </button>
@@ -5338,18 +5393,10 @@ onBeforeUnmount(stopQrScanner);
           :display-value="placementForm.kode_rak"
           @search="(keyword) => searchRackOptions(keyword)"
         />
-        <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
-          <AppSelect2 aria-label="Status" v-model="placementForm.status" >
-            <option value="READY">READY</option>
-            <option value="LOW">LOW</option>
-            <option value="EMPTY">EMPTY</option>
-            <option value="INACTIVE">INACTIVE</option>
-          </AppSelect2>
-        </label>
+        <div><span class="mb-1.5 block text-sm font-medium">Pallet asal</span><div class="field">{{placementForm.kode_pallet||'Tanpa pallet'}}</div><p class="text-xs text-slate-500">Mengikuti incoming/transfer, bukan membuat stok pallet baru.</p></div>
       </div>
       <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
-        Penempatan manual dapat memakai rak Tetap atau Lorong aktif. Rak Titipan hanya diisi dari proses incoming.
+        Penempatan manual dapat memakai rak Tetap atau Lorong aktif. Rak Titipan hanya diisi dari proses incoming. Status READY/LOW/EMPTY dihitung otomatis dari jumlah fisik. Penempatan hanya memetakan lokasi, tidak menambah saldo efektif ERP.
       </p>
 
       <div class="mt-6 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -5399,9 +5446,11 @@ onBeforeUnmount(stopQrScanner);
                   <p v-if="item.kode_barang" class="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     {{ item.kode_barang }}<span v-if="item.nama_barang"> - {{ item.nama_barang }}</span>
                   </p>
+                  <p v-if="item.uoms?.length" class="mt-1 text-xs text-slate-500">{{item.uoms.map(u=>`${u.nama} = ${numberLabel(u.faktor_konversi)} PCS`).join(' · ')}}</p>
                 </td>
                 <td class="px-4 py-3">
                   <input v-model.number="item.qty_karton" type="number" min="0" class="field" />
+                  <p class="mt-1 text-xs text-slate-500">1 CT = {{numberLabel(item.per_unit)}} PCS</p>
                 </td>
                 <td class="px-4 py-3">
                   <input v-model.number="item.qty_pcs" type="number" min="0" class="field" />

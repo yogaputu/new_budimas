@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth';
 import { getLoginBranchId, getRowBranchIds, getRowCompanyId, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { firstLocalDayOfMonth, toLocalDateInputValue } from '@/utils/date';
+import { journalLineDescription } from '../journalLineDescription';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
@@ -64,8 +65,6 @@ const detailColumns = [
   { key: 'nama_akun', label: 'Akun' },
   { key: 'jenis_transaksi', label: 'Jenis Transaksi' },
   { key: 'keterangan', label: 'Keterangan' },
-  { key: 'no_faktur', label: 'Faktur' },
-  { key: 'sumber_dana', label: 'Sumber Dana' },
   {
     key: 'debit_label',
     label: 'Debit',
@@ -647,7 +646,17 @@ onMounted(async () => {
           :paginated="false"
           row-key="id"
           empty-message="Belum ada detail jurnal."
-        />
+        >
+          <template #cell-keterangan="{ row }">
+            <p class="min-w-[240px] whitespace-pre-line break-words">{{ journalLineDescription(row) }}</p>
+          </template>
+          <template #cell-debit_label="{ row }">
+            <p class="whitespace-nowrap text-right tabular-nums">{{ formatCurrency(row.debit) }}</p>
+          </template>
+          <template #cell-kredit_label="{ row }">
+            <p class="whitespace-nowrap text-right tabular-nums">{{ formatCurrency(row.kredit) }}</p>
+          </template>
+        </AppTable>
       </div>
     </AppModal>
   </div>

@@ -620,7 +620,7 @@ onMounted(async () => {
         <section v-if="mode === 'confirmation'" class="grid gap-3 md:grid-cols-2">
           <AppSearchSelect v-model="processForm.armada" label="Armada" placeholder="Pilih armada" :options="fleetOptions" :loading="fleetLoading" empty-text="Armada belum tersedia untuk cabang/perusahaan transfer ini." />
           <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            Pastikan qty picked sesuai jumlah barang yang akan dibooking dari cabang asal.
+            Pastikan qty sesuai barang yang keluar. Untuk transfer baru, approval langsung mengurangi Stok Efektif, Good, Stok WMS, rak, dan pallet asal. Pengambilan tidak menguranginya lagi.
           </div>
         </section>
 
@@ -635,6 +635,9 @@ onMounted(async () => {
           <AppFormField v-model="processForm.pengambilan_oleh" label="Pengambilan oleh" placeholder="Nama pengambil / driver" />
           <AppFormField v-model="processForm.tanggal_ambil" label="Tanggal ambil" type="date" />
         </section>
+        <p v-if="mode === 'receipt' || mode === 'escalation'" class="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+          Untuk transfer baru, penerimaan otomatis ditempatkan ke rak Titipan aktif yang kosong dan pallet. Batch/expired mengikuti lot asal; Good, Stok WMS, dan Stok Efektif tujuan bertambah setelah penerimaan berhasil.
+        </p>
 
         <div v-if="modalError" class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
           {{ modalError }}

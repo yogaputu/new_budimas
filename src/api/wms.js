@@ -44,6 +44,10 @@ export function deleteWmsRack(id, params) {
   return api.delete(`/api/wms/racks/${encodeURIComponent(id)}`, { params });
 }
 
+export function setWmsRackActive(id, active) {
+  return api.put(`/api/wms/racks/${encodeURIComponent(id)}/active`, { active });
+}
+
 export function getWmsPallets(params) {
   return api.get('/api/wms/pallets', { params });
 }
@@ -64,8 +68,12 @@ export function updateWmsPallet(id, payload) {
   return api.put(`/api/wms/pallets/${encodeURIComponent(id)}`, payload);
 }
 
-export function deleteWmsPallet(id) {
-  return api.delete(`/api/wms/pallets/${encodeURIComponent(id)}`);
+export function deleteWmsPallet(id, params) {
+  return api.delete(`/api/wms/pallets/${encodeURIComponent(id)}`, { params });
+}
+
+export function setWmsPalletActive(id, active) {
+  return api.put(`/api/wms/pallets/${encodeURIComponent(id)}/active`, { active });
 }
 
 export function getWmsPlacements(params, config = {}) {

@@ -1,4 +1,5 @@
 import { escapePrintHtml as e, openPrintHtml } from './printTemplates.js';
+import { journalLineDescription } from '../modules/finance/journalLineDescription.js';
 
 const money = (v) => Number(v || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const num = (v) => `<td class="number">${money(v)}</td>`;
@@ -89,7 +90,7 @@ export function journalHtml(ctx, rows) {
     body += `<tr class="group"><td>${e(reportDate(r.tanggal))}</td><td colspan="3">Jurnal #${e(r.id_jurnal || r.id)} · ${e(r.nama_perusahaan)} / ${e(r.nama_cabang)}<br>${e(r.keterangan || r.jenis_transaksi || '')}</td><td></td><td></td></tr>`;
     for (const line of r.info_jurnal || []) {
       debit += Number(line.debit || 0); credit += Number(line.kredit || 0);
-      body += `<tr><td class="muted">#${e(r.id_jurnal || r.id)}</td><td>${e(line.nomor_akun || '-')}</td><td>${e(line.nama_akun)}</td><td>${e(line.keterangan || '')}<br><span class="muted">${e([line.no_faktur, line.sumber_dana].filter(Boolean).join(' · '))}</span></td>${num(line.debit)}${num(line.kredit)}</tr>`;
+      body += `<tr><td class="muted">#${e(r.id_jurnal || r.id)}</td><td>${e(line.nomor_akun || '-')}</td><td>${e(line.nama_akun)}</td><td>${e(journalLineDescription(line)).replaceAll('\n', '<br>')}</td>${num(line.debit)}${num(line.kredit)}</tr>`;
     }
   }
   const table = `<p>${rows.length} jurnal · Seluruh hasil filter, bukan hanya halaman aktif.</p><table><colgroup><col style="width:10%"><col style="width:12%"><col style="width:24%"><col style="width:28%"><col style="width:13%"><col style="width:13%"></colgroup><thead><tr><th>Tanggal</th><th>Kode Akun</th><th>Akun</th><th>Keterangan / Referensi</th><th class="number">Debit</th><th class="number">Kredit</th></tr></thead><tbody>${body || '<tr><td colspan="6">Tidak ada jurnal.</td></tr>'}<tr class="total"><td colspan="4">Total Debit / Kredit</td>${num(debit)}${num(credit)}</tr></tbody></table>`;

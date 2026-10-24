@@ -337,6 +337,14 @@ function toggleCandidateReturOption(row, optionKey) {
   applyCandidateReturOptions(row);
 }
 
+function candidateReturUsedElsewhere(row, option) {
+  return selectedCandidateRows.value.some((item) =>
+    String(item.id_faktur) !== String(row.id_faktur) &&
+    (item.selected_retur_payload || []).some((selected) =>
+      selected.source_type === option.source_type && String(selected.source_id) === String(option.source_id))
+  );
+}
+
 function getStateStorageKey() {
   const userId = auth.user?.id || auth.user?.id_user || auth.user?.user_id || 'anonymous';
   return `${LPH_STATE_STORAGE_KEY}:${userId}`;
@@ -512,6 +520,11 @@ function toggleCandidate(id) {
   const key = String(id);
   if (selectedCandidateIds.value.includes(key)) {
     selectedCandidateIds.value = selectedCandidateIds.value.filter((item) => item !== key);
+    return;
+  }
+  const row = candidateRows.value.find((item) => String(item.id_faktur) === key);
+  if ((row?.selected_retur_payload || []).some((option) => candidateReturUsedElsewhere(row, option))) {
+    errorMessage.value = 'CN/Retur yang sama hanya boleh dicantumkan satu kali dalam satu LPH. Lepas pilihan CN pada salah satu faktur.';
     return;
   }
   selectedCandidateIds.value = [...selectedCandidateIds.value, key];
@@ -1152,6 +1165,9 @@ watch(
         <p class="-mt-2 text-xs text-slate-500">
           Tanggal LPH menentukan tanggal dokumen. Field jatuh tempo bersifat opsional dan hanya membatasi kandidat yang ditampilkan.
         </p>
+        <p class="text-xs text-slate-500">
+          CN mengikuti customer, principal, dan saldo tersedia; tidak harus pada faktur asal retur. Pilihan CN di LPH adalah referensi cetak, bukan pemotongan tagihan. Saldo digunakan saat finalisasi pembayaran.
+        </p>
 
         <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
           <template v-if="createForm.is_cp === '2'">
@@ -1219,7 +1235,7 @@ watch(
             <tbody class="divide-y divide-slate-100">
               <tr v-for="item in candidateRows" :key="item.id_faktur">
                 <td class="px-3 py-3">
-                  <input type="checkbox" :checked="selectedCandidateIds.includes(String(item.id_faktur))" @change="toggleCandidate(item.id_faktur)">
+                  <input type="checkbox" :aria-label="`Pilih faktur ${item.no_faktur}`" :checked="selectedCandidateIds.includes(String(item.id_faktur))" @change="toggleCandidate(item.id_faktur)">
                 </td>
                 <td class="px-3 py-3 font-semibold text-slate-900">{{ item.no_faktur || '-' }}</td>
                 <td class="px-3 py-3">{{ formatDate(item.tanggal_jatuh_tempo) }}</td>
@@ -1246,12 +1262,15 @@ watch(
                         <input
                           type="checkbox"
                           class="mt-1"
+                          :aria-label="`${item.no_faktur} CN ${option.kode || option.source_id}`"
                           :checked="item.selected_retur_options?.includes(option.option_key)"
+                          :disabled="!item.selected_retur_options?.includes(option.option_key) && candidateReturUsedElsewhere(item, option)"
                           @change="toggleCandidateReturOption(item, option.option_key)"
                         >
                         <span>
                           <span class="block font-medium">{{ option.kode || option.source_type }}</span>
                           <span class="block text-xs text-slate-500">{{ formatCurrency(option.nominal) }}</span>
+                          <span v-if="candidateReturUsedElsewhere(item, option)" class="block text-xs text-amber-700">Sudah dicantumkan pada faktur lain dalam LPH ini.</span>
                         </span>
                       </label>
                       <p v-if="!(item.retur_options || []).length && !item.nominal_retur" class="px-2 py-3 text-sm text-slate-500">

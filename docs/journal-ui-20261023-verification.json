@@ -1,0 +1,50 @@
+{
+  "status": "deployed",
+  "scope": "frontend_only",
+  "date": "2026-10-23",
+  "changes": [
+    "General journal detail: remove separate invoice and fund-source columns; retain references in Keterangan without duplication",
+    "Payment workflow journals: use Akun, Keterangan, Debit, Kredit",
+    "Journal printing: share the same reference-preserving and HTML-escaped description formatter"
+  ],
+  "historical_decision": "User confirmed journal 772 remains unchanged; per-SO rules apply to subsequent transactions",
+  "diagnosis": {
+    "journal_id": 772,
+    "receipt_id": 7,
+    "receipt_number": "KW-20261023-4C5BFF38",
+    "receipt_status": "FINALIZED",
+    "finalized_at": "2026-10-23T08:58:19.390211+07:00",
+    "combined_legacy_invoices": [
+      { "invoice": "PJBMMSLO-2610000001", "amount": 99900, "source": "NTN-0002", "kind": "TRANSFER" },
+      { "invoice": "PJBMMSLO-2610000004", "amount": 888000, "source": "NTN-0001", "kind": "TRANSFER" }
+    ],
+    "total_debit": 987900,
+    "total_credit": 987900,
+    "credit_notes_used": false,
+    "payment_vat_rule": "Only VAT from consumed CN/returns is debited at settlement; do not duplicate sales VAT",
+    "inspection_mode": "Repeatable-read, read-only PostgreSQL transaction with statement and lock timeouts"
+  },
+  "deployment": {
+    "backup": "/www/backup/budimas-journal-ui-20261023-34j4voze",
+    "frontend_index_sha256": "9250a7315f0931a000c89fad11ce2525fd23af1428b7c23ca2f1a3ad7cb97727",
+    "files": 207,
+    "origins_verified": ["https://erp.budimas.swakarya.my.id", "https://erp.budimas.swakarya.my.id:9092"],
+    "index_and_journal_assets_http_status": 200,
+    "receipt_7_and_journal_772_unchanged": true,
+    "financial_snapshot_sha256": "65dc50310f91d096b4e96f22d1892a738f88cafa4a16d01196fd4e69ac051e16",
+    "database_migrations_run": false,
+    "api_restarted": false,
+    "historical_assets_retained": true
+  },
+  "tests": {
+    "frontend_unit_tests_passed": 86,
+    "compact_journal_browser_cases_on_dev": 4,
+    "compact_journal_browser_cases_on_production_build": 4,
+    "compact_journal_browser_cases_on_live_origin": 4,
+    "clearing_browser_cases_passed": 2,
+    "viewports": [1440, 390],
+    "themes": ["light", "dark"],
+    "production_build_passed": true,
+    "browser_business_api_requests": "Fully mocked; no live accounting writes"
+  }
+}

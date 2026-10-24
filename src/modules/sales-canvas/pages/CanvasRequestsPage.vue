@@ -196,7 +196,7 @@ const salesOptions = computed(() =>
 const productOptions = computed(() =>
   productRows.value.map((item) => ({
     value: String(item.id),
-    label: `${item.nama_produk || 'Produk'} | Stok ${Number(item.stock_gudang || 0).toLocaleString('id-ID')} pcs`
+    label: `${item.nama_produk || 'Produk'} | Stok efektif ${Number(item.stok_efektif ?? item.stock_gudang ?? 0).toLocaleString('id-ID')} pcs`
   }))
 );
 
@@ -266,7 +266,7 @@ const detailTableRows = computed(() =>
     principal_label: item.nama_principal || '-',
     qty_label: formatQtyBreakdown(item),
     qty_total_label: `${Number(item.qty_request_today || item.qty_request || 0).toLocaleString('id-ID')} pcs`,
-    stock_label: `${Number(item.stock_gudang || 0)} pcs`,
+    stock_label: `${Number(item.stok_efektif ?? item.stock_gudang ?? 0)} pcs`,
     uom_label: [item.uom3_nama, item.uom2_nama, item.uom1_nama].filter(Boolean).join(' / ') || '-',
     harga_label: formatCurrency(item.harga_per_uom1 || item.harga_beli || 0)
   }))
@@ -989,7 +989,7 @@ onMounted(async () => {
             <ProductUomFields class="md:col-span-2 xl:col-span-4" :product="getSelectedProduct(item.id_produk) || {}" :values="item" @change="updateRequestQty(item, $event.level, $event.value)" />
             <div class="rounded-2xl border border-slate-200 p-4 text-sm dark:border-slate-700">
               <p class="font-bold text-slate-900 dark:text-white">Info Produk</p>
-              <p class="mt-1 text-slate-500 dark:text-slate-400">Stok gudang: {{ Number(getSelectedProduct(item.id_produk)?.stock_gudang || 0).toLocaleString('id-ID') }} pcs</p>
+              <p class="mt-1 text-slate-500 dark:text-slate-400">Stok efektif: {{ Number(getSelectedProduct(item.id_produk)?.stok_efektif ?? getSelectedProduct(item.id_produk)?.stock_gudang ?? 0).toLocaleString('id-ID') }} pcs</p>
               <p class="text-slate-500 dark:text-slate-400">Harga: {{ formatCurrency(getSelectedProduct(item.id_produk)?.harga_per_uom1 || getSelectedProduct(item.id_produk)?.harga_beli || 0) }}</p>
             </div>
           </div>

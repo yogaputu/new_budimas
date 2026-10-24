@@ -689,6 +689,7 @@ function normalizeProductRow(item) {
   return {
     ...item,
     row_key: String(item.id),
+    stok_ready: toNumber(item.stok_efektif ?? item.stok_ready),
     kategori_customer_label: normalizeCategoryLetters(item.kategori_customer) || 'Semua',
     kategori_izin_label: normalizeCategoryLetters(item.kategori_izin) || 'Semua',
     kategori_customer_toko_label: normalizeCategoryLetters(item.kategori_customer_toko) || '-',

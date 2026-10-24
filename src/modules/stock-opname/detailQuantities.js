@@ -33,6 +33,8 @@ export function normalizeStockOpnameDetail(item) {
   const system = number(item.stok_sistem ?? item.stock_system);
   const price = number(item.harga ?? item.harga_produk);
   const row = {
+    label_uom_1:'',label_uom_2:'',label_uom_3:'',
+    konversi_uom_1:0,konversi_uom_2:0,konversi_uom_3:0,
     ...item,
     stok: physical,
     stok_fisik: physical,

@@ -6,7 +6,7 @@ import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
 import { exportRowsToCsv } from '@/utils/exportCsv';
 import { toLocalDateInputValue } from '@/utils/date';
 import { useAuthStore } from '@/stores/auth';
-import { getLoginBranchId, getLoginCompanyId, getRowBranchIds, getRowCompanyId, isSuperUser } from '@/utils/accessScope';
+import { getLoginBranchId, getLoginCompanyId, getRowBranchIds, getRowCompanyId, getRowCompanyIds, isSuperUser } from '@/utils/accessScope';
 import { getBranchOptionsForCompany, getCompanyOptionsForScope } from '@/utils/filterScope';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
 import AppTable from '@/shared/components/AppTable.vue';
@@ -58,7 +58,7 @@ const companyOptions = computed(() => getCompanyOptionsForScope(companyRows.valu
 
 const principalOptions = computed(() =>
   principalRows.value
-    .filter((item) => filters.companyId && String(item.id_perusahaan || item.company_id || '') === String(filters.companyId))
+    .filter((item) => filters.companyId && getRowCompanyIds(item).map(String).includes(String(filters.companyId)))
     .map((item) => ({
       value: String(item.id),
       label: `${item.kode || '-'} - ${item.nama || 'Principal'}`
@@ -82,12 +82,13 @@ const summary = computed(() => {
   const rows = filteredRows.value;
   return {
     sku: rows.length,
-    ready: rows.reduce((total, item) => total + Number(item.jumlah_ready || 0), 0),
+    total: rows.reduce((total, item) => total + Number(item.jumlah_total || 0), 0),
+    ready: rows.reduce((total, item) => total + Number(item.stok_efektif || 0), 0),
     rackReady: rows.reduce((total, item) => total + Number(item.jumlah_rak_tetap || 0), 0),
     titipan: rows.reduce((total, item) => total + Number(item.jumlah_titipan || 0), 0),
     good: rows.reduce((total, item) => total + Number(item.jumlah_good || 0), 0),
     bad: rows.reduce((total, item) => total + Number(item.jumlah_bad || 0), 0),
-    incoming: rows.reduce((total, item) => total + Number(item.jumlah_incoming || 0), 0)
+    incoming: rows.reduce((total, item) => total + Number(item.jumlah_in_transit || 0), 0)
   };
 });
 
@@ -96,12 +97,13 @@ const columns = [
   { key: 'nama_cabang', label: 'Cabang' },
   { key: 'nama_principal', label: 'Principal' },
   { key: 'kode_sku', label: 'Kode SKU' },
-  { key: 'nama_produk', label: 'Produk' },
-  { key: 'jumlah_ready', label: 'Stok Ready' },
-  { key: 'jumlah_good', label: 'Good' },
-  { key: 'jumlah_bad', label: 'Bad' },
-  { key: 'jumlah_incoming', label: 'In Transit' },
-  { key: 'uom', label: 'Satuan' },
+  { key: 'nama_produk', label: 'Nama Produk' },
+  { key: 'jumlah_total', label: 'Total Stok (PCS)' },
+  { key: 'stok_efektif', label: 'Stok Efektif (PCS)' },
+  { key: 'stok_wms', label: 'Stok WMS (PCS)' },
+  { key: 'jumlah_good', label: 'Good (PCS)' },
+  { key: 'jumlah_bad', label: 'Bad (PCS)' },
+  { key: 'jumlah_in_transit', label: 'In Transit (PCS)' },
   { key: 'last_update', label: 'Last Update' }
 ];
 
@@ -157,6 +159,10 @@ async function loadReport() {
     });
     stockRows.value = normalizeList(unwrapResponse(response)).map((row) => ({
       ...row,
+      stok_efektif: Number(row.stok_efektif ?? row.jumlah_ready ?? 0),
+      stok_wms: Number(row.stok_wms ?? row.jumlah_good ?? 0),
+      jumlah_total: Number(row.jumlah_total ?? (Number(row.jumlah_good || 0) + Number(row.jumlah_bad || 0))),
+      jumlah_in_transit: Number(row.jumlah_in_transit ?? row.jumlah_incoming ?? 0),
       last_update: [row.tanggal_update, row.waktu_update].filter(Boolean).join(' ') || '-'
     }));
     feedback.value = `Laporan stock berhasil dimuat: ${stockRows.value.length.toLocaleString('id-ID')} baris.`;
@@ -210,7 +216,7 @@ onMounted(async () => {
   <div class="space-y-5">
     <PageHeader
       title="Laporan Stok Gudang"
-      description="Stok Ready adalah stok tersedia untuk transaksi setelah reservasi. In Transit belum tersedia untuk transaksi atau belum masuk rak tetap."
+      description="Total stok = Good + Bad. Titipan yang sudah dikonfirmasi termasuk Good, Stok WMS, dan Stok Efektif. Stok Efektif dikurangi reservasi SO saat approval; Good/WMS berkurang saat Selesai Picking, atau saat approval Canvas/Transfer. Scan parsial mengunci lot tanpa mengurangi stok fisik. In Transit mencakup barang yang sudah keluar tetapi belum diterima. Semua jumlah dalam PCS."
     />
 
     <section class="panel p-4">
@@ -242,7 +248,7 @@ onMounted(async () => {
           <span class="mb-1 block text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Cari</span>
           <input
             v-model="filters.search"
-            class="input"
+            class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             placeholder="SKU, produk, principal"
           />
         </label>
@@ -263,40 +269,41 @@ onMounted(async () => {
     <section class="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
       <div class="panel p-4">
         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Total SKU</p>
-        <p class="mt-3 text-2xl font-black text-white">{{ numberLabel(summary.sku) }}</p>
+        <p class="mt-3 text-2xl font-black text-slate-900 dark:text-white">{{ numberLabel(summary.sku) }}</p>
       </div>
       <div class="panel p-4">
-        <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Ready</p>
-        <p class="mt-3 text-2xl font-black text-emerald-300">{{ numberLabel(summary.ready) }}</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Stok Efektif</p>
+        <p class="mt-3 text-2xl font-black text-emerald-700 dark:text-emerald-300">{{ numberLabel(summary.ready) }}</p>
         <p class="mt-1 text-xs text-slate-500">Stok transaksi cabang</p>
       </div>
       <div class="panel p-4">
-        <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Rak Tetap</p>
-        <p class="mt-3 text-2xl font-black text-cyan-300">{{ numberLabel(summary.rackReady) }}</p>
-        <p class="mt-1 text-xs text-slate-500">Fisik WMS (audit)</p>
+        <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Total Stok</p>
+        <p class="mt-3 text-2xl font-black text-cyan-700 dark:text-cyan-300">{{ numberLabel(summary.total) }}</p>
+        <p class="mt-1 text-xs text-slate-500">Good (termasuk Titipan terkonfirmasi) + Bad</p>
       </div>
       <div class="panel p-4">
         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Rak Titipan</p>
-        <p class="mt-3 text-2xl font-black text-violet-300">{{ numberLabel(summary.titipan) }}</p>
+        <p class="mt-3 text-2xl font-black text-violet-700 dark:text-violet-300">{{ numberLabel(summary.titipan) }}</p>
         <p class="mt-1 text-xs text-slate-500">Belum siap picking</p>
       </div>
       <div class="panel p-4">
         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Good</p>
-        <p class="mt-3 text-2xl font-black text-sky-300">{{ numberLabel(summary.good) }}</p>
+        <p class="mt-3 text-2xl font-black text-sky-700 dark:text-sky-300">{{ numberLabel(summary.good) }}</p>
       </div>
       <div class="panel p-4">
         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Bad</p>
-        <p class="mt-3 text-2xl font-black text-rose-300">{{ numberLabel(summary.bad) }}</p>
+        <p class="mt-3 text-2xl font-black text-rose-700 dark:text-rose-300">{{ numberLabel(summary.bad) }}</p>
       </div>
       <div class="panel p-4">
         <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">In Transit</p>
-        <p class="mt-3 text-2xl font-black text-amber-300">{{ numberLabel(summary.incoming) }}</p>
+        <p class="mt-3 text-2xl font-black text-amber-700 dark:text-amber-300">{{ numberLabel(summary.incoming) }}</p>
+        <p class="mt-1 text-xs text-slate-500">PO/transfer, loading driver, dan canvas</p>
       </div>
     </section>
 
     <section class="space-y-3">
       <div>
-        <h2 class="text-xl font-black text-white">Daftar Stock Cabang</h2>
+        <h2 class="text-xl font-black text-slate-900 dark:text-white">Daftar Stock Cabang</h2>
         <p class="text-sm text-slate-400">Tampil {{ filteredRows.length.toLocaleString('id-ID') }} dari {{ stockRows.length.toLocaleString('id-ID') }} baris.</p>
       </div>
       <AppTable

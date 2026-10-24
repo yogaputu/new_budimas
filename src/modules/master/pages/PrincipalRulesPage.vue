@@ -16,7 +16,8 @@ import {
 import { useAppStore } from '@/app/stores/app';
 import { useAuthStore } from '@/stores/auth';
 import { normalizeError, normalizeList, unwrapResponse } from '@/utils/api';
-import { getLoginBranchId, getRowBranchIds, getRowCompanyId, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
+import { getLoginBranchId, getRowCompanyIds, isSuperUser, scopeRowsByLoginBranch } from '@/utils/accessScope';
+import { getCompanyIdsForBranch } from '@/utils/filterScope';
 import AppFormField from '@/shared/components/AppFormField.vue';
 import AppModal from '@/shared/components/AppModal.vue';
 import AppSearchSelect from '@/shared/components/AppSearchSelect.vue';
@@ -91,26 +92,7 @@ function money(value) {
 }
 
 function companyIdsForBranch(branchId) {
-  if (!branchId) return [];
-
-  const ids = new Set();
-  companyRows.value.forEach((item) => {
-    if (getRowBranchIds(item).includes(String(branchId))) ids.add(String(item.id));
-  });
-
-  const branch = branchRows.value.find((item) => String(item.id) === String(branchId));
-  principalRows.value.forEach((item) => {
-    const companyId = getRowCompanyId(item);
-    const sameRegion =
-      branch &&
-      item.id_wilayah1 &&
-      item.id_wilayah2 &&
-      String(item.id_wilayah1) === String(branch.id_wilayah1) &&
-      String(item.id_wilayah2) === String(branch.id_wilayah2);
-    if (companyId && sameRegion) ids.add(String(companyId));
-  });
-
-  return [...ids];
+  return getCompanyIdsForBranch(branchId,branchRows.value,companyRows.value);
 }
 
 const branchOptions = computed(() =>
@@ -135,7 +117,7 @@ const formCompanyOptions = computed(() => companyOptionsForBranch(form.id_cabang
 
 function principalOptionsForCompany(companyId) {
   return principalRows.value
-    .filter((item) => !companyId || String(getRowCompanyId(item)) === String(companyId))
+    .filter((item) => !companyId || getRowCompanyIds(item).map(String).includes(String(companyId)))
     .map((item) => ({
       value: String(item.id),
       label: `${item.kode || '-'} - ${item.nama || item.principal_nama || 'Principal'}`
